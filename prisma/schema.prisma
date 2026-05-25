@@ -1,0 +1,440 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Product {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  price       Decimal     @db.Decimal(12, 2)
+  stock       Int         @default(0)
+  imageUrl    String?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  orderItems  OrderItem[]
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String?  @unique
+  email     String?  @unique
+  address   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders    Order[]
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  customerId    String
+  customer      Customer    @relation(fields: [customerId], references: [id])
+  warehouseCode String?     @db.VarChar(25)
+  status        OrderStatus @default(PENDING)
+  total         Decimal     @db.Decimal(12, 2)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  items         OrderItem[]
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  order     Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  unitPrice Decimal @db.Decimal(12, 2)
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  SHIPPED
+  COMPLETED
+  CANCELLED
+}
+
+model OdgEmployee {
+  employeeId       Int       @id @map("employee_id")
+  employeeCode     String?   @unique @map("employee_code") @db.VarChar(20)
+  titleLo          String?   @map("title_lo") @db.VarChar(50)
+  fullnameLo       String?   @map("fullname_lo") @db.VarChar(200)
+  nickname         String?   @db.VarChar(50)
+  titleEn          String?   @map("title_en") @db.VarChar(20)
+  fullnameEn       String?   @map("fullname_en") @db.VarChar(200)
+  positionCode     String?   @map("position_code") @db.VarChar(20)
+  divisionCode     String?   @map("division_code") @db.VarChar(20)
+  departmentCode   String?   @map("department_code") @db.VarChar(20)
+  unitCode         String?   @map("unit_code") @db.VarChar(20)
+  hireDate         DateTime? @map("hire_date") @db.Date
+  employmentStatus String?   @map("employment_status") @db.VarChar(20)
+  createdAt        DateTime? @map("created_at") @db.Timestamp(6)
+  lineId           String?   @map("line_id") @db.VarChar
+  password         String?   @db.VarChar
+  // App-specific role for the sales mobile app. Values: 'pc', 'salesperson',
+  // 'head', 'manager'. NULL → treated as 'salesperson' so existing rows keep
+  // working without backfill. See src/lib/roles.ts.
+  appRole          String?   @map("app_role") @db.VarChar(20)
+  // bcrypt hash of the POS PIN used for manager overrides at the register
+  // (line discount, bill discount, void). NULL → fall back to the login
+  // password. Managed from the employees admin UI.
+  posPinHash       String?   @map("pos_pin_hash") @db.VarChar(200)
+
+  @@map("odg_employee")
+}
+
+// FCM device tokens — one per (employee, device). Used by lib/notify.ts to
+// push notifications when a price request needs approval or has been
+// decided. Token column is unique so re-registration from the same device
+// updates the existing row rather than piling up duplicates.
+model AppFcmToken {
+  id           BigInt   @id @default(autoincrement())
+  employeeCode String   @map("employee_code") @db.VarChar(20)
+  token        String   @unique
+  platform     String?  @db.VarChar(10)
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  lastSeenAt   DateTime @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+
+  @@index([employeeCode])
+  @@map("app_fcm_token")
+}
+
+// Per-item special-price requests. While status='pending' the order_item
+// still uses original price; only an 'approved' decision flips the price on
+// the line and recomputes the cart total. See PATCH /api/price-requests/[id].
+model AppPriceRequest {
+  id             BigInt    @id @default(autoincrement())
+  // cart_number is nullable now: standalone requests created from the
+  // dedicated "Price Request" menu (before any cart exists) leave it NULL.
+  // Legacy cart-bound requests still set it.
+  cartNumber     String?   @map("cart_number") @db.VarChar(20)
+  // Customer this price was requested for. Required for standalone requests
+  // (so we can look up approved prices by customer + item when the user
+  // later creates a sale order). Cart-bound requests can leave it NULL
+  // because the cart already pins the customer.
+  customerCode   String?   @map("customer_code") @db.VarChar(20)
+  itemCode       String    @map("item_code") @db.VarChar(50)
+  originalPrice  Decimal   @map("original_price") @db.Decimal(18, 4)
+  // Set by the approver, not the requestor. Pending requests carry NULL
+  // until a manager approves with a concrete price; rejected requests
+  // also stay NULL.
+  requestedPrice Decimal?  @map("requested_price") @db.Decimal(18, 4)
+  status         String    @default("pending") @db.VarChar(20)
+  requestorCode  String    @map("requestor_code") @db.VarChar(20)
+  approverCode   String?   @map("approver_code") @db.VarChar(20)
+  reason         String?
+  approverNote   String?   @map("approver_note")
+  requestedAt    DateTime  @default(now()) @map("requested_at") @db.Timestamptz(6)
+  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(6)
+  // Tag for inline register overrides written at settle time. NULL for
+  // the standalone item-price request flow. Values: 'line_discount',
+  // 'bill_discount', 'walkin_high_value'.
+  overrideType   String?   @map("override_type") @db.VarChar(30)
+
+  @@index([status, requestedAt])
+  @@index([cartNumber, itemCode])
+  @@index([customerCode, itemCode, status])
+  @@map("app_price_request")
+}
+
+// Per-(currency, method) breakdown of money received at settlement time —
+// one row per cash/transfer line. The legacy cb_trans table only carries
+// aggregate cash_amount/tranfer_amount in THB; app_payment_line is the
+// audit trail showing exactly which currency+method made up the aggregate.
+model AppPaymentLine {
+  id                 BigInt   @id @default(autoincrement())
+  docNo              String   @map("doc_no") @db.VarChar(20)
+  cartNumber         String   @map("cart_number") @db.VarChar(20)
+  currencyCode       String   @map("currency_code") @db.VarChar(20)
+  payMethod          String   @map("pay_method") @db.VarChar(20)
+  amount             Decimal  @db.Decimal(18, 4)
+  exchangeRateToMain Decimal  @map("exchange_rate_to_main") @db.Decimal(18, 8)
+  amountInMain       Decimal  @map("amount_in_main") @db.Decimal(18, 4)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([docNo])
+  @@index([cartNumber])
+  @@map("app_payment_line")
+}
+
+// Bank-transfer slip images attached at settlement time. One settled order
+// may have many slips (customer paid from multiple accounts). Indexed by
+// both doc_no (cashier doc) and cart_number so it can be queried from either
+// side. No FK because ic_trans/order_cart can be purged outside the app.
+model AppTransferSlip {
+  id         BigInt   @id @default(autoincrement())
+  docNo      String   @map("doc_no") @db.VarChar(20)
+  cartNumber String   @map("cart_number") @db.VarChar(20)
+  imageData  Bytes    @map("image_data")
+  mimeType   String   @map("mime_type") @db.VarChar(50)
+  fileName   String?  @map("file_name") @db.VarChar(200)
+  fileSize   Int      @map("file_size")
+  uploadedBy String?  @map("uploaded_by") @db.VarChar(20)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([docNo])
+  @@index([cartNumber])
+  @@map("app_transfer_slip")
+}
+
+// Append-only log of who cancelled / reopened each order_cart. Written by
+// PATCH /api/orders/[cartNumber] and the /orders server actions. No FK to
+// order_cart on purpose — legacy carts may be physically deleted outside the
+// app, and we want the audit trail to survive that.
+model AppOrderAudit {
+  id         BigInt   @id @default(autoincrement())
+  cartNumber String   @map("cart_number") @db.VarChar(20)
+  action     String   @db.VarChar(20)
+  actorCode  String   @map("actor_code") @db.VarChar(20)
+  reason     String?
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([cartNumber, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("app_order_audit")
+}
+
+// Loyalty / points-collection configuration. One active row at a time —
+// manager edits the earn rate on /loyalty and the POS reads the active row
+// when calculating points to award.
+// We keep it as a table (not a single row keyed by id=1) so future
+// per-tier or per-period overrides can be added without a schema change.
+model AppLoyaltyConfig {
+  id                 BigInt   @id @default(autoincrement())
+  // Kip spent to earn 1 point. e.g. 70000 → ຊື້ 70,000 ກີບ ໄດ້ 1 ແຕ້ມ.
+  // Must be > 0 (validated at API layer).
+  earnKipPerPoint    Decimal  @default(70000) @map("earn_kip_per_point") @db.Decimal(18, 4)
+  // Legacy compatibility field. Redemption is not used by the current
+  // business rule, which only accumulates points from purchase amount.
+  redeemPointsPerKip Decimal  @default(1) @map("redeem_points_per_kip") @db.Decimal(18, 4)
+  // Legacy compatibility field. Redemption is not exposed in the UI.
+  minRedeemPoints    Decimal  @default(0) @map("min_redeem_points") @db.Decimal(18, 4)
+  // Optional human-readable label shown to the cashier (e.g. "ແຕ້ມ ODG").
+  pointName          String?  @map("point_name") @db.VarChar(50)
+  isActive           Boolean  @default(true) @map("is_active")
+  note               String?
+  updatedBy          String?  @map("updated_by") @db.VarChar(20)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt          DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([isActive, updatedAt(sort: Desc)])
+  @@map("app_loyalty_config")
+}
+
+// Warehouses that are allowed to be used as sale stock in POS/app.
+model AppSalesWarehouse {
+  warehouseCode String   @id @map("warehouse_code") @db.VarChar(25)
+  isActive      Boolean  @default(true) @map("is_active")
+  note          String?
+  updatedBy     String?  @map("updated_by") @db.VarChar(20)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@index([isActive, warehouseCode])
+  @@map("app_sales_warehouse")
+}
+
+// Per-item, per-sales-warehouse minimum stock threshold.
+model AppStockMinimum {
+  id            BigInt   @id @default(autoincrement())
+  warehouseCode String   @map("warehouse_code") @db.VarChar(25)
+  itemCode      String   @map("item_code") @db.VarChar(50)
+  minQty        Decimal  @default(0) @map("min_qty") @db.Decimal(18, 4)
+  targetQty     Decimal  @default(0) @map("target_qty") @db.Decimal(18, 4)
+  dailySalesQty Decimal  @default(0) @map("daily_sales_qty") @db.Decimal(18, 4)
+  coverDays     Decimal  @default(0) @map("cover_days") @db.Decimal(18, 4)
+  safetyQty     Decimal  @default(0) @map("safety_qty") @db.Decimal(18, 4)
+  note          String?
+  updatedBy     String?  @map("updated_by") @db.VarChar(20)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([warehouseCode, itemCode], map: "app_stock_minimum_unique")
+  @@index([itemCode])
+  @@index([warehouseCode])
+  @@map("app_stock_minimum")
+}
+
+// Manager-managed promotion definitions. Three discriminator values:
+//   bogo                 — buy N of trigger_item, get bonus_qty of bonus_item free
+//   item_pair_price      — buy trigger_item, then bonus_item is priced at bonus_price_kip
+//   fixed_price_period   — trigger_item is sold at fixed_price_kip during
+//                          start_at..end_at (and optional daily time_from..time_to)
+// CRUD only at this stage — the POS pricing engine is intentionally not yet
+// wired up. The shape stays narrow on purpose: type-specific columns are
+// nullable, validation lives in the API layer.
+model AppPromotion {
+  id              BigInt    @id @default(autoincrement())
+  name            String    @db.VarChar(200)
+  promoType       String    @map("promo_type") @db.VarChar(30)
+  isActive        Boolean   @default(true) @map("is_active")
+  startAt         DateTime? @map("start_at") @db.Timestamptz(6)
+  endAt           DateTime? @map("end_at") @db.Timestamptz(6)
+  timeFrom        DateTime? @map("time_from") @db.Time(6)
+  timeTo          DateTime? @map("time_to") @db.Time(6)
+  triggerItemCode String?   @map("trigger_item_code") @db.VarChar(50)
+  triggerQty      Decimal?  @map("trigger_qty") @db.Decimal(18, 4)
+  bonusItemCode   String?   @map("bonus_item_code") @db.VarChar(50)
+  bonusQty        Decimal?  @map("bonus_qty") @db.Decimal(18, 4)
+  bonusPriceKip   Decimal?  @map("bonus_price_kip") @db.Decimal(18, 4)
+  fixedPriceKip   Decimal?  @map("fixed_price_kip") @db.Decimal(18, 4)
+  // Whether this promotion's sale lines should accrue loyalty points.
+  // The POS / loyalty engine reads this flag when computing point
+  // awards on settlement — set FALSE for deep-discount promos that
+  // shouldn't also award points.
+  awardsPoints           Boolean @default(true) @map("awards_points")
+  // Whether the customer's standing member discount stacks on top of
+  // this promotion's price. FALSE → promo line is final, the member %
+  // is skipped. TRUE → member % applies on top of the promo price.
+  awardsMemberDiscount   Boolean @default(true) @map("awards_member_discount")
+  note            String?
+  createdBy       String?   @map("created_by") @db.VarChar(20)
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([isActive, promoType])
+  @@map("app_promotion")
+}
+
+// Append-only audit log for app_promotion. One row per create / update
+// / delete with a JSON snapshot of the row state at the time of the
+// action. Powers the "ປະຫວັດການແກ້" view in the promotions admin UI
+// so a manager can review what changed and who changed it.
+model AppPromotionAudit {
+  id           BigInt   @id @default(autoincrement())
+  promotionId  BigInt   @map("promotion_id")
+  action       String   @db.VarChar(20)
+  actorCode    String   @map("actor_code") @db.VarChar(20)
+  snapshot     Json
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([promotionId, createdAt(sort: Desc)])
+  @@index([createdAt(sort: Desc)])
+  @@map("app_promotion_audit")
+}
+
+// Loyalty points redeemed at settle time. One row per redeem action.
+// Reversed on void by restoring ar_customer.point_balance (the row stays
+// in place as audit; the void's CTPL doc carries the reverse signal).
+model AppLoyaltyRedemption {
+  id            BigInt   @id @default(autoincrement())
+  docNo         String   @map("doc_no") @db.VarChar(20)
+  cartNumber    String   @map("cart_number") @db.VarChar(20)
+  customerCode  String   @map("customer_code") @db.VarChar(50)
+  pointsUsed    Int      @map("points_used")
+  kipValue      Decimal  @map("kip_value") @db.Decimal(18, 2)
+  cashierCode   String   @map("cashier_code") @db.VarChar(20)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([customerCode, createdAt(sort: Desc)])
+  @@index([docNo])
+  @@map("app_loyalty_redemption")
+}
+
+// Held (parked) cart sidecar. ic_trans.status stays at 0 (pending); a row
+// here flags the SOK as parked so the cashier list filter can separate
+// held bills from regular incoming orders. Deleted when the cashier
+// resumes the bill or settles it.
+model AppHeldCart {
+  cartNumber String   @id @map("cart_number") @db.VarChar(20)
+  docNo      String   @map("doc_no") @db.VarChar(20)
+  heldBy     String   @map("held_by") @db.VarChar(20)
+  reason     String?
+  heldAt     DateTime @default(now()) @map("held_at") @db.Timestamptz(6)
+
+  @@index([heldAt(sort: Desc)])
+  @@map("app_held_cart")
+}
+
+// Cashier shift. Exactly one row with status='open' may exist per
+// cashier_code at any time. Every CAKAP settled while open binds to it
+// via app_settle_audit.shift_id for the end-of-shift X/Z reconciliation.
+model AppCashierShift {
+  id            BigInt    @id @default(autoincrement())
+  cashierCode   String    @map("cashier_code") @db.VarChar(20)
+  branchCode    String?   @map("branch_code") @db.VarChar(20)
+  openedAt      DateTime  @default(now()) @map("opened_at") @db.Timestamptz(6)
+  closedAt      DateTime? @map("closed_at") @db.Timestamptz(6)
+  openingCash   Decimal   @default(0) @map("opening_cash") @db.Decimal(18, 2)
+  closingCash   Decimal?  @map("closing_cash") @db.Decimal(18, 2)
+  expectedCash  Decimal?  @map("expected_cash") @db.Decimal(18, 2)
+  variance      Decimal?  @db.Decimal(18, 2)
+  note          String?
+  status        String    @default("open") @db.VarChar(20)
+
+  movements     AppCashMovement[]
+  settles       AppSettleAudit[]
+
+  @@index([cashierCode, status])
+  @@index([openedAt(sort: Desc)])
+  @@map("app_cashier_shift")
+}
+
+// Cash movements inside a shift. movementType: drop|payout|adjustment.
+// amount is signed (positive = cash in, negative = cash out).
+model AppCashMovement {
+  id            BigInt   @id @default(autoincrement())
+  shiftId       BigInt   @map("shift_id")
+  movementType  String   @map("movement_type") @db.VarChar(20)
+  amount        Decimal  @db.Decimal(18, 2)
+  reason        String
+  actorCode     String   @map("actor_code") @db.VarChar(20)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  shift         AppCashierShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+
+  @@index([shiftId, createdAt])
+  @@map("app_cash_movement")
+}
+
+// Per-settled-bill audit. Powers shift reconciliation, void tracking,
+// receipt history search. Written from /api/cashier/settle. Updated in
+// place when the receipt is later voided (Phase E).
+model AppSettleAudit {
+  id           BigInt    @id @default(autoincrement())
+  docNo        String    @unique @map("doc_no") @db.VarChar(20)
+  cartNumber   String    @map("cart_number") @db.VarChar(20)
+  shiftId      BigInt?   @map("shift_id")
+  cashierCode  String    @map("cashier_code") @db.VarChar(20)
+  totalKip     Decimal   @map("total_kip") @db.Decimal(18, 2)
+  cashKip      Decimal   @default(0) @map("cash_kip") @db.Decimal(18, 2)
+  transferKip  Decimal   @default(0) @map("transfer_kip") @db.Decimal(18, 2)
+  redeemedKip  Decimal   @default(0) @map("redeemed_kip") @db.Decimal(18, 2)
+  promoKip     Decimal   @default(0) @map("promo_kip") @db.Decimal(18, 2)
+  isVoided     Boolean   @default(false) @map("is_voided")
+  voidedAt     DateTime? @map("voided_at") @db.Timestamptz(6)
+  voidedBy     String?   @map("voided_by") @db.VarChar(20)
+  voidDocNo    String?   @map("void_doc_no") @db.VarChar(20)
+  voidReason   String?   @map("void_reason")
+  createdAt    DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  shift        AppCashierShift? @relation(fields: [shiftId], references: [id], onDelete: SetNull)
+
+  @@index([shiftId])
+  @@index([cashierCode, createdAt(sort: Desc)])
+  @@index([isVoided, createdAt(sort: Desc)])
+  @@map("app_settle_audit")
+}
+
+// Barcode → item mapping for in-store scanner lookups. One item may have
+// multiple barcodes (case pack, inner unit, etc.); PK on barcode itself
+// makes duplicate scans error out at insert time.
+model IcInventoryBarcode {
+  barcode   String   @id @db.VarChar(50)
+  icCode    String   @map("ic_code") @db.VarChar(50)
+  note      String?
+  createdBy String?  @map("created_by") @db.VarChar(20)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([icCode])
+  @@map("ic_inventory_barcode")
+}
