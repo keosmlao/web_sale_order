@@ -9,8 +9,9 @@ type Warehouse = {
 };
 
 type WatchItem = {
-  warehouseCode: string;
-  warehouseName: string;
+  scope: "warehouse" | "sales_agg";
+  warehouseCode: string | null;
+  warehouseName: string | null;
   itemCode: string;
   itemName: string;
   unitName: string | null;
@@ -26,8 +27,8 @@ type WatchItem = {
 
 type RefillRequest = {
   id: string;
-  warehouseCode: string;
-  warehouseName: string;
+  warehouseCode: string | null;
+  warehouseName: string | null;
   itemCode: string;
   itemName: string;
   unitName: string | null;
@@ -185,7 +186,7 @@ export default function StockRefillClient({
           ຕິດຕາມ stock + ຂໍເຕີມສະຕ້ອກ
         </h1>
         <p className="mt-1 text-sm text-odoo-text-muted">
-          ສິນຄ້າທີ່ stock ຕ່ຳກວ່າ target — ກົດປຸ່ມ "ຂໍເຕີມ" ເພື່ອສ້າງຄຳຂໍ.
+          ສິນຄ້າທີ່ stock ຕ່ຳກວ່າ target — ກົດປຸ່ມ &ldquo;ຂໍເຕີມ&rdquo; ເພື່ອສ້າງຄຳຂໍ.
         </p>
       </header>
 
@@ -293,7 +294,7 @@ export default function StockRefillClient({
               ) : (
                 items.map((it) => (
                   <tr
-                    key={`${it.warehouseCode}-${it.itemCode}`}
+                    key={`${it.scope}-${it.warehouseCode ?? ""}-${it.itemCode}`}
                     className="border-t border-odoo-border"
                   >
                     <td className="px-4 py-3">
@@ -303,8 +304,18 @@ export default function StockRefillClient({
                       </div>
                     </td>
                     <td className="px-4 py-3 text-xs">
-                      <div className="font-semibold text-odoo-text-strong">{it.warehouseCode}</div>
-                      <div className="text-odoo-text-muted">{it.warehouseName}</div>
+                      {it.scope === "sales_agg" ? (
+                        <span className="inline-flex rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700">
+                          ສາງຂາຍ (ລວມ)
+                        </span>
+                      ) : (
+                        <>
+                          <div className="font-semibold text-odoo-text-strong">
+                            {it.warehouseCode}
+                          </div>
+                          <div className="text-odoo-text-muted">{it.warehouseName}</div>
+                        </>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-semibold">
                       {qtyFmt.format(it.currentStock)}
@@ -402,8 +413,14 @@ export default function StockRefillClient({
                         </div>
                       ) : null}
                     </td>
-                    <td className="px-4 py-3 text-xs text-odoo-text-muted">
-                      {r.warehouseCode}
+                    <td className="px-4 py-3 text-xs">
+                      {r.warehouseCode ? (
+                        <span className="text-odoo-text-muted">{r.warehouseCode}</span>
+                      ) : (
+                        <span className="inline-flex rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700">
+                          ສາງຂາຍ (ລວມ)
+                        </span>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right font-mono font-bold">
                       {qtyFmt.format(r.requestedQty)}
@@ -570,7 +587,8 @@ function CreateRequestModal({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          warehouseCode: item.warehouseCode,
+          // sales_agg → warehouseCode = null (general request)
+          warehouseCode: item.scope === "sales_agg" ? null : item.warehouseCode,
           itemCode: item.itemCode,
           requestedQty: Number(qty),
           reason: reason.trim() || undefined,
@@ -595,6 +613,15 @@ function CreateRequestModal({
         <div className="rounded-md border border-odoo-border bg-odoo-surface-muted px-3 py-2 text-sm">
           <div className="font-bold text-odoo-text-strong">{item.itemCode}</div>
           <div className="text-xs text-odoo-text-muted">{item.itemName}</div>
+          {item.scope === "sales_agg" ? (
+            <div className="mt-1.5 inline-flex rounded-md border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-[11px] font-bold text-indigo-700">
+              ສາງຂາຍ (ລວມ) — ຄຳຂໍລວມ ບໍ່ລະບຸສາງ
+            </div>
+          ) : (
+            <div className="mt-1.5 text-[11px] text-odoo-text-muted">
+              ສາງ: {item.warehouseCode} · {item.warehouseName}
+            </div>
+          )}
           <div className="mt-2 grid grid-cols-3 gap-2 text-xs">
             <div>
               <div className="text-odoo-text-muted">Stock</div>
@@ -724,7 +751,8 @@ function DecideModal({
             {request.unitName ? ` ${request.unitName}` : ""}
           </div>
           <div className="text-xs text-odoo-text-muted">
-            {request.itemName} · {request.warehouseCode}
+            {request.itemName} ·{" "}
+            {request.warehouseCode ?? "ສາງຂາຍ (ລວມ)"}
           </div>
           {request.reason ? (
             <div className="mt-1 text-xs text-odoo-text-muted">

@@ -17,8 +17,9 @@ type ItemOption = {
 
 type StockRule = {
   id: string;
-  warehouseCode: string;
-  warehouseName: string;
+  scope: "warehouse" | "sales_agg";
+  warehouseCode: string | null;
+  warehouseName: string | null;
   itemCode: string;
   itemName: string;
   unitName: string | null;
@@ -45,6 +46,9 @@ export default function StockMinimumClient({
   canManage: boolean;
 }) {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  // Default scope is "sales_agg" since this is the recommended way to
+  // manage thresholds for sales warehouses (1 rule per item, summed stock).
+  const [scope, setScope] = useState<"sales_agg" | "warehouse">("sales_agg");
   const [warehouseCode, setWarehouseCode] = useState("");
   const [rules, setRules] = useState<StockRule[]>([]);
   const [q, setQ] = useState("");
@@ -72,9 +76,17 @@ export default function StockMinimumClient({
     return Math.max(0, daily * days + safety);
   }, [dailySalesQty, coverDays, safetyQty]);
 
-  async function loadRules(nextWarehouse = warehouseCode, nextQ = q) {
+  // Non-sales warehouses are the only warehouses that can carry a
+  // per-warehouse rule after the sales_agg migration. Derived once from
+  // the fetched warehouse list.
+  const nonSalesWarehouses = useMemo(
+    () => warehouses.filter((wh) => !wh.isSalesWarehouse),
+    [warehouses],
+  );
+
+  async function loadRules(nextQ = q) {
+    // Show all rules (both scopes) — the user can filter visually.
     const params = new URLSearchParams();
-    if (nextWarehouse) params.set("warehouse", nextWarehouse);
     if (nextQ.trim()) params.set("q", nextQ.trim());
     const res = await fetch(`/api/settings/stock-minimum?${params.toString()}`);
     if (!res.ok) throw new Error(`minimum-stock ${res.status}`);
@@ -91,14 +103,13 @@ export default function StockMinimumClient({
         if (!whRes.ok) throw new Error(`warehouses ${whRes.status}`);
         const whData = await whRes.json();
         if (cancelled) return;
-        const rows = ((whData.items ?? []) as Warehouse[]).filter(
-          (row) => row.isSalesWarehouse,
-        );
+        const rows = (whData.items ?? []) as Warehouse[];
         setWarehouses(rows);
-        const first = rows[0]?.code ?? "";
-        setWarehouseCode(first);
-        const params = first ? `?warehouse=${encodeURIComponent(first)}` : "";
-        const rulesRes = await fetch(`/api/settings/stock-minimum${params}`);
+        // Default per-warehouse picker to the first non-sales warehouse,
+        // since sales warehouses can't carry per-warehouse rules.
+        const firstNonSales = rows.find((row) => !row.isSalesWarehouse)?.code ?? "";
+        setWarehouseCode(firstNonSales);
+        const rulesRes = await fetch("/api/settings/stock-minimum");
         if (!rulesRes.ok) throw new Error(`minimum-stock ${rulesRes.status}`);
         const rulesData = await rulesRes.json();
         if (!cancelled) setRules((rulesData.items ?? []) as StockRule[]);
@@ -156,7 +167,8 @@ export default function StockMinimumClient({
   }
 
   async function save() {
-    if (!canManage || saving || !warehouseCode || !item) return;
+    if (!canManage || saving || !item) return;
+    if (scope === "warehouse" && !warehouseCode) return;
     setSaving(true);
     setError(null);
     try {
@@ -166,7 +178,8 @@ export default function StockMinimumClient({
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          warehouseCode,
+          scope,
+          warehouseCode: scope === "sales_agg" ? "" : warehouseCode,
           itemCode: item.code,
           dailySalesQty: Number(dailySalesQty),
           coverDays: Number(coverDays),
@@ -200,7 +213,8 @@ export default function StockMinimumClient({
     setError(null);
     try {
       const params = new URLSearchParams({
-        warehouseCode: rule.warehouseCode,
+        scope: rule.scope,
+        warehouseCode: rule.warehouseCode ?? "",
         itemCode: rule.itemCode,
       });
       const res = await fetch(`/api/settings/stock-minimum?${params.toString()}`, {
@@ -248,25 +262,63 @@ export default function StockMinimumClient({
             </div>
           </div>
           <div className="grid gap-3 px-4 py-4">
-            <label className="grid gap-1">
-              <span className="odoo-label">ສາງຂາຍ</span>
-              <select
-                value={warehouseCode}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setWarehouseCode(next);
-                  void loadRules(next, q);
-                }}
-                className="odoo-input"
-                disabled={saving}
-              >
-                {warehouses.map((wh) => (
-                  <option key={wh.code} value={wh.code}>
-                    {wh.code} · {wh.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="grid gap-1">
+              <span className="odoo-label">ປະເພດກົດ</span>
+              <div className="grid grid-cols-2 gap-1 rounded-md border border-odoo-border bg-odoo-surface-muted p-1">
+                <button
+                  type="button"
+                  onClick={() => setScope("sales_agg")}
+                  className={
+                    "rounded px-2 py-1.5 text-xs font-bold transition " +
+                    (scope === "sales_agg"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-odoo-text-muted hover:bg-white")
+                  }
+                  disabled={saving}
+                >
+                  ສາງຂາຍ (ລວມ)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setScope("warehouse")}
+                  className={
+                    "rounded px-2 py-1.5 text-xs font-bold transition " +
+                    (scope === "warehouse"
+                      ? "bg-indigo-600 text-white shadow-sm"
+                      : "text-odoo-text-muted hover:bg-white")
+                  }
+                  disabled={saving}
+                >
+                  ສາງສະເພາະ
+                </button>
+              </div>
+              <span className="text-[11px] text-odoo-text-muted">
+                {scope === "sales_agg"
+                  ? "1 rule ສຳລັບສິນຄ້ານີ້ — ກວດ stock ລວມຂອງທຸກສາງຂາຍ"
+                  : "ສ້າງ rule ຕໍ່ສາງ (ສະເພາະສາງໃຫຍ່/transit)"}
+              </span>
+            </div>
+            {scope === "warehouse" ? (
+              <label className="grid gap-1">
+                <span className="odoo-label">ສາງ</span>
+                <select
+                  value={warehouseCode}
+                  onChange={(e) => setWarehouseCode(e.target.value)}
+                  className="odoo-input"
+                  disabled={saving}
+                >
+                  {nonSalesWarehouses.length === 0 ? (
+                    <option value="">— ບໍ່ມີສາງທີ່ບໍ່ແມ່ນສາງຂາຍ —</option>
+                  ) : (
+                    nonSalesWarehouses.map((wh) => (
+                      <option key={wh.code} value={wh.code}>
+                        {wh.code} · {wh.name}
+                      </option>
+                    ))
+                  )}
+                </select>
+              </label>
+            ) : null}
             <label className="grid gap-1">
               <span className="odoo-label">ສິນຄ້າ</span>
               <input
@@ -379,7 +431,12 @@ export default function StockMinimumClient({
             <button
               type="button"
               onClick={save}
-              disabled={!canManage || saving || !item || !warehouseCode}
+              disabled={
+                !canManage ||
+                saving ||
+                !item ||
+                (scope === "warehouse" && !warehouseCode)
+              }
               className="odoo-btn odoo-btn-primary justify-center"
             >
               {saving ? "ກຳລັງບັນທຶກ..." : "ບັນທຶກ minimum"}
@@ -428,6 +485,7 @@ export default function StockMinimumClient({
               <thead className="bg-odoo-surface-muted text-left text-xs font-bold uppercase tracking-wider text-odoo-text-muted">
                 <tr>
                   <th className="px-4 py-3">ສິນຄ້າ</th>
+                  <th className="px-4 py-3">ຂອບເຂດ</th>
                   <th className="px-4 py-3">Stock</th>
                   <th className="px-4 py-3">Minimum</th>
                   <th className="px-4 py-3">Target</th>
@@ -438,13 +496,13 @@ export default function StockMinimumClient({
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-odoo-text-muted">
+                    <td colSpan={7} className="px-4 py-8 text-center text-odoo-text-muted">
                       ກຳລັງໂຫລດ...
                     </td>
                   </tr>
                 ) : rules.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-odoo-text-muted">
+                    <td colSpan={7} className="px-4 py-8 text-center text-odoo-text-muted">
                       ຍັງບໍ່ມີການກຳນົດ minimum stock
                     </td>
                   </tr>
@@ -456,6 +514,22 @@ export default function StockMinimumClient({
                         <div className="text-xs text-odoo-text-muted">
                           {rule.itemName} {rule.unitName ? `· ${rule.unitName}` : ""}
                         </div>
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {rule.scope === "sales_agg" ? (
+                          <span className="inline-flex rounded-md border border-indigo-200 bg-indigo-50 px-2 py-1 text-[11px] font-bold text-indigo-700">
+                            ສາງຂາຍ (ລວມ)
+                          </span>
+                        ) : (
+                          <div>
+                            <div className="font-semibold text-odoo-text-strong">
+                              {rule.warehouseCode}
+                            </div>
+                            <div className="text-odoo-text-muted">
+                              {rule.warehouseName}
+                            </div>
+                          </div>
+                        )}
                       </td>
                       <td className="px-4 py-3 font-semibold">
                         {qtyFmt.format(rule.currentStock)}
@@ -553,6 +627,8 @@ function parseCSV(text: string): string[][] {
 
 // Columns the importer reads. Templates include extra display columns
 // (itemName, brand, category, currentStock) that are ignored on import.
+// `scope` is OPTIONAL — if missing/empty, defaults to "warehouse" for
+// backward compat with templates exported before the sales_agg feature.
 const IMPORT_COLUMNS = [
   "warehouseCode",
   "itemCode",
@@ -565,6 +641,7 @@ const IMPORT_COLUMNS = [
 ] as const;
 
 const TEMPLATE_COLUMNS = [
+  "scope",
   "warehouseCode",
   "itemCode",
   "itemName",
@@ -599,8 +676,14 @@ function rowToPayload(row: Record<string, string>, defaultWarehouseCode: string)
   const minQty = row.minQty?.trim()
     ? parseNumber(row.minQty, calculatedMin)
     : calculatedMin;
+  const scopeRaw = row.scope?.trim().toLowerCase();
+  const scope: "warehouse" | "sales_agg" =
+    scopeRaw === "sales_agg" ? "sales_agg" : "warehouse";
   return {
-    warehouseCode: row.warehouseCode?.trim() || defaultWarehouseCode,
+    scope,
+    // sales_agg ignores warehouseCode (server sets it to '' sentinel).
+    warehouseCode:
+      scope === "sales_agg" ? "" : row.warehouseCode?.trim() || defaultWarehouseCode,
     itemCode: row.itemCode?.trim() || "",
     dailySalesQty,
     coverDays,
@@ -679,8 +762,12 @@ function ImportStockMinimumModal({
           a.code.localeCompare(b.code),
       );
 
+      // Default the template to sales_agg (the recommended scope for
+      // sales-warehouse items). Users can change to "warehouse" per row
+      // for non-sales warehouses.
       const body: (string | number)[][] = items.map((it) => [
-        defaultWarehouseCode,
+        "sales_agg",
+        "",
         it.code,
         it.nameLo ?? "",
         it.brand ? (it.brandName ? `${it.brand} · ${it.brandName}` : it.brand) : "",
@@ -703,11 +790,12 @@ function ImportStockMinimumModal({
           ? [[...TEMPLATE_COLUMNS], ...body]
           : [
               [...TEMPLATE_COLUMNS],
-              [defaultWarehouseCode, "110101-0001", "ຕົວຢ່າງສິນຄ້າ", "", "", 0, 5, 3, 2, "", 25, ""],
+              ["sales_agg", "", "110101-0001", "ຕົວຢ່າງສິນຄ້າ", "", "", 0, 5, 3, 2, "", 25, ""],
             ];
 
       const ws = XLSX.utils.aoa_to_sheet(data);
       ws["!cols"] = [
+        { wch: 10 }, // scope
         { wch: 12 }, // warehouseCode
         { wch: 16 }, // itemCode
         { wch: 36 }, // itemName
@@ -795,8 +883,11 @@ function ImportStockMinimumModal({
     for (let i = 0; i < rows.length; i++) {
       const payload = rowToPayload(rows[i], defaultWarehouseCode);
       try {
-        if (!payload.warehouseCode || !payload.itemCode) {
-          throw new Error("warehouseCode and itemCode are required");
+        if (!payload.itemCode) {
+          throw new Error("itemCode is required");
+        }
+        if (payload.scope === "warehouse" && !payload.warehouseCode) {
+          throw new Error("warehouseCode is required for scope=warehouse");
         }
         const res = await fetch("/api/settings/stock-minimum", {
           method: "PUT",
@@ -899,6 +990,7 @@ function ImportStockMinimumModal({
                   <thead className="bg-odoo-surface-muted text-odoo-text-muted">
                     <tr>
                       <th className="px-2 py-1 text-left">#</th>
+                      <th className="px-2 py-1 text-left">Scope</th>
                       <th className="px-2 py-1 text-left">Warehouse</th>
                       <th className="px-2 py-1 text-left">Item</th>
                       <th className="px-2 py-1 text-left">Min</th>
@@ -915,8 +1007,9 @@ function ImportStockMinimumModal({
                           <td className="px-2 py-1 font-mono text-odoo-text-muted">
                             {idx + 2}
                           </td>
+                          <td className="px-2 py-1 font-mono">{payload.scope}</td>
                           <td className="px-2 py-1 font-mono">
-                            {payload.warehouseCode}
+                            {payload.warehouseCode || "—"}
                           </td>
                           <td className="px-2 py-1 font-mono">
                             {payload.itemCode}
@@ -946,6 +1039,10 @@ function ImportStockMinimumModal({
               </div>
             </>
           ) : null}
+
+          <p className="mb-2 text-[11px] text-odoo-text-muted">
+            ໝາຍເຫດ: scope = <code>sales_agg</code> ສຳລັບສິນຄ້າທີ່ກວດ stock ລວມຂອງສາງຂາຍ (ໂດຍບໍ່ສົນໃຈ warehouseCode), scope = <code>warehouse</code> ສຳລັບ rule ຕໍ່ສາງສະເພາະ.
+          </p>
 
           {results.length > 0 ? (
             <div className="rounded-md border border-odoo-border bg-odoo-surface-muted px-3 py-2 text-[12px]">

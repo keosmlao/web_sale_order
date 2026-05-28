@@ -22,10 +22,15 @@ function createPrismaClient() {
   // before the next query lands on them.
   const pool = new Pool({
     connectionString,
-    max: 10,
+    // Larger pool to absorb the dashboard fan-out (the homepage fires 7
+    // parallel queries on every load) without queuing.
+    max: 20,
     min: 0,
     idleTimeoutMillis: 10_000,
-    connectionTimeoutMillis: 10_000,
+    // Establishing a TCP+TLS connection to the remote DB over Wi-Fi has
+    // p95 latency around 5–8s; 10s was a hard ceiling that the page load
+    // would routinely hit. 30s leaves headroom on a cold pool.
+    connectionTimeoutMillis: 30_000,
     query_timeout: 30_000,
     statement_timeout: 30_000,
     keepAlive: true,

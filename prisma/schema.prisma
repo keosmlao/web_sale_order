@@ -243,11 +243,15 @@ model AppSalesWarehouse {
   @@map("app_sales_warehouse")
 }
 
-// Per-item, per-sales-warehouse minimum stock threshold.
+// Per-item minimum stock threshold.
+// scope = 'warehouse' → rule applies to a specific (warehouse, item).
+// scope = 'sales_agg' → rule applies to the SUM of stock across all
+//   active sales warehouses; warehouseCode is '' (sentinel).
 model AppStockMinimum {
   id            BigInt   @id @default(autoincrement())
   warehouseCode String   @map("warehouse_code") @db.VarChar(25)
   itemCode      String   @map("item_code") @db.VarChar(50)
+  scope         String   @default("warehouse") @db.VarChar(20)
   minQty        Decimal  @default(0) @map("min_qty") @db.Decimal(18, 4)
   targetQty     Decimal  @default(0) @map("target_qty") @db.Decimal(18, 4)
   dailySalesQty Decimal  @default(0) @map("daily_sales_qty") @db.Decimal(18, 4)
@@ -261,6 +265,7 @@ model AppStockMinimum {
   @@unique([warehouseCode, itemCode], map: "app_stock_minimum_unique")
   @@index([itemCode])
   @@index([warehouseCode])
+  @@index([scope, itemCode])
   @@map("app_stock_minimum")
 }
 

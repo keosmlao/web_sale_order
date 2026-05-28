@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { requireEmployee } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
 import Sidebar from "@/components/Sidebar";
+import OrderNotifier from "@/components/OrderNotifier";
 import { logoutAction } from "@/app/login/actions";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
@@ -30,6 +31,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const subtitle = employee.nickname && employee.nickname !== "0" ? employee.nickname : undefined;
 
   if (posOnly) {
+    // POS users are the senders, not the recipients — skip the notifier
+    // for them so they don't get a ping for the bill they just rang up.
     return (
       <div className="min-h-screen bg-background text-odoo-text">
         <form
@@ -63,6 +66,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         role={role}
       />
       <main className="min-w-0 flex-1 md:h-screen md:overflow-y-auto">{children}</main>
+      <OrderNotifier selfEmployeeCode={employee.employeeCode ?? null} />
     </div>
   );
 }

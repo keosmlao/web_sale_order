@@ -5,6 +5,8 @@ import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { STOCK_BALANCE_AS_OF_DATE } from "@/lib/inventory-config";
 import { notifyByRole } from "@/lib/notify";
+import { publishNewOrder } from "@/lib/order-events";
+import { parseOrderRemark } from "@/lib/order-remark";
 import { canBeSalesperson, roleFromEmployee } from "@/lib/roles";
 import { applyPromotions } from "@/lib/promotions-engine";
 
@@ -19,6 +21,12 @@ type OrderItemJson = {
   productName: string | null;
   unitName: string | null;
   whCode: string | null;
+  // Per-line stock location (ic_trans_detail.shelf_code) and per-line
+  // salesperson override (ic_trans_detail.sale_code). Both round-trip
+  // through the mobile edit flow so the cashier doesn't have to re-pick
+  // when reopening a draft bill.
+  shelfCode: string | null;
+  saleCode: string | null;
 };
 
 type OrderRow = {
@@ -27,6 +35,10 @@ type OrderRow = {
   customer_id: string;
   customer_name: string | null;
   customer_phone: string | null;
+  customer_discount_raw: string | null;
+  customer_group_code: string | null;
+  customer_group_name: string | null;
+  customer_point_balance: string | number | null;
   status: number | null;
   is_scheduled: boolean | null;
   total: string | number | null;
@@ -39,6 +51,11 @@ type OrderRow = {
   salesperson_name_lo: string | null;
   salesperson_name_en: string | null;
   salesperson_nickname: string | null;
+  // ic_trans.remark — packed by POST as
+  // "<delivery> | ສ່ວນຫຼຸດທ້າຍບິນ: N | ໝາຍເຫດ: ..."; toOrder() parses
+  // it into the three flat fields so the mobile app can prefill cleanly
+  // on edit.
+  remark: string | null;
   items: OrderItemJson[] | null;
 };
 
@@ -105,6 +122,13 @@ function toOrder(row: OrderRow) {
         nickname: row.salesperson_nickname,
       }
     : null;
+  // Mobile prefill needs delivery / extra discount / note when reopening
+  // a draft. Unpack the packed remark string here so the edit screen
+  // doesn't have to know about the encoding.
+  const parsedRemark = parseOrderRemark(row.remark);
+  const pointBalanceNum = row.customer_point_balance != null
+    ? Number(row.customer_point_balance)
+    : 0;
   return {
     id: row.id,
     // Full SML doc_no (eg. SOK26050001) so the mobile app can display the
@@ -118,11 +142,19 @@ function toOrder(row: OrderRow) {
       phone: row.customer_phone,
       email: null,
       address: null,
+      groupCode: row.customer_group_code,
+      groupName: row.customer_group_name,
+      discountPct: parseDiscountPct(row.customer_discount_raw),
+      pointBalance: Number.isFinite(pointBalanceNum) ? pointBalanceNum : 0,
     },
     warehouseCode: row.warehouse_code,
     salesperson,
     status: statusLabel(row.status, row.is_scheduled === true),
     total: row.total ? Number(row.total) : 0,
+    // Flat fields off the packed remark — mobile edit prefill uses these.
+    deliveryName: parsedRemark.deliveryName,
+    extraDiscount: parsedRemark.extraDiscount,
+    note: parsedRemark.note,
     loyalty: {
       earnedPoints: row.earned_points ? Number(row.earned_points) : 0,
       earnKipPerPoint: row.earn_kip_per_point
@@ -137,6 +169,8 @@ function toOrder(row: OrderRow) {
       quantity: item.quantity ? Number(item.quantity) : 0,
       unitPrice: item.unitPrice ? Number(item.unitPrice) : 0,
       warehouseCode: item.whCode,
+      locationCode: item.shelfCode,
+      salespersonCode: item.saleCode,
       product: {
         id: item.productId,
         code: item.productId,
@@ -219,6 +253,10 @@ export async function GET(request: NextRequest) {
       t.cust_code AS customer_id,
       ar.name_1 AS customer_name,
       ar.telephone AS customer_phone,
+      NULLIF(ard.discount_item, '') AS customer_discount_raw,
+      ard.group_sub_1 AS customer_group_code,
+      arg.name_1 AS customer_group_name,
+      ar.point_balance AS customer_point_balance,
       t.status,
       (
         t.status = 1 AND EXISTS (
@@ -235,6 +273,7 @@ export async function GET(request: NextRequest) {
       emp.fullname_lo AS salesperson_name_lo,
       emp.fullname_en AS salesperson_name_en,
       emp.nickname AS salesperson_nickname,
+      t.remark,
       COALESCE(
         json_agg(
           json_build_object(
@@ -245,7 +284,9 @@ export async function GET(request: NextRequest) {
             'subtotal', d.sum_amount_2,
             'productName', p.name_1,
             'unitName', COALESCE(NULLIF(d.unit_code, ''), p.unit_standard_name),
-            'whCode', NULLIF(d.wh_code, '')
+            'whCode', NULLIF(d.wh_code, ''),
+            'shelfCode', NULLIF(d.shelf_code, ''),
+            'saleCode', NULLIF(d.sale_code, '')
           )
           ORDER BY d.line_number
         ) FILTER (WHERE d.line_number IS NOT NULL),
@@ -254,6 +295,8 @@ export async function GET(request: NextRequest) {
       eff.warehouse_code
     FROM ic_trans t
     LEFT JOIN ar_customer ar ON ar.code = t.cust_code
+    LEFT JOIN ar_customer_detail ard ON ard.ar_code = ar.code
+    LEFT JOIN ar_group_sub arg ON arg.code = ard.group_sub_1
     LEFT JOIN ic_trans_detail d
       ON d.doc_no = t.doc_no
       AND d.trans_type = t.trans_type
@@ -302,6 +345,10 @@ export async function GET(request: NextRequest) {
       t.cust_code,
       ar.name_1,
       ar.telephone,
+      ard.discount_item,
+      ard.group_sub_1,
+      arg.name_1,
+      ar.point_balance,
       t.status,
       t.total_amount_2,
       t.sum_point,
@@ -313,7 +360,8 @@ export async function GET(request: NextRequest) {
       eff.warehouse_code,
       emp.fullname_lo,
       emp.fullname_en,
-      emp.nickname
+      emp.nickname,
+      t.remark
     ORDER BY t.create_date_time_now DESC
     LIMIT 100
   `;
@@ -1266,6 +1314,10 @@ export async function POST(request: NextRequest) {
       t.cust_code AS customer_id,
       ar.name_1 AS customer_name,
       ar.telephone AS customer_phone,
+      NULLIF(ard.discount_item, '') AS customer_discount_raw,
+      ard.group_sub_1 AS customer_group_code,
+      arg.name_1 AS customer_group_name,
+      ar.point_balance AS customer_point_balance,
       t.status,
       (
         t.status = 1 AND EXISTS (
@@ -1282,6 +1334,7 @@ export async function POST(request: NextRequest) {
       emp.fullname_lo AS salesperson_name_lo,
       emp.fullname_en AS salesperson_name_en,
       emp.nickname AS salesperson_nickname,
+      t.remark,
       COALESCE(
         json_agg(
           json_build_object(
@@ -1292,7 +1345,9 @@ export async function POST(request: NextRequest) {
             'subtotal', d.sum_amount_2,
             'productName', p.name_1,
             'unitName', COALESCE(NULLIF(d.unit_code, ''), p.unit_standard_name),
-            'whCode', NULLIF(d.wh_code, '')
+            'whCode', NULLIF(d.wh_code, ''),
+            'shelfCode', NULLIF(d.shelf_code, ''),
+            'saleCode', NULLIF(d.sale_code, '')
           )
           ORDER BY d.line_number
         ) FILTER (WHERE d.line_number IS NOT NULL),
@@ -1301,6 +1356,8 @@ export async function POST(request: NextRequest) {
       t.wh_from AS warehouse_code
     FROM ic_trans t
     LEFT JOIN ar_customer ar ON ar.code = t.cust_code
+    LEFT JOIN ar_customer_detail ard ON ard.ar_code = ar.code
+    LEFT JOIN ar_group_sub arg ON arg.code = ard.group_sub_1
     LEFT JOIN ic_trans_detail d
       ON d.doc_no = t.doc_no
       AND d.trans_type = t.trans_type
@@ -1321,6 +1378,10 @@ export async function POST(request: NextRequest) {
       t.cust_code,
       ar.name_1,
       ar.telephone,
+      ard.discount_item,
+      ard.group_sub_1,
+      arg.name_1,
+      ar.point_balance,
       t.status,
       t.total_amount_2,
       t.sum_point,
@@ -1332,11 +1393,37 @@ export async function POST(request: NextRequest) {
       t.wh_from,
       emp.fullname_lo,
       emp.fullname_en,
-      emp.nickname
+      emp.nickname,
+      t.remark
     LIMIT 1
   `;
 
-  return NextResponse.json(toOrder(createdRows[0]), { status: 201 });
+  const created = toOrder(createdRows[0]);
+
+  // Broadcast to any web browser listening on /api/orders/stream so they
+  // can pop a desktop notification ("ມີອໍເດີໃໝ່"). In-process EventEmitter
+  // so it's safe to fire synchronously; the SSE handler forwards to its
+  // connected sockets without blocking this response.
+  try {
+    publishNewOrder({
+      type: "new-order",
+      cartNumber,
+      docNo: created.docNo ?? null,
+      total: created.total ?? null,
+      customerName: created.customer?.name ?? null,
+      salespersonCode: created.salesperson?.employeeCode ?? null,
+      salespersonName:
+        created.salesperson?.fullnameLo ??
+        created.salesperson?.fullnameEn ??
+        created.salesperson?.nickname ??
+        null,
+      createdAt: new Date(created.createdAt ?? Date.now()).toISOString(),
+    });
+  } catch (e) {
+    console.warn("[order-events] publishNewOrder failed:", e);
+  }
+
+  return NextResponse.json(created, { status: 201 });
 }
 
 function isUniqueConstraintViolation(error: unknown): boolean {

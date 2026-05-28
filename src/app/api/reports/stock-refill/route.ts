@@ -12,16 +12,20 @@ import { STOCK_BALANCE_AS_OF_DATE } from "@/lib/inventory-config";
 
 // GET /api/reports/stock-refill?warehouse=1102&status=needs_refill
 //
-// Returns two lists in one round trip:
-//   items[]    — every (warehouse, item) where current stock <= target (or
-//                <= min — controlled by ?status param). Each row carries the
-//                most recent open request (pending/approved) so the UI can
-//                hide the "ຂໍເຕີມ" button when one is already in flight.
-//   requests[] — recent refill requests (any status) for the same warehouse,
-//                so the workflow panel below the report can show them.
+// Watchlist now has two scopes:
+//   sales_agg  — one row per item, current_stock = SUM across all active
+//                sales warehouses, compared against a single (min, target)
+//                threshold stored with warehouse_code = '' (sentinel).
+//   warehouse  — one row per (warehouse, item) for non-sales warehouses
+//                (main/transit). Stock is per-warehouse as before.
+//
+// The ?warehouse filter only narrows the "warehouse" scope rows.
+// sales_agg rows are always returned (they don't belong to any single
+// warehouse).
 
 type WatchRow = {
-  warehouse_code: string;
+  scope: string;
+  warehouse_code: string | null;
   warehouse_name: string | null;
   item_code: string;
   item_name: string | null;
@@ -36,7 +40,7 @@ type WatchRow = {
 
 type ReqRow = {
   id: bigint;
-  warehouse_code: string;
+  warehouse_code: string | null;
   warehouse_name: string | null;
   item_code: string;
   item_name: string | null;
@@ -75,81 +79,139 @@ export async function GET(request: NextRequest) {
   const warehouse = request.nextUrl.searchParams.get("warehouse")?.trim() ?? "";
   // 'needs_refill' (default) = current <= target. 'critical' = current <= min.
   const statusParam = (request.nextUrl.searchParams.get("status") ?? "needs_refill").trim();
+  const wantCritical = statusParam === "critical";
 
-  // Watchlist query — joins app_stock_minimum with the live balance function
-  // and the most recent open request per (warehouse, item).
+  // Per-warehouse rules: only return rules for warehouses NOT in the active
+  // sales-warehouse set (sales warehouses are covered by the sales_agg rule).
   const warehouseFilter = warehouse
     ? Prisma.sql`AND sm.warehouse_code = ${warehouse}`
     : Prisma.empty;
-  const statusFilter =
-    statusParam === "critical"
-      ? Prisma.sql`AND COALESCE(b.balance_qty, 0) <= sm.min_qty`
-      : Prisma.sql`AND COALESCE(b.balance_qty, 0) <= sm.target_qty`;
 
-  // Push the balance function lookup down to the rows we actually care about
-  // (only the configured minimum-stock rules) so we don't iterate the entire
-  // catalog.
+  // The watchlist is a UNION of two query shapes — sales_agg and per-warehouse.
+  // Sales_agg sums the current stock across all active sales warehouses; the
+  // per-warehouse arm preserves the original 1-row-per-(warehouse,item)
+  // behaviour but excludes sales warehouses (their per-warehouse rules
+  // should not exist after the migration, but we filter defensively).
   const items = await prisma.$queryRaw<WatchRow[]>`
-    WITH rule AS (
-      SELECT sm.warehouse_code, sm.item_code, sm.min_qty, sm.target_qty
+    WITH sales_codes AS (
+      SELECT warehouse_code
+      FROM app_sales_warehouse
+      WHERE is_active = TRUE
+    ),
+    -- Sales aggregate: 1 row per item, summed stock across sales warehouses.
+    sales_agg_rule AS (
+      SELECT sm.id, sm.item_code, sm.min_qty, sm.target_qty
       FROM app_stock_minimum sm
-      WHERE 1=1
-      ${warehouseFilter}
+      WHERE sm.scope = 'sales_agg'
     ),
-    keys AS (
-      SELECT
-        string_agg(DISTINCT item_code, ',') AS item_codes,
-        string_agg(DISTINCT warehouse_code, ',') AS warehouse_codes
-      FROM rule
-    ),
-    balance AS (
-      SELECT ic_code, warehouse, SUM(balance_qty) AS balance_qty
+    sales_agg_balance AS (
+      SELECT ic_code, SUM(balance_qty) AS qty
       FROM public.sml_ic_function_stock_balance_warehouse(
         ${STOCK_BALANCE_AS_OF_DATE}::date,
-        (SELECT item_codes FROM keys),
-        (SELECT warehouse_codes FROM keys)
+        (SELECT string_agg(DISTINCT item_code, ',') FROM sales_agg_rule),
+        (SELECT string_agg(DISTINCT warehouse_code, ',') FROM sales_codes)
+      )
+      WHERE warehouse IN (SELECT warehouse_code FROM sales_codes)
+      GROUP BY ic_code
+    ),
+    -- Per-warehouse balance only computed for non-sales warehouses.
+    per_wh_rule AS (
+      SELECT sm.id, sm.warehouse_code, sm.item_code, sm.min_qty, sm.target_qty
+      FROM app_stock_minimum sm
+      WHERE sm.scope = 'warehouse'
+        AND sm.warehouse_code NOT IN (SELECT warehouse_code FROM sales_codes)
+        ${warehouseFilter}
+    ),
+    per_wh_balance AS (
+      SELECT ic_code, warehouse, SUM(balance_qty) AS qty
+      FROM public.sml_ic_function_stock_balance_warehouse(
+        ${STOCK_BALANCE_AS_OF_DATE}::date,
+        (SELECT string_agg(DISTINCT item_code, ',') FROM per_wh_rule),
+        (SELECT string_agg(DISTINCT warehouse_code, ',') FROM per_wh_rule)
       )
       GROUP BY ic_code, warehouse
     ),
+    -- Most recent open request per (warehouse_code, item_code). NULL
+    -- warehouse_code maps to sales_agg rows.
     open_req AS (
-      SELECT DISTINCT ON (warehouse_code, item_code)
+      SELECT DISTINCT ON (COALESCE(warehouse_code, ''), item_code)
         warehouse_code, item_code, id, status, requested_qty
       FROM app_stock_refill_request
       WHERE status IN ('pending', 'approved')
-      ORDER BY warehouse_code, item_code, requested_at DESC
+      ORDER BY COALESCE(warehouse_code, ''), item_code, requested_at DESC
+    ),
+    rows_combined AS (
+      -- sales_agg arm
+      SELECT
+        'sales_agg'::text AS scope,
+        NULL::varchar AS warehouse_code,
+        NULL::varchar AS warehouse_name,
+        r.item_code,
+        i.name_1 AS item_name,
+        i.unit_standard_name AS unit_name,
+        r.min_qty,
+        r.target_qty,
+        COALESCE(b.qty, 0) AS current_stock,
+        o.id AS open_request_id,
+        o.status AS open_request_status,
+        o.requested_qty AS open_request_qty
+      FROM sales_agg_rule r
+      LEFT JOIN ic_inventory i ON i.code = r.item_code
+      LEFT JOIN sales_agg_balance b ON b.ic_code = r.item_code
+      LEFT JOIN open_req o
+        ON o.warehouse_code IS NULL AND o.item_code = r.item_code
+      WHERE 1=1
+        ${
+          warehouse
+            ? // when user filters by a specific warehouse, only show
+              // sales_agg rows if it's one of the sales warehouses
+              Prisma.sql`AND ${warehouse} IN (SELECT warehouse_code FROM sales_codes)`
+            : Prisma.empty
+        }
+
+      UNION ALL
+
+      -- per-warehouse arm (non-sales warehouses only)
+      SELECT
+        'warehouse'::text AS scope,
+        r.warehouse_code,
+        wh.name_1 AS warehouse_name,
+        r.item_code,
+        i.name_1 AS item_name,
+        i.unit_standard_name AS unit_name,
+        r.min_qty,
+        r.target_qty,
+        COALESCE(b.qty, 0) AS current_stock,
+        o.id AS open_request_id,
+        o.status AS open_request_status,
+        o.requested_qty AS open_request_qty
+      FROM per_wh_rule r
+      LEFT JOIN ic_warehouse wh ON wh.code = r.warehouse_code
+      LEFT JOIN ic_inventory i ON i.code = r.item_code
+      LEFT JOIN per_wh_balance b
+        ON b.ic_code = r.item_code AND b.warehouse = r.warehouse_code
+      LEFT JOIN open_req o
+        ON o.warehouse_code = r.warehouse_code AND o.item_code = r.item_code
     )
-    SELECT
-      sm.warehouse_code,
-      wh.name_1 AS warehouse_name,
-      sm.item_code,
-      i.name_1 AS item_name,
-      i.unit_standard_name AS unit_name,
-      sm.min_qty,
-      sm.target_qty,
-      COALESCE(b.balance_qty, 0) AS current_stock,
-      o.id AS open_request_id,
-      o.status AS open_request_status,
-      o.requested_qty AS open_request_qty
-    FROM app_stock_minimum sm
-    LEFT JOIN ic_warehouse wh ON wh.code = sm.warehouse_code
-    LEFT JOIN ic_inventory i ON i.code = sm.item_code
-    LEFT JOIN balance b
-      ON b.ic_code = sm.item_code
-     AND b.warehouse = sm.warehouse_code
-    LEFT JOIN open_req o
-      ON o.warehouse_code = sm.warehouse_code
-     AND o.item_code = sm.item_code
-    WHERE 1=1
-      ${warehouseFilter}
-      ${statusFilter}
+    SELECT *
+    FROM rows_combined
+    WHERE
+      ${
+        wantCritical
+          ? Prisma.sql`current_stock <= min_qty`
+          : Prisma.sql`current_stock <= target_qty`
+      }
     ORDER BY
-      (COALESCE(b.balance_qty, 0) / NULLIF(sm.target_qty, 0)) ASC NULLS FIRST,
-      sm.warehouse_code,
-      sm.item_code
+      (current_stock / NULLIF(target_qty, 0)) ASC NULLS FIRST,
+      scope DESC,
+      COALESCE(warehouse_code, ''),
+      item_code
     LIMIT 500
   `;
 
-  // Recent requests (any status) for the same warehouse(s).
+  // Recent requests (any status). General (sales_agg) requests have
+  // warehouse_code IS NULL — show them regardless of the warehouse filter
+  // since they aren't tied to a specific warehouse.
   const requests = await prisma.$queryRaw<ReqRow[]>`
     SELECT
       r.id,
@@ -182,7 +244,11 @@ export async function GET(request: NextRequest) {
     LEFT JOIN odg_employee appEmp ON appEmp.employee_code = r.approver_code
     LEFT JOIN odg_employee fulfEmp ON fulfEmp.employee_code = r.fulfiller_code
     WHERE 1=1
-      ${warehouse ? Prisma.sql`AND r.warehouse_code = ${warehouse}` : Prisma.empty}
+      ${
+        warehouse
+          ? Prisma.sql`AND (r.warehouse_code = ${warehouse} OR r.warehouse_code IS NULL)`
+          : Prisma.empty
+      }
     ORDER BY r.requested_at DESC
     LIMIT 200
   `;
@@ -203,6 +269,7 @@ export async function GET(request: NextRequest) {
               ? "below_target"
               : "ok";
       return {
+        scope: row.scope,
         warehouseCode: row.warehouse_code,
         warehouseName: row.warehouse_name?.trim() || row.warehouse_code,
         itemCode: row.item_code,
@@ -221,7 +288,9 @@ export async function GET(request: NextRequest) {
     requests: requests.map((r) => ({
       id: r.id.toString(),
       warehouseCode: r.warehouse_code,
-      warehouseName: r.warehouse_name?.trim() || r.warehouse_code,
+      warehouseName: r.warehouse_code
+        ? r.warehouse_name?.trim() || r.warehouse_code
+        : null,
       itemCode: r.item_code,
       itemName: r.item_name?.trim() || r.item_code,
       unitName: r.unit_name?.trim() || null,
@@ -247,8 +316,10 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/reports/stock-refill — open a new request.
+// warehouseCode = null  →  sales aggregate (general) request
+// warehouseCode = code  →  per-warehouse request
 type CreateBody = {
-  warehouseCode?: string;
+  warehouseCode?: string | null;
   itemCode?: string;
   requestedQty?: number | string;
   reason?: string;
@@ -270,16 +341,16 @@ export async function POST(request: NextRequest) {
   }
 
   const body = (await request.json().catch(() => null)) as CreateBody | null;
-  const warehouseCode = body?.warehouseCode?.trim();
+  const rawWh = body?.warehouseCode;
+  // Treat missing, null, and empty string as "general / sales aggregate".
+  const warehouseCode =
+    typeof rawWh === "string" && rawWh.trim() ? rawWh.trim() : null;
   const itemCode = body?.itemCode?.trim();
   const requestedQty = Number(body?.requestedQty);
   const reason = body?.reason?.trim() ?? null;
 
-  if (!warehouseCode || !itemCode) {
-    return NextResponse.json(
-      { error: "warehouseCode + itemCode ຈຳເປັນ" },
-      { status: 400 },
-    );
+  if (!itemCode) {
+    return NextResponse.json({ error: "itemCode ຈຳເປັນ" }, { status: 400 });
   }
   if (!Number.isFinite(requestedQty) || requestedQty <= 0) {
     return NextResponse.json(
@@ -288,14 +359,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Block creating a second request when one is already in flight for the
-  // same (warehouse, item) — keeps the workflow queue clean.
+  // Block creating a second request when one is already in flight. The
+  // (warehouse, item) tuple matches by NULL-aware equality so general and
+  // per-warehouse requests don't collide with each other.
   const existing = await prisma.$queryRaw<Array<{ id: bigint; status: string }>>`
     SELECT id, status
     FROM app_stock_refill_request
-    WHERE warehouse_code = ${warehouseCode}
-      AND item_code = ${itemCode}
+    WHERE item_code = ${itemCode}
       AND status IN ('pending', 'approved')
+      AND warehouse_code IS NOT DISTINCT FROM ${warehouseCode}
     ORDER BY requested_at DESC
     LIMIT 1
   `;
@@ -308,35 +380,74 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Snapshot current stock + minimum-rule values so the audit view stays
-  // meaningful after the live values change.
-  const snap = await prisma.$queryRaw<
-    Array<{
-      min_qty: string | number | null;
-      target_qty: string | number | null;
-      current_stock: string | number | null;
-    }>
-  >`
-    SELECT
-      sm.min_qty,
-      sm.target_qty,
-      (
-        SELECT COALESCE(SUM(b.balance_qty), 0)
+  // Snapshot current stock + threshold values at request time so the audit
+  // view stays meaningful even after the live values move. For sales_agg
+  // requests, "current stock" = SUM across active sales warehouses.
+  let snapshotStock: number | null = null;
+  let snapshotMin: number | null = null;
+  let snapshotTarget: number | null = null;
+
+  if (warehouseCode === null) {
+    const snap = await prisma.$queryRaw<
+      Array<{
+        min_qty: string | number | null;
+        target_qty: string | number | null;
+        current_stock: string | number | null;
+      }>
+    >`
+      WITH sales_codes AS (
+        SELECT warehouse_code FROM app_sales_warehouse WHERE is_active = TRUE
+      ),
+      stock AS (
+        SELECT SUM(balance_qty) AS qty
         FROM public.sml_ic_function_stock_balance_warehouse(
           ${STOCK_BALANCE_AS_OF_DATE}::date,
           ${itemCode},
-          ${warehouseCode}
-        ) b
-        WHERE b.ic_code = sm.item_code AND b.warehouse = sm.warehouse_code
-      ) AS current_stock
-    FROM app_stock_minimum sm
-    WHERE sm.warehouse_code = ${warehouseCode}
-      AND sm.item_code = ${itemCode}
-    LIMIT 1
-  `;
-  const snapshotMin = snap[0]?.min_qty !== undefined ? toNumber(snap[0].min_qty) : null;
-  const snapshotTarget = snap[0]?.target_qty !== undefined ? toNumber(snap[0].target_qty) : null;
-  const snapshotStock = snap[0]?.current_stock !== undefined ? toNumber(snap[0].current_stock) : null;
+          (SELECT string_agg(warehouse_code, ',') FROM sales_codes)
+        )
+        WHERE warehouse IN (SELECT warehouse_code FROM sales_codes)
+      )
+      SELECT
+        sm.min_qty,
+        sm.target_qty,
+        (SELECT COALESCE(qty, 0) FROM stock) AS current_stock
+      FROM app_stock_minimum sm
+      WHERE sm.scope = 'sales_agg' AND sm.item_code = ${itemCode}
+      LIMIT 1
+    `;
+    snapshotMin = snap[0]?.min_qty !== undefined ? toNumber(snap[0].min_qty) : null;
+    snapshotTarget = snap[0]?.target_qty !== undefined ? toNumber(snap[0].target_qty) : null;
+    snapshotStock = snap[0]?.current_stock !== undefined ? toNumber(snap[0].current_stock) : null;
+  } else {
+    const snap = await prisma.$queryRaw<
+      Array<{
+        min_qty: string | number | null;
+        target_qty: string | number | null;
+        current_stock: string | number | null;
+      }>
+    >`
+      SELECT
+        sm.min_qty,
+        sm.target_qty,
+        (
+          SELECT COALESCE(SUM(b.balance_qty), 0)
+          FROM public.sml_ic_function_stock_balance_warehouse(
+            ${STOCK_BALANCE_AS_OF_DATE}::date,
+            ${itemCode},
+            ${warehouseCode}
+          ) b
+          WHERE b.ic_code = sm.item_code AND b.warehouse = sm.warehouse_code
+        ) AS current_stock
+      FROM app_stock_minimum sm
+      WHERE sm.scope = 'warehouse'
+        AND sm.warehouse_code = ${warehouseCode}
+        AND sm.item_code = ${itemCode}
+      LIMIT 1
+    `;
+    snapshotMin = snap[0]?.min_qty !== undefined ? toNumber(snap[0].min_qty) : null;
+    snapshotTarget = snap[0]?.target_qty !== undefined ? toNumber(snap[0].target_qty) : null;
+    snapshotStock = snap[0]?.current_stock !== undefined ? toNumber(snap[0].current_stock) : null;
+  }
 
   const inserted = await prisma.$queryRaw<Array<{ id: bigint }>>`
     INSERT INTO app_stock_refill_request (
