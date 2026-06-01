@@ -177,7 +177,7 @@ export default function StockRefillClient({
   }, [items]);
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 sm:py-8">
+    <div className="odoo-page">
       <header className="mb-6">
         <div className="text-[11px] font-bold uppercase tracking-widest text-odoo-text-muted">
           ລາຍງານສະຕ້ອກ
@@ -265,7 +265,7 @@ export default function StockRefillClient({
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+          <table className="odoo-table">
             <thead className="bg-odoo-surface-muted text-left text-xs font-bold uppercase tracking-wider text-odoo-text-muted">
               <tr>
                 <th className="px-4 py-3">ສິນຄ້າ</th>
@@ -380,7 +380,7 @@ export default function StockRefillClient({
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+          <table className="odoo-table">
             <thead className="bg-odoo-surface-muted text-left text-xs font-bold uppercase tracking-wider text-odoo-text-muted">
               <tr>
                 <th className="px-4 py-3">ສິນຄ້າ</th>

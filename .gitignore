@@ -22,6 +22,7 @@
 
 # misc
 .DS_Store
+._*
 *.pem
 
 # debug
@@ -34,6 +35,9 @@ yarn-error.log*
 .env*
 !.env.example
 
+# firebase service account credentials — never commit
+*-firebase-adminsdk-*.json
+
 # vercel
 .vercel
 
@@ -42,3 +46,9 @@ yarn-error.log*
 next-env.d.ts
 
 /src/generated/prisma
+
+# temporary debug/query scripts — not for commit
+query_promotions.js
+src/query_promotions.ts
+src/query_all_promotions.ts
+src/activate_promo.ts

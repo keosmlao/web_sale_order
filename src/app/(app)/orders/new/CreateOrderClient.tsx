@@ -266,24 +266,36 @@ export default function CreateOrderClient({
   useEffect(() => {
     try {
       const rawCart = window.localStorage.getItem(cartStorageKey);
-      if (rawCart) {
-        const parsed = JSON.parse(rawCart) as Line[];
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setItems(parsed);
-          itemsRef.current = parsed;
-        }
-      }
       const rawCust = window.localStorage.getItem(customerStorageKey);
-      if (rawCust) {
-        const parsedCust = JSON.parse(rawCust) as Customer;
-        if (parsedCust && typeof parsedCust.id === "string") {
-          setCustomer(parsedCust);
+      
+      Promise.resolve().then(() => {
+        if (rawCart) {
+          try {
+            const parsed = JSON.parse(rawCart) as Line[];
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              setItems(parsed);
+              itemsRef.current = parsed;
+            }
+          } catch {
+            // ignore corrupt entry
+          }
         }
-      }
+        if (rawCust) {
+          try {
+            const parsedCust = JSON.parse(rawCust) as Customer;
+            if (parsedCust && typeof parsedCust.id === "string") {
+              setCustomer(parsedCust);
+            }
+          } catch {
+            // ignore corrupt entry
+          }
+        }
+        setCartHydrated(true);
+      });
     } catch {
-      // ignore corrupt entry
-    } finally {
-      setCartHydrated(true);
+      Promise.resolve().then(() => {
+        setCartHydrated(true);
+      });
     }
     // intentionally one-shot on mount
     // eslint-disable-next-line react-hooks/exhaustive-deps

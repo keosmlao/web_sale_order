@@ -1,4 +1,5 @@
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { prisma } from "@/lib/prisma";
 import { requireEmployee } from "@/lib/auth";
 import { roleFromEmployee, canApprovePriceRequests } from "@/lib/roles";
@@ -67,6 +68,14 @@ const dayShortFmt = new Intl.DateTimeFormat("en-GB", {
   timeZone: "Asia/Vientiane",
 });
 
+const dateFmt = new Intl.DateTimeFormat("lo-LA", {
+  weekday: "short",
+  day: "2-digit",
+  month: "long",
+  year: "numeric",
+  timeZone: "Asia/Vientiane",
+});
+
 export default async function HomePage() {
   const me = await requireEmployee();
   const role = roleFromEmployee(me);
@@ -75,130 +84,135 @@ export default async function HomePage() {
   const greeting =
     me.nickname && me.nickname !== "0" ? me.nickname : displayName;
 
-  const [todayRows, yesterdayRows, monthRows, topRows, recentRows, dailyRows, priceCountRows] =
-    await Promise.all([
-      prisma.$queryRaw<DayMetrics[]>`
-        SELECT
-          COUNT(*) FILTER (WHERE status = 0)::bigint AS pending_count,
-          COUNT(*) FILTER (WHERE status = 1)::bigint AS completed_count,
-          COUNT(*) FILTER (WHERE status = 2)::bigint AS cancelled_count,
-          COALESCE(SUM(total_amount_2) FILTER (WHERE status = 0), 0) AS pending_amount,
-          COALESCE(SUM(total_amount_2) FILTER (WHERE status = 1), 0) AS completed_amount,
-          COALESCE(SUM(total_amount_2) FILTER (WHERE status = 2), 0) AS cancelled_amount
-        FROM ic_trans
-        WHERE doc_format_code = 'SOK'
-          AND create_date_time_now::date = CURRENT_DATE
-      `,
-      prisma.$queryRaw<DayMetrics[]>`
-        SELECT
-          COUNT(*) FILTER (WHERE status = 0)::bigint AS pending_count,
-          COUNT(*) FILTER (WHERE status = 1)::bigint AS completed_count,
-          COUNT(*) FILTER (WHERE status = 2)::bigint AS cancelled_count,
-          COALESCE(SUM(total_amount_2) FILTER (WHERE status = 0), 0) AS pending_amount,
-          COALESCE(SUM(total_amount_2) FILTER (WHERE status = 1), 0) AS completed_amount,
-          COALESCE(SUM(total_amount_2) FILTER (WHERE status = 2), 0) AS cancelled_amount
-        FROM ic_trans
-        WHERE doc_format_code = 'SOK'
-          AND create_date_time_now::date = CURRENT_DATE - INTERVAL '1 day'
-      `,
-      prisma.$queryRaw<DayMetrics[]>`
-        SELECT
-          COUNT(*) FILTER (WHERE status = 0)::bigint AS pending_count,
-          COUNT(*) FILTER (WHERE status = 1)::bigint AS completed_count,
-          COUNT(*) FILTER (WHERE status = 2)::bigint AS cancelled_count,
-          COALESCE(SUM(total_amount_2) FILTER (WHERE status = 0), 0) AS pending_amount,
-          COALESCE(SUM(total_amount_2) FILTER (WHERE status = 1), 0) AS completed_amount,
-          COALESCE(SUM(total_amount_2) FILTER (WHERE status = 2), 0) AS cancelled_amount
-        FROM ic_trans
-        WHERE doc_format_code = 'SOK'
-          AND create_date_time_now >= date_trunc('month', CURRENT_DATE)
-          AND create_date_time_now < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
-      `,
-      prisma.$queryRaw<TopSalesperson[]>`
-        SELECT
-          eff.salesperson_code AS user_owner,
-          emp.fullname_lo,
-          emp.nickname,
-          COUNT(*)::bigint AS orders,
-          COALESCE(SUM(t.total_amount_2), 0) AS total
-        FROM ic_trans t
-        LEFT JOIN LATERAL (
-          SELECT COALESCE(
-            NULLIF(NULLIF(t.sale_code, ''), '00000'),
-            NULLIF(NULLIF((
-              SELECT d.sale_code
-              FROM ic_trans_detail d
-              WHERE d.doc_no = t.doc_no
-                AND d.trans_type = t.trans_type
-                AND d.trans_flag = t.trans_flag
-              ORDER BY d.line_number
-              LIMIT 1
-            ), ''), '00000'),
-            NULLIF(t.creator_code, '')
-          ) AS salesperson_code
-        ) eff ON true
-        LEFT JOIN odg_employee emp ON emp.employee_code = eff.salesperson_code
-        WHERE t.doc_format_code = 'SOK'
-          AND t.create_date_time_now::date = CURRENT_DATE
-          AND t.status IN (0, 1)
-        GROUP BY eff.salesperson_code, emp.fullname_lo, emp.nickname
-        ORDER BY total DESC
-        LIMIT 5
-      `,
-      prisma.$queryRaw<RecentOrder[]>`
-        SELECT
-          SUBSTRING(t.doc_no FROM 6) AS cart_number,
-          eff.salesperson_code AS user_owner,
-          COALESCE(emp.fullname_lo, emp.nickname, eff.salesperson_code) AS salesperson_name,
-          ar.name_1 AS customer_name,
-          t.total_amount_2 AS amount,
-          t.status,
-          t.create_date_time_now
-        FROM ic_trans t
-        LEFT JOIN LATERAL (
-          SELECT COALESCE(
-            NULLIF(NULLIF(t.sale_code, ''), '00000'),
-            NULLIF(NULLIF((
-              SELECT d.sale_code
-              FROM ic_trans_detail d
-              WHERE d.doc_no = t.doc_no
-                AND d.trans_type = t.trans_type
-                AND d.trans_flag = t.trans_flag
-              ORDER BY d.line_number
-              LIMIT 1
-            ), ''), '00000'),
-            NULLIF(t.creator_code, '')
-          ) AS salesperson_code
-        ) eff ON true
-        LEFT JOIN ar_customer ar ON ar.code = t.cust_code
-        LEFT JOIN odg_employee emp ON emp.employee_code = eff.salesperson_code
-        WHERE t.doc_format_code = 'SOK'
-        ORDER BY t.create_date_time_now DESC
-        LIMIT 8
-      `,
-      // Last 7 days of sales — drives the inline area chart. We zero-fill
-      // missing days client-side so the chart always shows a full week.
-      prisma.$queryRaw<DailyBar[]>`
-        SELECT
-          create_date_time_now::date AS day,
-          COALESCE(SUM(total_amount_2), 0) AS total,
-          COUNT(*)::bigint AS orders
-        FROM ic_trans
-        WHERE doc_format_code = 'SOK'
-          AND create_date_time_now::date >= CURRENT_DATE - INTERVAL '6 days'
-          AND status IN (0, 1)
-        GROUP BY 1
-        ORDER BY 1
-      `,
-      prisma.$queryRaw<PriceCounts[]>`
-        SELECT
-          COUNT(*) FILTER (WHERE status = 'pending')::bigint AS pending,
-          COUNT(*) FILTER (
-            WHERE status = 'approved' AND decided_at::date = CURRENT_DATE
-          )::bigint AS approved_today
-        FROM app_price_request
-      `,
-    ]);
+  const [
+    todayRows,
+    yesterdayRows,
+    monthRows,
+    topRows,
+    recentRows,
+    dailyRows,
+    priceCountRows,
+  ] = await Promise.all([
+    prisma.$queryRaw<DayMetrics[]>`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 0)::bigint AS pending_count,
+        COUNT(*) FILTER (WHERE status = 1)::bigint AS completed_count,
+        COUNT(*) FILTER (WHERE status = 2)::bigint AS cancelled_count,
+        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 0), 0) AS pending_amount,
+        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 1), 0) AS completed_amount,
+        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 2), 0) AS cancelled_amount
+      FROM ic_trans
+      WHERE doc_format_code = 'SOK'
+        AND create_date_time_now::date = CURRENT_DATE
+    `,
+    prisma.$queryRaw<DayMetrics[]>`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 0)::bigint AS pending_count,
+        COUNT(*) FILTER (WHERE status = 1)::bigint AS completed_count,
+        COUNT(*) FILTER (WHERE status = 2)::bigint AS cancelled_count,
+        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 0), 0) AS pending_amount,
+        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 1), 0) AS completed_amount,
+        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 2), 0) AS cancelled_amount
+      FROM ic_trans
+      WHERE doc_format_code = 'SOK'
+        AND create_date_time_now::date = CURRENT_DATE - INTERVAL '1 day'
+    `,
+    prisma.$queryRaw<DayMetrics[]>`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 0)::bigint AS pending_count,
+        COUNT(*) FILTER (WHERE status = 1)::bigint AS completed_count,
+        COUNT(*) FILTER (WHERE status = 2)::bigint AS cancelled_count,
+        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 0), 0) AS pending_amount,
+        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 1), 0) AS completed_amount,
+        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 2), 0) AS cancelled_amount
+      FROM ic_trans
+      WHERE doc_format_code = 'SOK'
+        AND create_date_time_now >= date_trunc('month', CURRENT_DATE)
+        AND create_date_time_now < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+    `,
+    prisma.$queryRaw<TopSalesperson[]>`
+      SELECT
+        eff.salesperson_code AS user_owner,
+        emp.fullname_lo,
+        emp.nickname,
+        COUNT(*)::bigint AS orders,
+        COALESCE(SUM(t.total_amount_2), 0) AS total
+      FROM ic_trans t
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(
+          NULLIF(NULLIF(t.sale_code, ''), '00000'),
+          NULLIF(NULLIF((
+            SELECT d.sale_code
+            FROM ic_trans_detail d
+            WHERE d.doc_no = t.doc_no
+              AND d.trans_type = t.trans_type
+              AND d.trans_flag = t.trans_flag
+            ORDER BY d.line_number
+            LIMIT 1
+          ), ''), '00000'),
+          NULLIF(t.creator_code, '')
+        ) AS salesperson_code
+      ) eff ON true
+      LEFT JOIN odg_employee emp ON emp.employee_code = eff.salesperson_code
+      WHERE t.doc_format_code = 'SOK'
+        AND t.create_date_time_now::date = CURRENT_DATE
+        AND t.status IN (0, 1)
+      GROUP BY eff.salesperson_code, emp.fullname_lo, emp.nickname
+      ORDER BY total DESC
+      LIMIT 5
+    `,
+    prisma.$queryRaw<RecentOrder[]>`
+      SELECT
+        SUBSTRING(t.doc_no FROM 6) AS cart_number,
+        eff.salesperson_code AS user_owner,
+        COALESCE(emp.fullname_lo, emp.nickname, eff.salesperson_code) AS salesperson_name,
+        ar.name_1 AS customer_name,
+        t.total_amount_2 AS amount,
+        t.status,
+        t.create_date_time_now
+      FROM ic_trans t
+      LEFT JOIN LATERAL (
+        SELECT COALESCE(
+          NULLIF(NULLIF(t.sale_code, ''), '00000'),
+          NULLIF(NULLIF((
+            SELECT d.sale_code
+            FROM ic_trans_detail d
+            WHERE d.doc_no = t.doc_no
+              AND d.trans_type = t.trans_type
+              AND d.trans_flag = t.trans_flag
+            ORDER BY d.line_number
+            LIMIT 1
+          ), ''), '00000'),
+          NULLIF(t.creator_code, '')
+        ) AS salesperson_code
+      ) eff ON true
+      LEFT JOIN ar_customer ar ON ar.code = t.cust_code
+      LEFT JOIN odg_employee emp ON emp.employee_code = eff.salesperson_code
+      WHERE t.doc_format_code = 'SOK'
+      ORDER BY t.create_date_time_now DESC
+      LIMIT 8
+    `,
+    prisma.$queryRaw<DailyBar[]>`
+      SELECT
+        create_date_time_now::date AS day,
+        COALESCE(SUM(total_amount_2), 0) AS total,
+        COUNT(*)::bigint AS orders
+      FROM ic_trans
+      WHERE doc_format_code = 'SOK'
+        AND create_date_time_now::date >= CURRENT_DATE - INTERVAL '6 days'
+        AND status IN (0, 1)
+      GROUP BY 1
+      ORDER BY 1
+    `,
+    prisma.$queryRaw<PriceCounts[]>`
+      SELECT
+        COUNT(*) FILTER (WHERE status = 'pending')::bigint AS pending,
+        COUNT(*) FILTER (
+          WHERE status = 'approved' AND decided_at::date = CURRENT_DATE
+        )::bigint AS approved_today
+      FROM app_price_request
+    `,
+  ]);
 
   const today = normalizeMetrics(todayRows[0]);
   const yesterday = normalizeMetrics(yesterdayRows[0]);
@@ -218,323 +232,306 @@ export default async function HomePage() {
   const dailySeries = buildDailySeries(dailyRows);
   const weekTotal = dailySeries.reduce((s, d) => s + d.total, 0);
   const weekOrders = dailySeries.reduce((s, d) => s + d.orders, 0);
+  const highestDay = dailySeries.reduce(
+    (max, d) => (d.total > max.total ? d : max),
+    { total: 0, date: new Date() }
+  );
 
   const topTotal = Number(topRows[0]?.total ?? 0);
-
   const priceCounts = priceCountRows[0];
   const pendingPriceRequests = Number(priceCounts?.pending ?? 0);
   const approvedPricesToday = Number(priceCounts?.approved_today ?? 0);
 
   const now = new Date();
-  const hour = now.getHours();
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      hour: "numeric",
+      hour12: false,
+      timeZone: "Asia/Vientiane",
+    }).format(now)
+  );
   const timeOfDay =
-    hour < 11 ? "ສະບາຍດີຕອນເຊົ້າ" : hour < 17 ? "ສະບາຍດີຕອນບ່າຍ" : "ສະບາຍດີຕອນແລງ";
+    hour < 11
+      ? "ສະບາຍດີຕອນເຊົ້າ"
+      : hour < 17
+        ? "ສະບາຍດີຕອນບ່າຍ"
+        : "ສະບາຍດີຕອນແລງ";
+
+  const totalBothDays = todayTotal + yesterdayTotal;
+  const todayRatio = totalBothDays > 0 ? (todayTotal / totalBothDays) * 100 : 50;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
-      {/* Hero greeting with gradient */}
-      <header className="relative overflow-hidden rounded-2xl border border-odoo-border bg-gradient-to-br from-odoo-primary via-odoo-primary-dark to-[#312e81] p-6 text-white shadow-lg sm:p-8">
-        <div className="absolute -right-12 -top-12 h-48 w-48 rounded-full bg-white/10 blur-2xl" />
-        <div className="absolute -bottom-16 -left-8 h-40 w-40 rounded-full bg-odoo-accent/30 blur-3xl" />
-        <div className="relative flex flex-wrap items-end justify-between gap-4">
-          <div>
-            <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-white/70">
-              {timeOfDay}
+    <div className="space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+      {/* Premium Hero Banner Greeting */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-xl md:p-8">
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:24px_24px] opacity-20" />
+        <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl" />
+        <div className="absolute -right-20 -bottom-20 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
+        
+        <div className="relative flex flex-col justify-between gap-6 md:flex-row md:items-center">
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-300">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-1 text-emerald-300 backdrop-blur-sm">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                Online
+              </span>
+              <span>·</span>
+              <span>{dateFmt.format(now)}</span>
             </div>
-            <h1 className="mt-1.5 text-3xl font-bold tracking-tight sm:text-4xl">
-              {greeting}
+            <h1 className="text-2xl font-extrabold tracking-tight text-white md:text-3xl">
+              {timeOfDay}, {greeting}
             </h1>
-            <p className="mt-2 max-w-md text-sm text-white/80">
-              ມື້ນີ້ມີ {numFmt.format(todayOrders)} ບິນ · ຍອດຮວມ{" "}
-              <span className="font-mono font-bold">
-                {compactMoneyFmt.format(todayTotal)}
-              </span>{" "}
-              ກີບ
+            <p className="max-w-xl text-xs text-slate-300">
+              ສະຫຼຸບການຂາຍ, ຄິວຮັບເງິນ, ແລະວຽກທີ່ຕ້ອງຕິດຕາມໃນມື້ນີ້
             </p>
           </div>
-          <div className="flex flex-col items-end gap-3">
-            <div className="rounded-xl bg-white/15 px-4 py-2.5 backdrop-blur-sm">
-              <div className="text-[10px] font-bold uppercase tracking-widest text-white/70">
-                ມື້ນີ້
-              </div>
-              <div className="mt-0.5 text-sm font-semibold">
-                {new Intl.DateTimeFormat("lo-LA", {
-                  weekday: "long",
-                  day: "2-digit",
-                  month: "long",
-                  year: "numeric",
-                  timeZone: "Asia/Vientiane",
-                }).format(now)}
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <Link
-                href="/orders/new"
-                className="inline-flex items-center gap-1.5 rounded-lg bg-white px-3.5 py-2 text-xs font-bold text-odoo-primary shadow-sm transition hover:bg-white/90"
-              >
-                <span className="text-base leading-none">+</span> ສ້າງບິນໃໝ່
-              </Link>
-              <Link
-                href="/cashier"
-                className="inline-flex items-center gap-1.5 rounded-lg border border-white/30 bg-white/10 px-3.5 py-2 text-xs font-bold text-white backdrop-blur-sm transition hover:bg-white/20"
-              >
-                ຮັບເງິນ
-              </Link>
-            </div>
+          
+          <div className="flex flex-wrap items-center gap-3">
+            <UserBadge
+              name={displayName}
+              employeeCode={me.employeeCode ?? "—"}
+              role={role}
+            />
+            <Link
+              href="/orders/new"
+              className="inline-flex h-10 items-center gap-2 rounded-xl bg-indigo-600 px-5 text-xs font-bold text-white shadow-lg shadow-indigo-600/30 transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-500 active:translate-y-0 active:scale-[0.98]"
+            >
+              <PlusIcon />
+              ສ້າງບິນໃໝ່
+            </Link>
           </div>
         </div>
-      </header>
+      </div>
 
-      {/* KPI cards */}
-      <section className="mt-5 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-        <KpiCard
-          accent="primary"
-          label="ຍອດຂາຍມື້ນີ້"
+      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <MetricCard
+          title="ຍອດຂາຍມື້ນີ້"
           value={moneyFmt.format(todayTotal)}
           unit="ກີບ"
-          subtitle={`${numFmt.format(todayOrders)} ບິນ`}
+          sub={`${numFmt.format(todayOrders)} ບິນ · ຮັບເງິນແລ້ວ ${numFmt.format(today.completedCount)}`}
           delta={totalDeltaPct}
-          deltaLabel="vs ມື້ວານ"
-          icon={<TrendIcon />}
+          icon={<SalesIcon />}
+          accent="primary"
         />
-        <KpiCard
-          accent="warning"
-          label="ລໍຖ້າຮັບເງິນ"
-          value={moneyFmt.format(today.pendingAmount)}
-          unit="ກີບ"
-          subtitle={`${numFmt.format(today.pendingCount)} ບິນ · ກົດເພື່ອຮັບເງິນ`}
-          href="/cashier"
-          icon={<ClockIcon />}
+        <MetricCard
+          title="ຈຳນວນບິນ"
+          value={numFmt.format(todayOrders)}
+          sub={`ມື້ວານ ${numFmt.format(yesterdayOrders)} ບິນ`}
+          delta={ordersDeltaPct}
+          icon={<ReceiptIcon />}
+          accent="info"
         />
-        <KpiCard
-          accent="success"
-          label="ສະເລ່ຍ/ບິນ"
+        <MetricCard
+          title="ສະເລ່ຍຕໍ່ບິນ"
           value={moneyFmt.format(avg)}
           unit="ກີບ"
-          subtitle={`${numFmt.format(today.completedCount)} ບິນຮັບເງິນແລ້ວ`}
-          icon={<CheckIcon />}
+          sub={`${numFmt.format(today.pendingCount)} ບິນລໍຖ້າຊຳລະ`}
+          icon={<AverageIcon />}
+          accent="success"
         />
-        <KpiCard
-          accent="info"
-          label="ຍອດເດືອນນີ້"
+        <MetricCard
+          title="ຍອດຂາຍເດືອນນີ້"
           value={moneyFmt.format(monthTotal)}
           unit="ກີບ"
-          subtitle={`${numFmt.format(monthOrders)} ບິນ`}
-          href="/reports/salespeople"
+          sub={`${numFmt.format(monthOrders)} ບິນໃນເດືອນນີ້`}
           icon={<CalendarIcon />}
+          accent="warning"
         />
       </section>
 
-      {/* 7-day chart + action items */}
-      <section className="mt-5 grid gap-4 lg:grid-cols-[1.6fr_1fr]">
-        <Panel
-          title="ຍອດຂາຍ 7 ວັນຍ້ອນຫຼັງ"
-          subtitle={`ຮວມ ${compactMoneyFmt.format(weekTotal)} ກີບ · ${numFmt.format(weekOrders)} ບິນ`}
-          link={{ href: "/reports/daily-sales", label: "ລາຍງານລະອຽດ →" }}
-        >
-          <AreaChart series={dailySeries} />
-        </Panel>
+      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(340px,0.9fr)]">
+        <div className="space-y-5">
+          <Panel
+            title="ຍອດຂາຍ 7 ວັນຍ້ອນຫຼັງ"
+            eyebrow="Sales trend"
+            action={
+              <Link
+                href="/reports/daily-sales"
+                className="text-xs font-semibold text-odoo-primary hover:underline"
+              >
+                ເບິ່ງລາຍງານ
+              </Link>
+            }
+          >
+            <div className="mb-4 grid gap-3 sm:grid-cols-3">
+              <MiniStat label="ຮວມ 7 ວັນ" value={`${moneyFmt.format(weekTotal)} ກີບ`} />
+              <MiniStat label="ຈຳນວນບິນ" value={`${numFmt.format(weekOrders)} ບິນ`} />
+              <MiniStat
+                label="ວັນສູງສຸດ"
+                value={`${compactMoneyFmt.format(highestDay.total)} ກີບ`}
+              />
+            </div>
+            <AreaChart series={dailySeries} />
+          </Panel>
 
-        <Panel title="ລາຍການດ່ວນ" subtitle="ສິ່ງທີ່ຕ້ອງເຮັດວັນນີ້">
-          <ul className="space-y-2">
-            <ActionItem
-              label="ບິນລໍຖ້າຊຳລະ"
-              count={today.pendingCount}
-              amount={today.pendingAmount}
-              tone={today.pendingCount > 0 ? "warning" : "neutral"}
-              href="/cashier"
-              icon={<ClockIcon />}
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)]">
+            <Panel title="ມື້ນີ້ ທຽບກັບ ມື້ວານ" eyebrow="Comparison">
+              <div className="space-y-4">
+                <div>
+                  <div className="mb-2 flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-800">
+                      ສັດສ່ວນຍອດຂາຍ
+                    </span>
+                    <span className="text-slate-400 font-semibold">
+                      ຮວມ {moneyFmt.format(totalBothDays)} ກີບ
+                    </span>
+                  </div>
+                  <div className="flex h-3 overflow-hidden rounded-full bg-slate-100 border border-slate-200/50">
+                    <div
+                      className="bg-indigo-500 rounded-full"
+                      style={{ width: `${todayRatio.toFixed(1)}%` }}
+                    />
+                    <div className="flex-1 bg-slate-200" />
+                  </div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <SplitStat
+                    label="ມື້ນີ້"
+                    value={`${moneyFmt.format(todayTotal)} ກີບ`}
+                    meta={`${todayRatio.toFixed(0)}%`}
+                    tone="primary"
+                  />
+                  <SplitStat
+                    label="ມື້ວານ"
+                    value={`${moneyFmt.format(yesterdayTotal)} ກີບ`}
+                    meta={`${(100 - todayRatio).toFixed(0)}%`}
+                    tone="muted"
+                  />
+                </div>
+              </div>
+            </Panel>
+
+            <PriceRequestPanel
+              canSeePriceRequests={canSeePriceRequests}
+              pendingPriceRequests={pendingPriceRequests}
+              approvedPricesToday={approvedPricesToday}
             />
-            {canSeePriceRequests ? (
-              <ActionItem
-                label="ຄຳຂໍລາຄາພິເສດ"
-                count={pendingPriceRequests}
-                tone={pendingPriceRequests > 0 ? "danger" : "neutral"}
-                sub={`ອະນຸມັດແລ້ວວັນນີ້: ${approvedPricesToday}`}
-                icon={<TagIcon />}
+          </div>
+
+          <Panel title="ທາງລັດ" eyebrow="Quick actions">
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <LauncherButton
+                href="/orders/new"
+                label="POS / ສ້າງບິນ"
+                icon={<PosIcon />}
+                accent="primary"
               />
-            ) : (
-              <ActionItem
-                label="ລາຄາພິເສດອະນຸມັດແລ້ວ"
-                count={approvedPricesToday}
-                tone="success"
+              <LauncherButton
                 href="/cashier"
-                sub="ກວດສອບໃນໜ້າຮັບເງິນ"
-                icon={<TagIcon />}
+                label="ຮັບເງິນ"
+                icon={<CashIcon />}
+                accent="warning"
               />
-            )}
-            {today.cancelledCount > 0 ? (
-              <ActionItem
-                label="ບິນຍົກເລີກວັນນີ້"
-                count={today.cancelledCount}
-                amount={today.cancelledAmount}
-                tone="danger"
-                icon={<XIcon />}
+              <LauncherButton
+                href="/reports/daily-sales"
+                label="ລາຍງານ"
+                icon={<ReportIcon />}
+                accent="info"
               />
-            ) : null}
-          </ul>
-        </Panel>
-      </section>
-
-      {/* Compare strip */}
-      <section className="mt-4 rounded-xl border border-odoo-border bg-gradient-to-r from-white via-odoo-primary-50/40 to-white p-4 shadow-sm">
-        <div className="flex flex-wrap items-center gap-x-8 gap-y-3 text-xs">
-          <Stat
-            label="ມື້ວານ"
-            value={`${moneyFmt.format(yesterdayTotal)} ກີບ`}
-            sub={`${numFmt.format(yesterdayOrders)} ບິນ`}
-          />
-          <div className="h-8 w-px bg-odoo-border" />
-          <Stat label="ບິນ ມື້ນີ້ vs ມື້ວານ" value="" delta={ordersDeltaPct} />
-          <Stat label="ຍອດ ມື້ນີ້ vs ມື້ວານ" value="" delta={totalDeltaPct} />
+              <LauncherButton
+                href="/employees"
+                label="ຈັດການທີມ"
+                icon={<UsersIcon />}
+                accent="success"
+              />
+            </div>
+          </Panel>
         </div>
-      </section>
 
-      {/* Top salespeople + recent activity */}
-      <section className="mt-5 grid gap-4 lg:grid-cols-[1fr_1.2fr]">
-        <Panel
-          title="Top ພະນັກງານຂາຍ ມື້ນີ້"
-          subtitle="ຈັດອັນດັບຕາມຍອດຂາຍ"
-          link={{ href: "/reports/salespeople", label: "ເບິ່ງທັງໝົດ →" }}
-        >
-          {topRows.length === 0 ? (
-            <EmptyHint>ຍັງບໍ່ມີຍອດຂາຍວັນນີ້</EmptyHint>
-          ) : (
-            <ul className="space-y-2.5">
-              {topRows.map((r, i) => {
-                const total = Number(r.total ?? 0);
-                const pct = topTotal > 0 ? (total / topTotal) * 100 : 0;
-                const name =
-                  r.fullname_lo?.trim() ||
-                  r.nickname?.trim() ||
-                  r.user_owner ||
-                  "ບໍ່ລະບຸ";
-                const initial = name.trim().charAt(0).toUpperCase();
-                return (
-                  <li
-                    key={(r.user_owner ?? "") + i}
-                    className="group flex items-center gap-3 rounded-xl border border-odoo-border bg-odoo-surface p-3 transition hover:border-odoo-primary-200 hover:shadow-sm"
-                  >
-                    <div className="relative">
-                      <div
-                        className={
-                          "flex h-11 w-11 items-center justify-center rounded-full text-base font-bold text-white shadow-sm " +
-                          rankAvatarBg(i)
-                        }
-                      >
-                        {initial || "?"}
-                      </div>
-                      <div
-                        className={
-                          "absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white font-mono text-[10px] font-bold " +
-                          rankBadgeBg(i)
-                        }
-                      >
-                        {i + 1}
-                      </div>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <div className="truncate text-sm font-bold text-odoo-text-strong">
-                          {name}
+        <aside className="space-y-5">
+          <Panel
+            title="Top ພະນັກງານຂາຍ"
+            eyebrow="Today ranking"
+            action={
+              <Link
+                href="/reports/salespeople"
+                className="text-xs font-semibold text-odoo-primary hover:underline"
+              >
+                ທັງໝົດ
+              </Link>
+            }
+          >
+            {topRows.length === 0 ? (
+              <EmptyHint>ຍັງບໍ່ມີຍອດຂາຍວັນນີ້</EmptyHint>
+            ) : (
+              <ul className="space-y-3">
+                {topRows.map((r, i) => {
+                  const total = Number(r.total ?? 0);
+                  const pct = topTotal > 0 ? (total / topTotal) * 100 : 0;
+                  const name =
+                    r.fullname_lo?.trim() ||
+                    r.nickname?.trim() ||
+                    r.user_owner ||
+                    "ບໍ່ລະບຸ";
+
+                  return (
+                    <li
+                      key={(r.user_owner ?? "") + i}
+                      className="group flex flex-col gap-2.5 rounded-xl border border-slate-100 bg-slate-50/50 p-3 hover:border-indigo-100 hover:bg-white transition-all duration-300"
+                    >
+                      <div className="flex items-center gap-3">
+                        <span className={rankBadgeClass(i)}>{i + 1}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="truncate text-xs font-bold text-slate-800">
+                            {name}
+                          </div>
+                          <div className="text-[10px] text-slate-400 font-semibold">
+                            {numFmt.format(Number(r.orders))} ບິນ
+                          </div>
                         </div>
-                        <div className="font-mono text-sm font-bold text-odoo-text-strong">
-                          {moneyFmt.format(total)}
+                        <div className="text-right text-xs font-black text-indigo-600">
+                          {compactMoneyFmt.format(total)}
                         </div>
                       </div>
-                      <div className="mt-1.5 flex items-center gap-2">
-                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-odoo-surface-muted">
-                          <div
-                            className={
-                              "h-full rounded-full " + rankBarBg(i)
-                            }
-                            style={{ width: `${Math.max(pct, 4).toFixed(1)}%` }}
-                          />
-                        </div>
-                        <div className="font-mono text-[10px] font-semibold text-odoo-text-muted">
-                          {numFmt.format(Number(r.orders))} ບິນ
+                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 border border-slate-200/50">
+                        <div
+                          className={rankBarClass(i)}
+                          style={{ width: `${Math.max(pct, 4).toFixed(1)}%` }}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </Panel>
+
+          <Panel title="ກິດຈະກຳຫຼ້າສຸດ" eyebrow="Recent orders">
+            {recentRows.length === 0 ? (
+              <EmptyHint>ຍັງບໍ່ມີ Order</EmptyHint>
+            ) : (
+              <ul className="divide-y divide-slate-100">
+                {recentRows.map((r) => (
+                  <li key={r.cart_number} className="py-3 first:pt-0 last:pb-0">
+                    <div className="flex items-start gap-3">
+                      <span className={"mt-1.5 h-2 w-2 rounded-full " + statusDotBg(r.status)} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-xs font-bold text-slate-800">
+                              {r.customer_name ?? "—"}
+                            </div>
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-slate-400 font-semibold">
+                              <span>{r.salesperson_name ?? "—"}</span>
+                              <span>#{r.cart_number}</span>
+                              <span>{timeFmt.format(new Date(r.create_date_time_now))}</span>
+                            </div>
+                          </div>
+                          <div className="shrink-0 text-right">
+                            <div className="text-xs font-black text-slate-800">
+                              {compactMoneyFmt.format(Number(r.amount ?? 0))}
+                            </div>
+                            <StatusPill status={r.status} />
+                          </div>
                         </div>
                       </div>
                     </div>
                   </li>
-                );
-              })}
-            </ul>
-          )}
-        </Panel>
-
-        <Panel title="ກິດຈະກຳຫຼ້າສຸດ" subtitle="8 ບິນລ່າສຸດ">
-          {recentRows.length === 0 ? (
-            <EmptyHint>ຍັງບໍ່ມີ Order</EmptyHint>
-          ) : (
-            <ul className="relative space-y-3 before:absolute before:left-[7px] before:top-2 before:bottom-2 before:w-px before:bg-odoo-border">
-              {recentRows.map((r) => (
-                <li key={r.cart_number} className="relative pl-6">
-                  <span
-                    className={
-                      "absolute left-0 top-1.5 h-3.5 w-3.5 rounded-full border-2 border-white shadow-sm " +
-                      statusDotBg(r.status)
-                    }
-                  />
-                  <div className="flex items-start justify-between gap-2 text-sm">
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className="truncate font-semibold text-odoo-text-strong">
-                          {r.customer_name ?? "—"}
-                        </span>
-                        <span className="rounded bg-odoo-surface-muted px-1.5 py-0.5 font-mono text-[10px] font-bold text-odoo-text-muted">
-                          #{r.cart_number}
-                        </span>
-                      </div>
-                      <div className="mt-0.5 truncate text-[11px] text-odoo-text-muted">
-                        {r.salesperson_name ?? "—"} ·{" "}
-                        {timeFmt.format(new Date(r.create_date_time_now))}
-                      </div>
-                    </div>
-                    <div className="text-right">
-                      <div className="font-mono text-sm font-bold text-odoo-text-strong">
-                        {moneyFmt.format(Number(r.amount ?? 0))}
-                      </div>
-                      <StatusPill status={r.status} />
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Panel>
-      </section>
-
-      {/* Quick links */}
-      <section className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <QuickLink
-          href="/orders/new"
-          label="POS / ສ້າງບິນ"
-          sub="ເລີ່ມຂາຍສິນຄ້າ"
-          icon={<PosIcon />}
-          accent="primary"
-        />
-        <QuickLink
-          href="/cashier"
-          label="ຮັບເງິນ"
-          sub="ຊຳລະບິນລໍຖ້າ"
-          icon={<CashIcon />}
-          accent="warning"
-        />
-        <QuickLink
-          href="/reports/daily-sales"
-          label="ລາຍງານ"
-          sub="ສະຫຼຸບການຂາຍ"
-          icon={<ReportIcon />}
-          accent="info"
-        />
-        <QuickLink
-          href="/employees"
-          label="ພະນັກງານ + ສິດ"
-          sub="ຈັດການທີມ"
-          icon={<UsersIcon />}
-          accent="success"
-        />
+                ))}
+              </ul>
+            )}
+          </Panel>
+        </aside>
       </section>
     </div>
   );
@@ -556,9 +553,6 @@ function pctDelta(current: number, previous: number): number | null {
   return ((current - previous) / previous) * 100;
 }
 
-// Asia/Vientiane calendar date for an absolute moment. Returned as
-// "YYYY-MM-DD" so we can subtract days and compare without local-TZ drift
-// — the server's local TZ is irrelevant; we always work in Lao time.
 function laoDateIso(d: Date): string {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Vientiane",
@@ -571,8 +565,6 @@ function laoDateIso(d: Date): string {
 function buildDailySeries(rows: DailyBar[]) {
   const map = new Map<string, { total: number; orders: number }>();
   for (const r of rows) {
-    // Prisma maps DATE columns to a Date at UTC midnight of the date
-    // string, so the UTC slice round-trips back to the same calendar day.
     const iso = r.day.toISOString().slice(0, 10);
     map.set(iso, {
       total: Number(r.total ?? 0),
@@ -588,9 +580,6 @@ function buildDailySeries(rows: DailyBar[]) {
   }> = [];
   const todayIso = laoDateIso(new Date());
   const [ty, tm, td] = todayIso.split("-").map(Number);
-  // UTC midnight of today's Lao date — pairs cleanly with toISOString
-  // (deterministic across server TZ) and renders identically under the
-  // Asia/Vientiane formatter (same calendar day there too).
   const baseUtc = Date.UTC(ty, tm - 1, td);
   for (let i = 6; i >= 0; i--) {
     const date = new Date(baseUtc - i * 86_400_000);
@@ -609,200 +598,302 @@ function buildDailySeries(rows: DailyBar[]) {
 
 type AccentName = "primary" | "warning" | "success" | "info";
 
-const KPI_ACCENT: Record<
+const ACCENTS: Record<
   AccentName,
-  { bar: string; iconBg: string; iconColor: string; ring: string }
+  { icon: string; border: string; text: string; soft: string }
 > = {
   primary: {
-    bar: "from-odoo-primary to-odoo-primary-light",
-    iconBg: "bg-odoo-primary-50",
-    iconColor: "text-odoo-primary",
-    ring: "group-hover:ring-odoo-primary/30",
+    icon: "bg-odoo-primary-50 text-odoo-primary",
+    border: "border-l-odoo-primary",
+    text: "text-odoo-primary",
+    soft: "bg-odoo-primary-50 text-odoo-primary",
   },
   warning: {
-    bar: "from-odoo-warning to-amber-300",
-    iconBg: "bg-odoo-warning-bg",
-    iconColor: "text-odoo-warning",
-    ring: "group-hover:ring-odoo-warning/30",
+    icon: "bg-odoo-warning-bg text-odoo-warning-text",
+    border: "border-l-odoo-warning",
+    text: "text-odoo-warning-text",
+    soft: "bg-odoo-warning-bg text-odoo-warning-text",
   },
   success: {
-    bar: "from-odoo-success to-emerald-400",
-    iconBg: "bg-odoo-success-bg",
-    iconColor: "text-odoo-success",
-    ring: "group-hover:ring-odoo-success/30",
+    icon: "bg-odoo-success-bg text-odoo-success-text",
+    border: "border-l-odoo-success",
+    text: "text-odoo-success-text",
+    soft: "bg-odoo-success-bg text-odoo-success-text",
   },
   info: {
-    bar: "from-odoo-info to-sky-300",
-    iconBg: "bg-odoo-info-bg",
-    iconColor: "text-odoo-info",
-    ring: "group-hover:ring-odoo-info/30",
+    icon: "bg-odoo-info-bg text-odoo-info-text",
+    border: "border-l-odoo-info",
+    text: "text-odoo-info-text",
+    soft: "bg-odoo-info-bg text-odoo-info-text",
   },
 };
 
-function KpiCard({
-  accent,
-  label,
-  value,
-  unit,
-  subtitle,
-  delta,
-  deltaLabel,
-  href,
-  icon,
+function UserBadge({
+  name,
+  employeeCode,
+  role,
 }: {
-  accent: AccentName;
-  label: string;
-  value: string;
-  unit?: string;
-  subtitle?: string;
-  delta?: number | null;
-  deltaLabel?: string;
-  href?: string;
-  icon?: React.ReactNode;
+  name: string;
+  employeeCode: string;
+  role: string;
 }) {
-  const a = KPI_ACCENT[accent];
-  const inner = (
-    <div
-      className={
-        "group relative overflow-hidden rounded-xl border border-odoo-border bg-white p-4 shadow-sm ring-1 ring-transparent transition hover:shadow-md " +
-        a.ring
-      }
-    >
-      <span
-        className={`absolute left-0 top-0 h-full w-1 bg-gradient-to-b ${a.bar}`}
-      />
-      <div className="flex items-start justify-between gap-2">
-        <div className="text-[10px] font-bold uppercase tracking-widest text-odoo-text-muted">
-          {label}
-        </div>
-        {icon ? (
-          <span
-            className={`flex h-8 w-8 items-center justify-center rounded-lg ${a.iconBg} ${a.iconColor}`}
-          >
-            {icon}
-          </span>
-        ) : null}
-      </div>
-      <div className="mt-3 flex items-baseline gap-1.5">
-        <div className="font-mono text-2xl font-bold tracking-tight text-odoo-text-strong">
-          {value}
-        </div>
-        {unit ? (
-          <div className="text-xs font-semibold text-odoo-text-muted">{unit}</div>
-        ) : null}
-      </div>
-      {subtitle ? (
-        <div className="mt-1 text-[11px] text-odoo-text-muted">{subtitle}</div>
-      ) : null}
-      {delta !== undefined && delta !== null ? (
-        <div className="mt-3 flex items-center gap-1.5 text-xs">
-          <DeltaBadge delta={delta} />
-          {deltaLabel ? (
-            <span className="text-[10px] font-semibold text-odoo-text-muted">
-              {deltaLabel}
-            </span>
-          ) : null}
-        </div>
-      ) : null}
-      {href ? (
-        <span className="absolute right-3 bottom-3 text-odoo-text-soft transition group-hover:translate-x-0.5 group-hover:text-odoo-primary">
-          →
+  return (
+    <div className="inline-flex h-10 items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 backdrop-blur-md px-3.5 shadow-sm text-white">
+      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/30 text-xs font-bold text-indigo-200">
+        {name.trim().charAt(0).toUpperCase()}
+      </span>
+      <span className="min-w-0 text-left">
+        <span className="block max-w-32 truncate text-xs font-bold text-white leading-tight">
+          {name}
         </span>
-      ) : null}
-    </div>
-  );
-  return href ? <Link href={href}>{inner}</Link> : inner;
-}
-
-function DeltaBadge({ delta }: { delta: number }) {
-  const positive = delta >= 0;
-  return (
-    <span
-      className={
-        "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold " +
-        (positive ? "odoo-pill-success" : "odoo-pill-danger")
-      }
-    >
-      {positive ? "▲" : "▼"}
-      {Math.abs(delta).toFixed(1)}%
-    </span>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  sub,
-  delta,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-  delta?: number | null;
-}) {
-  return (
-    <div>
-      <div className="text-[10px] font-bold uppercase tracking-widest text-odoo-text-muted">
-        {label}
-      </div>
-      <div className="mt-1 flex items-baseline gap-2">
-        {value ? (
-          <span className="font-mono text-sm font-bold text-odoo-text-strong">
-            {value}
-          </span>
-        ) : null}
-        {delta !== undefined && delta !== null ? (
-          <span
-            className={
-              "inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold " +
-              (delta >= 0 ? "odoo-pill-success" : "odoo-pill-danger")
-            }
-          >
-            {delta >= 0 ? "▲" : "▼"} {Math.abs(delta).toFixed(1)}%
-          </span>
-        ) : delta === null ? (
-          <span className="text-[10px] font-bold text-odoo-text-soft">—</span>
-        ) : null}
-        {sub ? (
-          <span className="text-[11px] text-odoo-text-muted">· {sub}</span>
-        ) : null}
-      </div>
+        <span className="block text-[9px] uppercase text-slate-300 tracking-wider">
+          {employeeCode} · {role}
+        </span>
+      </span>
     </div>
   );
 }
 
 function Panel({
   title,
-  subtitle,
-  link,
+  eyebrow,
+  action,
   children,
 }: {
   title: string;
-  subtitle?: string;
-  link?: { href: string; label: string };
-  children: React.ReactNode;
+  eyebrow?: string;
+  action?: ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-odoo-border bg-white p-4 shadow-sm sm:p-5">
-      <div className="mb-4 flex items-start justify-between gap-2">
+    <section className="odoo-card p-5 hover:shadow-lg transition-all duration-300">
+      <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <h2 className="text-sm font-bold text-odoo-text-strong">{title}</h2>
-          {subtitle ? (
-            <p className="mt-0.5 text-[11px] text-odoo-text-muted">{subtitle}</p>
+          {eyebrow ? (
+            <div className="mb-1 text-[9px] font-bold uppercase tracking-wide text-odoo-text-soft">
+              {eyebrow}
+            </div>
           ) : null}
+          <h2 className="text-sm font-bold text-odoo-text-strong">{title}</h2>
         </div>
-        {link ? (
-          <Link
-            href={link.href}
-            className="shrink-0 rounded-md px-2 py-1 text-[11px] font-semibold text-odoo-primary transition hover:bg-odoo-primary-50"
-          >
-            {link.label}
-          </Link>
-        ) : null}
+        {action ? <div className="shrink-0">{action}</div> : null}
       </div>
       {children}
+    </section>
+  );
+}
+
+function MetricCard({
+  title,
+  value,
+  unit,
+  sub,
+  delta,
+  icon,
+  accent,
+}: {
+  title: string;
+  value: string;
+  unit?: string;
+  sub?: string;
+  delta?: number | null;
+  icon: ReactNode;
+  accent: AccentName;
+}) {
+  const c = ACCENTS[accent];
+  return (
+    <article
+      className={`odoo-card border-l-4 ${c.border} p-5 hover:scale-[1.015] hover:shadow-xl transition-all duration-300`}
+    >
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <span className={`flex h-9 w-9 items-center justify-center rounded-md ${c.icon}`}>
+          {icon}
+        </span>
+        {delta !== undefined && delta !== null ? <DeltaPill value={delta} /> : null}
+      </div>
+      <div className="text-[10px] font-semibold text-odoo-text-muted">{title}</div>
+      <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
+        <span className="break-all text-lg font-bold text-odoo-text-strong sm:text-xl">
+          {value}
+        </span>
+        {unit ? <span className="text-[10px] font-semibold text-odoo-text-muted">{unit}</span> : null}
+      </div>
+      {sub ? <div className="mt-2 text-[10px] text-odoo-text-muted">{sub}</div> : null}
+    </article>
+  );
+}
+
+function DeltaPill({ value }: { value: number }) {
+  const positive = value >= 0;
+  return (
+    <span
+      className={
+        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold " +
+        (positive
+          ? "bg-odoo-success-bg text-odoo-success-text"
+          : "bg-odoo-danger-bg text-odoo-danger-text")
+      }
+    >
+      {positive ? "+" : "-"}
+      {Math.abs(value).toFixed(1)}%
+    </span>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border border-odoo-border bg-odoo-surface-muted px-3 py-2">
+      <div className="text-[9px] font-semibold text-odoo-text-muted">{label}</div>
+      <div className="mt-1 truncate text-xs font-bold text-odoo-text-strong">{value}</div>
     </div>
   );
+}
+
+function SplitStat({
+  label,
+  value,
+  meta,
+  tone,
+}: {
+  label: string;
+  value: string;
+  meta: string;
+  tone: "primary" | "muted";
+}) {
+  return (
+    <div className="rounded-md border border-odoo-border bg-odoo-surface-muted p-3">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[10px] font-semibold text-odoo-text-muted">{label}</span>
+        <span
+          className={
+            "rounded-full px-2 py-0.5 text-[10px] font-bold " +
+            (tone === "primary"
+              ? "bg-odoo-primary-50 text-odoo-primary"
+              : "bg-slate-200 text-slate-700")
+          }
+        >
+          {meta}
+        </span>
+      </div>
+      <div className="mt-2 text-xs font-bold text-odoo-text-strong">{value}</div>
+    </div>
+  );
+}
+
+function PriceRequestPanel({
+  canSeePriceRequests,
+  pendingPriceRequests,
+  approvedPricesToday,
+}: {
+  canSeePriceRequests: boolean;
+  pendingPriceRequests: number;
+  approvedPricesToday: number;
+}) {
+  const hasPending = pendingPriceRequests > 0;
+  return (
+    <section
+      className={
+        "rounded-lg border p-4 shadow-sm " +
+        (hasPending
+          ? "border-odoo-danger-border bg-odoo-danger-bg"
+          : "border-odoo-border bg-white")
+      }
+    >
+      <div className="mb-4 flex items-start gap-3">
+        <span
+          className={
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-md " +
+            (hasPending
+              ? "bg-white text-odoo-danger"
+              : "bg-odoo-primary-50 text-odoo-primary")
+          }
+        >
+          <TagIcon />
+        </span>
+        <div className="min-w-0">
+          <div className="text-sm font-bold text-odoo-text-strong">
+            ອະນຸມັດລາຄາພິເສດ
+          </div>
+          <p className="mt-1 text-[10px] text-odoo-text-muted">
+            {hasPending
+              ? `ມີ ${pendingPriceRequests} ລາຍການລໍຖ້າການອະນຸມັດ`
+              : "ບໍ່ມີຄຳຂໍລາຄາພິເສດໃນຂະນະນີ້"}
+          </p>
+        </div>
+      </div>
+
+      {canSeePriceRequests ? (
+        <Link
+          href="/cashier"
+          className={
+            "inline-flex h-9 w-full items-center justify-center rounded-md px-3 text-xs font-semibold transition " +
+            (hasPending
+              ? "bg-odoo-danger text-white hover:bg-odoo-danger-dark"
+              : "border border-odoo-border bg-white text-odoo-text-strong hover:bg-odoo-surface-muted")
+          }
+        >
+          {hasPending ? "ໄປອະນຸມັດ" : "ເບິ່ງປະຫວັດ"}
+        </Link>
+      ) : (
+        <div className="rounded-md border border-odoo-border bg-white px-3 py-2 text-[10px] font-semibold text-odoo-text-muted">
+          ອະນຸມັດແລ້ວມື້ນີ້:{" "}
+          <span className="text-odoo-text-strong">{approvedPricesToday}</span>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function LauncherButton({
+  href,
+  label,
+  icon,
+  accent,
+}: {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  accent: AccentName;
+}) {
+  const c = ACCENTS[accent];
+  return (
+    <Link
+      href={href}
+      className="group flex min-h-24 flex-col justify-between rounded-xl border border-odoo-border bg-white p-4 shadow-sm transition-all duration-300 hover:scale-[1.03] hover:shadow-md hover:border-odoo-primary-light"
+    >
+      <span className={`flex h-9 w-9 items-center justify-center rounded-md ${c.soft}`}>
+        {icon}
+      </span>
+      <span className="mt-3 text-xs font-semibold text-odoo-text-strong group-hover:text-odoo-primary">
+        {label}
+      </span>
+    </Link>
+  );
+}
+
+function getBezierPath(points: Array<{ x: number; y: number }>) {
+  if (points.length === 0) return "";
+  let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
+  for (let i = 0; i < points.length - 1; i++) {
+    const p0 = points[i];
+    const p1 = points[i + 1];
+    const cpX1 = p0.x + (p1.x - p0.x) / 2;
+    const cpY1 = p0.y;
+    const cpX2 = p0.x + (p1.x - p0.x) / 2;
+    const cpY2 = p1.y;
+    d += ` C ${cpX1.toFixed(1)} ${cpY1.toFixed(1)}, ${cpX2.toFixed(1)} ${cpY2.toFixed(1)}, ${p1.x.toFixed(1)} ${p1.y.toFixed(1)}`;
+  }
+  return d;
+}
+
+function getAreaBezierPath(
+  points: Array<{ x: number; y: number }>,
+  height: number,
+  padY: number
+) {
+  const linePath = getBezierPath(points);
+  if (!linePath) return "";
+  return `${linePath} L ${points[points.length - 1].x.toFixed(1)} ${height - padY} L ${points[0].x.toFixed(1)} ${height - padY} Z`;
 }
 
 function AreaChart({
@@ -816,67 +907,57 @@ function AreaChart({
     isToday: boolean;
   }>;
 }) {
-  const W = 700;
-  const H = 180;
+  const width = 700;
+  const height = 184;
   const padX = 28;
   const padY = 24;
   const maxTotal = Math.max(1, ...series.map((d) => d.total));
-  const stepX = (W - padX * 2) / Math.max(1, series.length - 1);
+  const stepX = (width - padX * 2) / Math.max(1, series.length - 1);
 
   const points = series.map((d, i) => {
     const x = padX + i * stepX;
-    const y = padY + (H - padY * 2) * (1 - d.total / maxTotal);
+    const y = padY + (height - padY * 2) * (1 - d.total / maxTotal);
     return { x, y, ...d };
   });
 
-  const linePath = points
-    .map((p, i) => `${i === 0 ? "M" : "L"} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`)
-    .join(" ");
-  const areaPath =
-    linePath +
-    ` L ${points[points.length - 1].x.toFixed(1)} ${H - padY} L ${points[0].x.toFixed(1)} ${H - padY} Z`;
+  const linePath = getBezierPath(points);
+  const areaPath = getAreaBezierPath(points, height, padY);
 
   return (
-    <div className="-mx-2 overflow-hidden">
+    <div className="overflow-hidden rounded-xl border border-odoo-border bg-white shadow-sm">
       <svg
-        viewBox={`0 0 ${W} ${H + 24}`}
+        viewBox={`0 0 ${width} ${height + 26}`}
         className="h-auto w-full"
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
-          <linearGradient id="area-grad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--odoo-primary)" stopOpacity="0.35" />
-            <stop offset="100%" stopColor="var(--odoo-primary)" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="line-grad" x1="0" y1="0" x2="1" y2="0">
-            <stop offset="0%" stopColor="var(--odoo-primary)" />
-            <stop offset="100%" stopColor="var(--odoo-accent)" />
+          <linearGradient id="dashboard-area-grad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="var(--odoo-primary)" stopOpacity="0.16" />
+            <stop offset="100%" stopColor="var(--odoo-primary)" stopOpacity="0.02" />
           </linearGradient>
         </defs>
 
-        {/* horizontal grid */}
         {[0.25, 0.5, 0.75].map((t) => {
-          const y = padY + (H - padY * 2) * t;
+          const y = padY + (height - padY * 2) * t;
           return (
             <line
               key={t}
               x1={padX}
-              x2={W - padX}
+              x2={width - padX}
               y1={y}
               y2={y}
-              stroke="var(--odoo-border)"
+              stroke="#e2e8f0"
               strokeWidth="1"
-              strokeDasharray="2 3"
             />
           );
         })}
 
-        <path d={areaPath} fill="url(#area-grad)" />
+        <path d={areaPath} fill="url(#dashboard-area-grad)" />
         <path
           d={linePath}
           fill="none"
-          stroke="url(#line-grad)"
-          strokeWidth="2.5"
+          stroke="var(--odoo-primary)"
+          strokeWidth="3"
           strokeLinecap="round"
           strokeLinejoin="round"
         />
@@ -886,48 +967,33 @@ function AreaChart({
             <circle
               cx={p.x}
               cy={p.y}
-              r={p.isToday ? 5 : 3.5}
-              fill="white"
-              stroke="var(--odoo-primary)"
-              strokeWidth={p.isToday ? 2.5 : 2}
+              r={p.isToday ? 4.8 : 3.6}
+              fill="#ffffff"
+              stroke={p.isToday ? "var(--odoo-primary)" : "#94a3b8"}
+              strokeWidth={p.isToday ? 3 : 2}
             />
-            {p.isToday ? (
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r="10"
-                fill="var(--odoo-primary)"
-                opacity="0.15"
-              />
-            ) : null}
             <text
               x={p.x}
-              y={p.y - 10}
+              y={p.y - 11}
               textAnchor="middle"
-              className="font-mono"
               fontSize="9"
               fontWeight="700"
-              fill={
-                p.isToday ? "var(--odoo-primary)" : "var(--odoo-text-muted)"
-              }
+              fill={p.isToday ? "var(--odoo-primary)" : "#64748b"}
             >
               {p.total > 0 ? compactMoneyFmt.format(p.total) : ""}
             </text>
             <text
               x={p.x}
-              y={H - 6}
+              y={height + 12}
               textAnchor="middle"
-              fontSize="10"
+              fontSize="9.5"
               fontWeight={p.isToday ? "800" : "600"}
-              fill={
-                p.isToday ? "var(--odoo-primary)" : "var(--odoo-text-muted)"
-              }
+              fill={p.isToday ? "var(--odoo-primary)" : "#64748b"}
             >
               {dayShortFmt.format(p.date)}
             </text>
             <title>
-              {dayShortFmt.format(p.date)} · {moneyFmt.format(p.total)} ກີບ ·{" "}
-              {p.orders} ບິນ
+              {`${dayShortFmt.format(p.date)} · ${moneyFmt.format(p.total)} ກີບ · ${p.orders} ບິນ`}
             </title>
           </g>
         ))}
@@ -936,101 +1002,9 @@ function AreaChart({
   );
 }
 
-const ACTION_TONE: Record<
-  "neutral" | "warning" | "danger" | "success",
-  { bar: string; iconBg: string; iconColor: string; count: string }
-> = {
-  neutral: {
-    bar: "bg-odoo-border",
-    iconBg: "bg-odoo-surface-muted",
-    iconColor: "text-odoo-text-muted",
-    count: "text-odoo-text-strong",
-  },
-  warning: {
-    bar: "bg-odoo-warning",
-    iconBg: "bg-odoo-warning-bg",
-    iconColor: "text-odoo-warning",
-    count: "text-odoo-warning",
-  },
-  danger: {
-    bar: "bg-odoo-danger",
-    iconBg: "bg-odoo-danger-bg",
-    iconColor: "text-odoo-danger",
-    count: "text-odoo-danger",
-  },
-  success: {
-    bar: "bg-odoo-success",
-    iconBg: "bg-odoo-success-bg",
-    iconColor: "text-odoo-success",
-    count: "text-odoo-success",
-  },
-};
-
-function ActionItem({
-  label,
-  count,
-  amount,
-  tone,
-  href,
-  sub,
-  icon,
-}: {
-  label: string;
-  count: number;
-  amount?: number;
-  tone: "neutral" | "warning" | "danger" | "success";
-  href?: string;
-  sub?: string;
-  icon?: React.ReactNode;
-}) {
-  const t = ACTION_TONE[tone];
-  const inner = (
-    <div className="relative flex items-center gap-3 overflow-hidden rounded-lg border border-odoo-border bg-white p-3 transition hover:border-odoo-primary-200 hover:shadow-sm">
-      <span className={`absolute left-0 top-0 h-full w-0.5 ${t.bar}`} />
-      {icon ? (
-        <span
-          className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${t.iconBg} ${t.iconColor}`}
-        >
-          {icon}
-        </span>
-      ) : null}
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-semibold text-odoo-text-strong">
-          {label}
-        </div>
-        {amount !== undefined ? (
-          <div className="mt-0.5 font-mono text-[11px] text-odoo-text-muted">
-            {moneyFmt.format(amount)} ກີບ
-          </div>
-        ) : sub ? (
-          <div className="mt-0.5 truncate text-[11px] text-odoo-text-muted">
-            {sub}
-          </div>
-        ) : null}
-      </div>
-      <div
-        className={`font-mono text-2xl font-bold tabular-nums ${t.count}`}
-      >
-        {numFmt.format(count)}
-      </div>
-    </div>
-  );
+function EmptyHint({ children }: { children: ReactNode }) {
   return (
-    <li>
-      {href ? (
-        <Link href={href} className="block">
-          {inner}
-        </Link>
-      ) : (
-        inner
-      )}
-    </li>
-  );
-}
-
-function EmptyHint({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="rounded-lg border border-dashed border-odoo-border bg-odoo-surface-muted py-12 text-center text-xs font-semibold text-odoo-text-soft">
+    <div className="rounded-md border border-dashed border-odoo-border bg-odoo-surface-muted py-8 text-center text-[11px] font-semibold text-odoo-text-muted">
       {children}
     </div>
   );
@@ -1039,20 +1013,20 @@ function EmptyHint({ children }: { children: React.ReactNode }) {
 function StatusPill({ status }: { status: number | null }) {
   if (status === 1) {
     return (
-      <span className="mt-0.5 inline-block rounded-full bg-odoo-success-bg px-2 py-0.5 text-[9px] font-bold text-odoo-success-text">
+      <span className="mt-1 inline-flex rounded-full bg-odoo-success-bg px-2 py-0.5 text-[9px] font-bold text-odoo-success-text">
         ສຳເລັດ
       </span>
     );
   }
   if (status === 2) {
     return (
-      <span className="mt-0.5 inline-block rounded-full bg-odoo-danger-bg px-2 py-0.5 text-[9px] font-bold text-odoo-danger-text">
+      <span className="mt-1 inline-flex rounded-full bg-odoo-danger-bg px-2 py-0.5 text-[9px] font-bold text-odoo-danger-text">
         ຍົກເລີກ
       </span>
     );
   }
   return (
-    <span className="mt-0.5 inline-block rounded-full bg-odoo-warning-bg px-2 py-0.5 text-[9px] font-bold text-odoo-warning-text">
+    <span className="mt-1 inline-flex rounded-full bg-odoo-warning-bg px-2 py-0.5 text-[9px] font-bold text-odoo-warning-text">
       ລໍຖ້າ
     </span>
   );
@@ -1066,101 +1040,59 @@ function statusDotBg(status: number | null) {
       : "bg-odoo-warning";
 }
 
-function rankAvatarBg(i: number) {
-  if (i === 0) return "bg-gradient-to-br from-amber-400 to-amber-600";
-  if (i === 1) return "bg-gradient-to-br from-slate-300 to-slate-500";
-  if (i === 2) return "bg-gradient-to-br from-orange-400 to-orange-600";
-  return "bg-gradient-to-br from-odoo-primary to-odoo-primary-dark";
+function rankBadgeClass(i: number) {
+  if (i === 0) return "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 text-xs font-bold text-white shadow-md shadow-amber-500/20";
+  if (i === 1) return "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-300 to-slate-400 text-xs font-bold text-white shadow-md shadow-slate-400/20";
+  if (i === 2) return "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-amber-600 text-xs font-bold text-white shadow-md shadow-orange-500/20";
+  return "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-xs font-bold text-slate-600 border border-slate-200";
 }
 
-function rankBadgeBg(i: number) {
-  if (i === 0) return "bg-amber-500 text-white";
-  if (i === 1) return "bg-slate-400 text-white";
-  if (i === 2) return "bg-orange-500 text-white";
-  return "bg-odoo-primary text-white";
+function rankBarClass(i: number) {
+  if (i === 0) return "h-full rounded-full bg-gradient-to-r from-amber-400 to-yellow-500 shadow-[0_0_8px_rgba(245,158,11,0.2)]";
+  if (i === 1) return "h-full rounded-full bg-gradient-to-r from-slate-300 to-slate-500";
+  if (i === 2) return "h-full rounded-full bg-gradient-to-r from-orange-400 to-amber-600";
+  return "h-full rounded-full bg-gradient-to-r from-indigo-400 to-indigo-600";
 }
 
-function rankBarBg(i: number) {
-  if (i === 0)
-    return "bg-gradient-to-r from-amber-400 to-amber-600";
-  if (i === 1)
-    return "bg-gradient-to-r from-slate-300 to-slate-500";
-  if (i === 2)
-    return "bg-gradient-to-r from-orange-400 to-orange-600";
-  return "bg-gradient-to-r from-odoo-primary to-odoo-primary-light";
-}
-
-const QUICK_ACCENT: Record<
-  AccentName,
-  { bg: string; iconBg: string; iconColor: string }
-> = {
-  primary: {
-    bg: "from-odoo-primary-50 to-white",
-    iconBg: "bg-odoo-primary text-white",
-    iconColor: "",
-  },
-  warning: {
-    bg: "from-odoo-warning-bg to-white",
-    iconBg: "bg-odoo-warning text-white",
-    iconColor: "",
-  },
-  info: {
-    bg: "from-odoo-info-bg to-white",
-    iconBg: "bg-odoo-info text-white",
-    iconColor: "",
-  },
-  success: {
-    bg: "from-odoo-success-bg to-white",
-    iconBg: "bg-odoo-success text-white",
-    iconColor: "",
-  },
-};
-
-function QuickLink({
-  href,
-  label,
-  sub,
-  icon,
-  accent,
-}: {
-  href: string;
-  label: string;
-  sub?: string;
-  icon: React.ReactNode;
-  accent: AccentName;
-}) {
-  const a = QUICK_ACCENT[accent];
+function PlusIcon() {
   return (
-    <Link
-      href={href}
-      className={`group relative flex items-center gap-3 overflow-hidden rounded-xl border border-odoo-border bg-gradient-to-br ${a.bg} p-4 shadow-sm transition hover:-translate-y-0.5 hover:shadow-md`}
-    >
-      <span
-        className={`flex h-11 w-11 items-center justify-center rounded-xl shadow-sm ${a.iconBg}`}
-      >
-        {icon}
-      </span>
-      <div className="min-w-0 flex-1">
-        <div className="truncate text-sm font-bold text-odoo-text-strong">
-          {label}
-        </div>
-        {sub ? (
-          <div className="mt-0.5 truncate text-[11px] text-odoo-text-muted">
-            {sub}
-          </div>
-        ) : null}
-      </div>
-      <span className="text-odoo-text-soft transition group-hover:translate-x-0.5 group-hover:text-odoo-primary">
-        →
-      </span>
-    </Link>
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+      <path d="M12 5v14M5 12h14" />
+    </svg>
+  );
+}
+
+function SalesIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      <path d="M3 3v18h18" />
+      <path d="m7 14 4-4 4 4 5-6" />
+    </svg>
+  );
+}
+
+function ReceiptIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2z" />
+      <path d="M8 7h8M8 12h8M8 17h5" />
+    </svg>
+  );
+}
+
+function AverageIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      <circle cx="12" cy="12" r="9" />
+      <path d="M8 12h8M12 8v8" />
+    </svg>
   );
 }
 
 function CashIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-      <rect x="2" y="6" width="20" height="12" rx="2" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      <rect x="2" y="6" width="20" height="12" rx="2.5" />
       <circle cx="12" cy="12" r="2.5" />
       <path d="M6 10v.01M18 14v.01" />
     </svg>
@@ -1169,7 +1101,7 @@ function CashIcon() {
 
 function PosIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
       <path d="M4 4h16v5H4z" />
       <path d="M4 9v11h16V9" />
       <path d="M8 13h2" />
@@ -1181,16 +1113,16 @@ function PosIcon() {
 
 function ReportIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
       <path d="M3 3v18h18" />
-      <path d="M7 14l4-4 4 4 5-6" />
+      <path d="m7 14 4-4 4 4 5-6" />
     </svg>
   );
 }
 
 function UsersIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
       <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
       <circle cx="9" cy="7" r="4" />
       <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
@@ -1199,35 +1131,9 @@ function UsersIcon() {
   );
 }
 
-function TrendIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-      <path d="M3 17l6-6 4 4 8-8" />
-      <path d="M14 7h7v7" />
-    </svg>
-  );
-}
-
-function ClockIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-      <path d="M20 6L9 17l-5-5" />
-    </svg>
-  );
-}
-
 function CalendarIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
       <rect x="3" y="4" width="18" height="17" rx="2" />
       <path d="M16 2v4M8 2v4M3 10h18" />
     </svg>
@@ -1236,18 +1142,9 @@ function CalendarIcon() {
 
 function TagIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-      <path d="M20.59 13.41L13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+      <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z" />
       <circle cx="7" cy="7" r="1.5" />
-    </svg>
-  );
-}
-
-function XIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M15 9l-6 6M9 9l6 6" />
     </svg>
   );
 }

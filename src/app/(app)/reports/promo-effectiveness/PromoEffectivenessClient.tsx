@@ -46,11 +46,13 @@ export default function PromoEffectivenessClient() {
   }, [from, to]);
 
   useEffect(() => {
-    void load();
+    Promise.resolve().then(() => {
+      void load();
+    });
   }, [load]);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+    <div className="odoo-page">
       <header className="mb-4">
         <div className="text-[11px] font-bold uppercase tracking-widest text-odoo-text-muted">
           Reports
@@ -100,7 +102,7 @@ export default function PromoEffectivenessClient() {
       ) : null}
 
       <div className="overflow-x-auto rounded-md border border-odoo-border bg-odoo-surface">
-        <table className="w-full text-sm">
+        <table className="odoo-table">
           <thead className="bg-odoo-surface-muted text-left text-[11px] font-bold uppercase tracking-wider text-odoo-text-muted">
             <tr>
               <th className="px-3 py-2">ໂປຣໂມຊັນ</th>

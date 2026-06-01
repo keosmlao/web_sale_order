@@ -31,7 +31,7 @@ export default async function LoginPage() {
         <div className="login-brand-bg" aria-hidden />
         <div className="login-brand-inner">
           <div className="login-brand-mark">
-            <div className="login-brand-logo">O</div>
+            <div className="login-brand-logo"><img src="/odm.png" alt="ODIEN Mall" /></div>
             <div>
               <div className="login-brand-name">ODG ຂາຍ</div>
               <div className="login-brand-tag">Sales Management System</div>
@@ -45,21 +45,33 @@ export default async function LoginPage() {
 
           <ul className="login-brand-features">
             <li>
-              <span className="login-feature-dot" aria-hidden>✓</span>
+              <span className="login-feature-dot" aria-hidden>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </span>
               <div>
                 <strong>ຮັບອໍເດີ້ໄວ</strong>
                 <small>ສ້າງອໍເດີ້ ແລະ ສະແກນບາໂຄດໃນຄຣິກດຽວ</small>
               </div>
             </li>
             <li>
-              <span className="login-feature-dot" aria-hidden>✓</span>
+              <span className="login-feature-dot" aria-hidden>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </span>
               <div>
                 <strong>ຄຸ້ມຄອງສິນຄ້າຄົງເຫຼືອ</strong>
                 <small>ເບິ່ງສະຕັອກ ແລະ ລາຄາແບບ real-time</small>
               </div>
             </li>
             <li>
-              <span className="login-feature-dot" aria-hidden>✓</span>
+              <span className="login-feature-dot" aria-hidden>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="20 6 9 17 4 12" />
+                </svg>
+              </span>
               <div>
                 <strong>ລາຍງານຂາຍ</strong>
                 <small>ສະຫຼຸບຍອດຂາຍ ແລະ KPI ປະຈຳວັນ</small>
@@ -75,7 +87,7 @@ export default async function LoginPage() {
       <main className="login-panel">
         <div className="login-panel-inner">
           <div className="login-mobile-brand">
-            <div className="login-brand-logo">O</div>
+            <div className="login-brand-logo"><img src="/odm.png" alt="ODIEN Mall" /></div>
             <div>
               <div className="login-brand-name">ODG ຂາຍ</div>
               <div className="login-brand-tag">Sales Management</div>

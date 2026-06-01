@@ -241,7 +241,7 @@ export default function StockMinimumClient({
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+    <div className="px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-6">
         <div className="text-[11px] font-bold uppercase tracking-widest text-odoo-text-muted">
           ການຕັ້ງຄ່າ
@@ -789,9 +789,9 @@ function ImportStockMinimumModal({
         body.length > 0
           ? [[...TEMPLATE_COLUMNS], ...body]
           : [
-              [...TEMPLATE_COLUMNS],
-              ["sales_agg", "", "110101-0001", "ຕົວຢ່າງສິນຄ້າ", "", "", 0, 5, 3, 2, "", 25, ""],
-            ];
+            [...TEMPLATE_COLUMNS],
+            ["sales_agg", "", "110101-0001", "ຕົວຢ່າງສິນຄ້າ", "", "", 0, 5, 3, 2, "", 25, ""],
+          ];
 
       const ws = XLSX.utils.aoa_to_sheet(data);
       ws["!cols"] = [

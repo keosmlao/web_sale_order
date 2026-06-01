@@ -79,7 +79,10 @@ export default function OrderNotifier(_props: Props) {
 
   // Initial permission read happens client-side only.
   useEffect(() => {
-    setPerm(readPermission());
+    const current = readPermission();
+    Promise.resolve().then(() => {
+      setPerm(current);
+    });
   }, []);
 
   // EventSource lifecycle. Independent of permission so we can show the

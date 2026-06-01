@@ -53,7 +53,9 @@ export default function BarcodesClient({ canManage }: { canManage: boolean }) {
   }, [q]);
 
   useEffect(() => {
-    void fetchRows();
+    Promise.resolve().then(() => {
+      void fetchRows();
+    });
   }, [fetchRows]);
 
   // Search items as the admin types in the item query box.
@@ -150,7 +152,7 @@ export default function BarcodesClient({ canManage }: { canManage: boolean }) {
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+    <div className="px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-4">
         <div className="text-[11px] font-bold uppercase tracking-widest text-odoo-text-muted">
           ການຕັ້ງຄ່າ

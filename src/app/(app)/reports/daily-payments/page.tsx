@@ -154,7 +154,7 @@ export default async function DailyPaymentsReportPage({
   }
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-5 sm:px-6 lg:px-8">
+    <div className="odoo-page">
       <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <div className="odoo-label">ລາຍງານ</div>

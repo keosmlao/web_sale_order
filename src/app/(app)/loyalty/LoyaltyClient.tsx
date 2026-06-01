@@ -103,7 +103,7 @@ export default function LoyaltyClient({
       : "ບໍ່ເປີດໃຊ້ການແລກ — ໃສ່ 0";
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-6 sm:px-6 sm:py-8">
+    <div className="px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-6">
         <div className="text-[11px] font-bold uppercase tracking-widest text-odoo-text-muted">
           ການຕັ້ງຄ່າ

@@ -95,6 +95,37 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
           DELETE FROM ic_trans
           WHERE doc_no = ${receiptDocNo} AND trans_type = 2 AND trans_flag = 44
         `;
+        // Restore any loyalty points redeemed on this receipt before dropping
+        // the redemption rows — a delete must fully undo the settle's
+        // side-effects, never leave the customer short on points.
+        const redemptions = await tx.$queryRaw<
+          Array<{ points_used: number; customer_code: string }>
+        >`
+          SELECT points_used, customer_code
+          FROM app_loyalty_redemption
+          WHERE doc_no = ${receiptDocNo}
+        `;
+        for (const r of redemptions) {
+          if (r.points_used > 0 && r.customer_code) {
+            await tx.$executeRaw`
+              UPDATE ar_customer
+              SET point_balance = COALESCE(point_balance, 0) + ${r.points_used}
+              WHERE code = ${r.customer_code}
+            `;
+          }
+        }
+        await tx.$executeRaw`
+          DELETE FROM app_loyalty_redemption
+          WHERE doc_no = ${receiptDocNo}
+        `;
+        // The settle audit row drives receipt history + the shift X/Z report
+        // and carries its own UNIQUE(doc_no). Leaving it behind keeps the
+        // "deleted" receipt visible in history and lets a later settle reuse
+        // this doc_no, colliding on app_settle_audit_doc_no_key.
+        await tx.$executeRaw`
+          DELETE FROM app_settle_audit
+          WHERE doc_no = ${receiptDocNo}
+        `;
         await tx.$executeRaw`
           UPDATE app_price_request
           SET status = 'approved'

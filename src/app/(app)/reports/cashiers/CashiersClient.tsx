@@ -48,7 +48,9 @@ export default function CashiersClient() {
   }, [from, to]);
 
   useEffect(() => {
-    void load();
+    Promise.resolve().then(() => {
+      void load();
+    });
   }, [load]);
 
   // Aggregate by cashier across the date range.
@@ -84,7 +86,7 @@ export default function CashiersClient() {
     .sort((a, b) => b.totalKip - a.totalKip);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-8">
+    <div className="odoo-page">
       <header className="mb-4">
         <div className="text-[11px] font-bold uppercase tracking-widest text-odoo-text-muted">
           Reports
@@ -137,7 +139,7 @@ export default function CashiersClient() {
         <div className="border-b border-odoo-border px-3 py-2 text-sm font-bold text-odoo-text-strong">
           ສະຫຼຸບຕໍ່ Cashier
         </div>
-        <table className="w-full text-sm">
+        <table className="odoo-table">
           <thead className="bg-odoo-surface-muted text-left text-[11px] font-bold uppercase tracking-wider text-odoo-text-muted">
             <tr>
               <th className="px-3 py-2">Cashier</th>
@@ -196,7 +198,7 @@ export default function CashiersClient() {
         <div className="border-b border-odoo-border px-3 py-2 text-sm font-bold text-odoo-text-strong">
           ລາຍລະອຽດຕາມວັນ
         </div>
-        <table className="w-full text-sm">
+        <table className="odoo-table">
           <thead className="bg-odoo-surface-muted text-left text-[11px] font-bold uppercase tracking-wider text-odoo-text-muted">
             <tr>
               <th className="px-3 py-2">ວັນ</th>

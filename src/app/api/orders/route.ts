@@ -56,6 +56,15 @@ type OrderRow = {
   // it into the three flat fields so the mobile app can prefill cleanly
   // on edit.
   remark: string | null;
+  // Settlement info (present only once the cashier has settled the SOK).
+  // Pulled from app_settle_audit keyed on the SOK's tax_doc_no (= CAKAP no).
+  receipt_no: string | null;
+  settled_at: Date | null;
+  cashier_code: string | null;
+  cashier_name: string | null;
+  cash_kip: string | number | null;
+  transfer_kip: string | number | null;
+  redeemed_kip: string | number | null;
   items: OrderItemJson[] | null;
 };
 
@@ -151,6 +160,19 @@ function toOrder(row: OrderRow) {
     salesperson,
     status: statusLabel(row.status, row.is_scheduled === true),
     total: row.total ? Number(row.total) : 0,
+    // Settlement details — null until the cashier settles the SOK. Surfaced
+    // so the salesperson can see receipt no / who collected / how it was paid.
+    settlement: row.receipt_no
+      ? {
+          receiptNo: row.receipt_no,
+          settledAt: row.settled_at ? row.settled_at.toISOString() : null,
+          cashierCode: row.cashier_code,
+          cashierName: row.cashier_name,
+          cashKip: row.cash_kip != null ? Number(row.cash_kip) : 0,
+          transferKip: row.transfer_kip != null ? Number(row.transfer_kip) : 0,
+          redeemedKip: row.redeemed_kip != null ? Number(row.redeemed_kip) : 0,
+        }
+      : null,
     // Flat fields off the packed remark — mobile edit prefill uses these.
     deliveryName: parsedRemark.deliveryName,
     extraDiscount: parsedRemark.extraDiscount,
@@ -242,6 +264,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json([]);
   }
 
+  // Managers see the whole team's orders (each carries its salesperson);
+  // everyone else is scoped to their own.
+  const isManager = roleFromEmployee(employee) === "manager";
+  const salespersonFilter = isManager
+    ? Prisma.empty
+    : Prisma.sql`AND eff.salesperson_code = ${employeeCode}`;
+
   // The cart_number returned to the mobile app is the 5-digit doc_no
   // suffix (chars 6+ of doc_no like SOK2600123 → "00123"). The Flutter app
   // still keys orders by this 5-character id, so we strip the SOK/YY
@@ -274,6 +303,13 @@ export async function GET(request: NextRequest) {
       emp.fullname_en AS salesperson_name_en,
       emp.nickname AS salesperson_nickname,
       t.remark,
+      NULLIF(t.tax_doc_no, '') AS receipt_no,
+      sa.created_at AS settled_at,
+      sa.cashier_code,
+      cemp.fullname_lo AS cashier_name,
+      sa.cash_kip,
+      sa.transfer_kip,
+      sa.redeemed_kip,
       COALESCE(
         json_agg(
           json_build_object(
@@ -337,8 +373,11 @@ export async function GET(request: NextRequest) {
       ORDER BY updated_at DESC
       LIMIT 1
     ) lc ON true
+    LEFT JOIN app_settle_audit sa
+      ON sa.doc_no = t.tax_doc_no AND sa.is_voided = FALSE
+    LEFT JOIN odg_employee cemp ON cemp.employee_code = sa.cashier_code
     WHERE t.doc_format_code = 'SOK'
-      AND eff.salesperson_code = ${employeeCode}
+      ${salespersonFilter}
     GROUP BY
       t.doc_no,
       t.tax_doc_no,
@@ -361,7 +400,13 @@ export async function GET(request: NextRequest) {
       emp.fullname_lo,
       emp.fullname_en,
       emp.nickname,
-      t.remark
+      t.remark,
+      sa.created_at,
+      sa.cashier_code,
+      cemp.fullname_lo,
+      sa.cash_kip,
+      sa.transfer_kip,
+      sa.redeemed_kip
     ORDER BY t.create_date_time_now DESC
     LIMIT 100
   `;
@@ -386,6 +431,7 @@ export async function POST(request: NextRequest) {
         salespersonCode?: unknown;
         items?: unknown;
         priceRequests?: unknown;
+        promoSelections?: unknown;
       }
     | null;
   const customerId = typeof body?.customerId === "string" ? body.customerId.trim() : "";
@@ -417,6 +463,15 @@ export async function POST(request: NextRequest) {
       : "";
   const rawItems: unknown[] = Array.isArray(body?.items) ? body.items : [];
   const items = normalizeItems(rawItems, warehouseCode);
+
+  // Per-item promotion choice from the cart: { itemCode: promoId | null }.
+  // promoId  → keep only that promo on the trigger item;
+  // null/""  → opt out of all promos on that trigger item;
+  // absent   → default (server applies promos as before).
+  const promoSelections: Record<string, string | null> =
+    body?.promoSelections && typeof body.promoSelections === "object"
+      ? (body.promoSelections as Record<string, string | null>)
+      : {};
 
   // Per-item special-price requests: { productId, reason }
   // The cart is inserted with original prices — these rows go into
@@ -823,6 +878,19 @@ export async function POST(request: NextRequest) {
   const activePromos = await prisma.appPromotion.findMany({
     where: { isActive: true },
   });
+  // Honour the cart's per-item promo choices (mirrors the app's preview
+  // filter). An opted-out trigger drops all its promos; a chosen trigger
+  // keeps only that promo id; untouched triggers keep their defaults.
+  const effectivePromos = activePromos.filter((p) => {
+    const trig = (p.triggerItemCode ?? "").trim();
+    if (!trig) return true;
+    if (!Object.prototype.hasOwnProperty.call(promoSelections, trig)) {
+      return true;
+    }
+    const chosen = promoSelections[trig];
+    if (chosen == null || chosen === "") return false;
+    return String(p.id) === String(chosen);
+  });
   applyPromotions(
     linePricing.map((lp) => ({
       productId: lp.item.productId,
@@ -834,7 +902,7 @@ export async function POST(request: NextRequest) {
       promoLabel: lp.promoLabel,
       amount: lp.amount,
     })),
-    activePromos,
+    effectivePromos,
     new Date(),
   ).forEach((engineLine, i) => {
     const lp = linePricing[i];
@@ -871,7 +939,12 @@ export async function POST(request: NextRequest) {
   );
 
   const appliedExtraDiscount = Math.min(extraDiscount, lineTotal);
-  const total = lineTotal - appliedExtraDiscount;
+  const roundUpKipUnit = (n: number, unit = 1000) => {
+    if (!Number.isFinite(n) || n <= 0) return 0;
+    return Math.ceil(n / unit) * unit;
+  };
+  const rawTotal = Math.max(0, lineTotal - appliedExtraDiscount);
+  const total = roundUpKipUnit(rawTotal);
   const loyaltyRows = await prisma.$queryRaw<LoyaltyConfigRow[]>`
     SELECT earn_kip_per_point, point_name, is_active
     FROM app_loyalty_config

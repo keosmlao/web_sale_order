@@ -91,7 +91,7 @@ export default function SalesWarehousesClient({
   }
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-8">
+    <div className="px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-6">
         <div className="text-[11px] font-bold uppercase tracking-widest text-odoo-text-muted">
           ການຕັ້ງຄ່າ

@@ -142,7 +142,7 @@ const sections: NavSection[] = [
       },
       {
         href: "/cashier/history",
-        label: "ປະຫວັດການຊາຍ",
+        label: "ປະຫວັດການຂາຍ",
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
             <circle cx="12" cy="12" r="9" />
@@ -286,8 +286,15 @@ export default function Sidebar({ displayName, employeeCode, subtitle }: Sidebar
   );
 
   const isHrefActive = useCallback(
-    (href: string) =>
-      pathname === href || (href !== "/" && pathname.startsWith(`${href}/`)),
+    (href: string) => {
+      if (href === "/cashier") {
+        return (
+          pathname === "/cashier" ||
+          (pathname.startsWith("/cashier/") && !pathname.startsWith("/cashier/history"))
+        );
+      }
+      return pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
+    },
     [pathname],
   );
 
@@ -311,28 +318,28 @@ export default function Sidebar({ displayName, employeeCode, subtitle }: Sidebar
       ) : null}
 
       {/* Mobile top header */}
-      <header className="sticky top-0 z-20 border-b border-odoo-primary-dark bg-odoo-primary px-4 py-3 md:hidden">
+      <header className="sticky top-0 z-20 border-b border-white/5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-4 py-3 shadow-md md:hidden">
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-md bg-white text-sm font-bold text-odoo-primary">
-              O
+            <div className="flex h-9 w-auto items-center justify-center rounded-xl bg-white px-2 shadow-sm">
+              <img src="/odm.png" alt="ODIEN Mall" className="h-6 w-auto object-contain" />
             </div>
             <div>
-              <div className="text-base font-bold leading-none text-white">ODG ຂາຍ</div>
-              <div className="mt-1 text-[11px] text-white/70">ລະບົບຈັດການການຂາຍ</div>
+              <div className="text-base font-extrabold leading-none text-white tracking-tight">ODG ຂາຍ</div>
+              <div className="mt-1 text-[10px] font-medium text-slate-400">ລະບົບຈັດການການຂາຍ</div>
             </div>
           </div>
           <form action={logoutAction}>
             <button
               type="submit"
               aria-label="ອອກຈາກລະບົບ"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-white/20 text-white hover:bg-white/10"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white"
             >
               <LogoutIcon className="h-4 w-4" />
             </button>
           </form>
         </div>
-        <nav className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
+        <nav className="mt-3 flex gap-2 overflow-x-auto pb-1.5 scrollbar-none">
           {mobileNavItems.map((item) => {
             const active = isHrefActive(item.href);
             return (
@@ -343,10 +350,10 @@ export default function Sidebar({ displayName, employeeCode, subtitle }: Sidebar
                 onPointerEnter={() => router.prefetch(item.href)}
                 onClick={() => markPending(item.href)}
                 className={
-                  "inline-flex shrink-0 items-center gap-2 rounded-md px-3 py-1.5 text-xs font-medium transition " +
+                  "inline-flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-1.5 text-xs font-bold transition-all " +
                   (active
-                    ? "bg-white text-odoo-primary"
-                    : "bg-white/10 text-white hover:bg-white/20")
+                    ? "bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/20"
+                    : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white")
                 }
               >
                 {item.icon}
@@ -368,7 +375,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle }: Sidebar
             className="sbd-brand"
             aria-label="ໜ້າຫຼັກ"
           >
-            <div className="sbd-brand-logo">O</div>
+            <div className="sbd-brand-logo"><img src="/odm.png" alt="ODIEN Mall" /></div>
             <div className="sbd-brand-text">
               <div className="sbd-brand-name">ODG ຂາຍ</div>
               <div className="sbd-brand-tag">Sales Management</div>

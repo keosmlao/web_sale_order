@@ -164,6 +164,7 @@ type CartRow = {
   amount: number | string | null;
   status: number | null;
   remark: string | null;
+  sum_point: number | string | null;
   user_owner: string | null;
   header_department_code: string | null;
 };
@@ -374,6 +375,7 @@ export async function POST(request: NextRequest) {
           total_amount_2 AS amount,
           status,
           remark,
+          sum_point,
           COALESCE(
             NULLIF(NULLIF(sale_code, ''), '00000'),
             NULLIF(NULLIF((
@@ -409,6 +411,10 @@ export async function POST(request: NextRequest) {
       // SML columns are VARCHAR, so we coalesce to '' at every insert site;
       // ar_customer joins downstream skip the row when the code is blank.
       const custCode = cart.cust_code ?? "";
+      // Loyalty points the SOK accrued at order time. Credited to the member
+      // on settle and stamped onto the CAKAP header so a later void can claw
+      // the exact same amount back.
+      const earnedPts = Math.floor(Number(cart.sum_point ?? 0));
 
       // 2. Load items from the SOK doc.
       const items = await tx.$queryRaw<CartItemRow[]>`
@@ -660,24 +666,40 @@ export async function POST(request: NextRequest) {
       await tx.$executeRaw`
         SELECT pg_advisory_xact_lock(hashtext(${`${DOC_PREFIX}:${yymm}`}))
       `;
+      // Derive the next sequence from BOTH ic_trans and app_settle_audit.
+      // app_settle_audit carries its own UNIQUE(doc_no) and can outlive the
+      // matching ic_trans row (e.g. SML resets the ic_* tables while the
+      // app-owned audit persists). Counting only ic_trans would let the
+      // allocator hand back a doc_no that already exists in app_settle_audit,
+      // hitting app_settle_audit_doc_no_key at the step-12 insert.
       const seqRows = await tx.$queryRaw<Array<{ next_seq: number }>>`
-        SELECT COALESCE(
-          MAX(CAST(SUBSTRING(doc_no FROM ${DOC_PREFIX.length + 5}) AS INTEGER)),
-          0
-        ) + 1 AS next_seq
-        FROM ic_trans
-        WHERE doc_no LIKE ${docNoPattern}
-          AND LENGTH(doc_no) >= ${DOC_PREFIX.length + 5}
+        SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq
+        FROM (
+          SELECT CAST(SUBSTRING(doc_no FROM ${DOC_PREFIX.length + 5}) AS INTEGER) AS seq
+          FROM ic_trans
+          WHERE doc_no LIKE ${docNoPattern}
+            AND LENGTH(doc_no) >= ${DOC_PREFIX.length + 5}
+          UNION ALL
+          SELECT CAST(SUBSTRING(doc_no FROM ${DOC_PREFIX.length + 5}) AS INTEGER) AS seq
+          FROM app_settle_audit
+          WHERE doc_no LIKE ${docNoPattern}
+            AND LENGTH(doc_no) >= ${DOC_PREFIX.length + 5}
+        ) AS seqs
       `;
       let seq = seqRows[0]?.next_seq ?? 1;
       let docNo = `${DOC_PREFIX}${yymm}${String(seq).padStart(4, "0")}`;
       let allocatedDocNo = false;
       for (let i = 0; i < 20; i++) {
         const existsRows = await tx.$queryRaw<Array<{ exists: boolean }>>`
-          SELECT EXISTS (
-            SELECT 1 FROM ic_trans
-            WHERE doc_no = ${docNo}
-              AND trans_flag = ${TRANS_FLAG}
+          SELECT (
+            EXISTS (
+              SELECT 1 FROM ic_trans
+              WHERE doc_no = ${docNo}
+                AND trans_flag = ${TRANS_FLAG}
+            )
+            OR EXISTS (
+              SELECT 1 FROM app_settle_audit WHERE doc_no = ${docNo}
+            )
           ) AS exists
         `;
         if (!existsRows[0]?.exists) {
@@ -952,6 +974,7 @@ export async function POST(request: NextRequest) {
           is_cancel, cancel_type,
           create_datetime, lastedit_datetime,
           create_date_time_now,
+          sum_point,
           remark
         )
         VALUES (
@@ -975,6 +998,7 @@ export async function POST(request: NextRequest) {
           0, 0,
           NOW(), NOW(),
           NOW(),
+          ${earnedPts},
           ${joinRemarks(cart.remark, billDiscountKip, redeemKipValue, redeemPointsApplied)}
         )
       `;
@@ -1293,6 +1317,18 @@ export async function POST(request: NextRequest) {
         await tx.$executeRaw`
           UPDATE ar_customer
           SET point_balance = COALESCE(point_balance, 0) - ${redeemPointsApplied}
+          WHERE code = ${custCode}
+        `;
+      }
+
+      // 11b. Loyalty earning — credit the points this bill accrued (carried on
+      //      the SOK header) to the member's balance. Stamped onto the CAKAP
+      //      header above so voiding the receipt later subtracts the same
+      //      amount. Walk-ins (no custCode) earn nothing.
+      if (earnedPts > 0 && custCode) {
+        await tx.$executeRaw`
+          UPDATE ar_customer
+          SET point_balance = COALESCE(point_balance, 0) + ${earnedPts}
           WHERE code = ${custCode}
         `;
       }
