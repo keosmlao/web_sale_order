@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { canManagePromotions, roleFromEmployee } from "@/lib/roles";
 import {
+  autoCloseExpiredPromotions,
   serializePromotion,
   validatePromoInput,
   type PromoInput,
@@ -18,6 +19,10 @@ export async function GET(request: NextRequest) {
   const url = request.nextUrl;
   const typeFilter = url.searchParams.get("type")?.trim() || null;
   const activeOnly = url.searchParams.get("active") === "1";
+
+  // Auto-close expired promos before reading, so the list (and the
+  // ?active=1 filter) reflects the real state without a cron job.
+  await autoCloseExpiredPromotions();
 
   const rows = await prisma.appPromotion.findMany({
     where: {

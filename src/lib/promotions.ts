@@ -13,6 +13,7 @@
 // validation enforces shape so that a future engine can rely on it.
 
 import { Prisma, type AppPromotion } from "@/generated/prisma/client";
+import { prisma } from "@/lib/prisma";
 
 export const PROMO_TYPES = ["bogo", "item_pair_price", "fixed_price_period"] as const;
 export type PromoType = (typeof PROMO_TYPES)[number];
@@ -211,6 +212,48 @@ export function validatePromoInput(
       note,
     },
   };
+}
+
+// Auto-close any promotion whose end date has already passed. There's no
+// cron in this app, so expiry is enforced lazily: every time an admin loads
+// the promotions list (server page or GET API) we sweep promos that are
+// still is_active=true but whose end_at is now in the past and flip them off,
+// logging an "auto_close" audit row per promo (actor = "system"). A promo
+// with no end_at never auto-closes. Returns how many were closed.
+export async function autoCloseExpiredPromotions(
+  now: Date = new Date(),
+): Promise<number> {
+  const expired = await prisma.appPromotion.findMany({
+    where: {
+      isActive: true,
+      endAt: { not: null, lt: now },
+    },
+  });
+  if (expired.length === 0) return 0;
+
+  const ids = expired.map((p) => p.id);
+  await prisma.appPromotion.updateMany({
+    where: { id: { in: ids } },
+    data: { isActive: false },
+  });
+
+  await prisma.appPromotionAudit
+    .createMany({
+      data: expired.map((p) => ({
+        promotionId: p.id,
+        action: "auto_close",
+        actorCode: "system",
+        snapshot: serializePromotion({
+          ...p,
+          isActive: false,
+        }) as unknown as Prisma.InputJsonValue,
+      })),
+    })
+    .catch((e) => {
+      console.warn("[promo-audit] auto_close log failed:", e);
+    });
+
+  return expired.length;
 }
 
 export function serializePromotion(p: AppPromotion) {

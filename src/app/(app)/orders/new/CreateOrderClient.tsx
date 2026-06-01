@@ -342,6 +342,29 @@ export default function CreateOrderClient({
   } | null>(null);
   const [whPickerLoading, setWhPickerLoading] = useState(false);
 
+  // Per-trigger promo choice. Keyed by trigger ic_code:
+  //   promoId → apply only that promo on this product
+  //   null    → opt out of promos for this product (normal price)
+  //   (absent)→ default: apply active promos as usual
+  // Sent to /api/orders as `promoSelections` so the server honours the same
+  // decision at settlement. Mirrored into a ref so the async add / bonus
+  // flow reads the latest choice without waiting for a re-render.
+  const [promoChoice, setPromoChoice] = useState<Record<string, string | null>>(
+    {},
+  );
+  const promoChoiceRef = useRef<Record<string, string | null>>({});
+  function setPromoChoiceFor(code: string, value: string | null) {
+    const next = { ...promoChoiceRef.current, [code]: value };
+    promoChoiceRef.current = next;
+    setPromoChoice(next);
+  }
+  // Pending promo-choice dialog: the tapped product plus the promos for which
+  // it is the trigger. Null when no dialog is open.
+  const [promoPrompt, setPromoPrompt] = useState<{
+    product: Product;
+    promos: EnginePromotion[];
+  } | null>(null);
+
   // Set-build availability modal. Opened when the cashier clicks an
   // ic_inventory_set product. Lists each warehouse with its per-component
   // balance and overall complete/incomplete/none status so the cashier can
@@ -691,6 +714,36 @@ export default function CreateOrderClient({
   // than one warehouse, otherwise add directly. Mirrors the Flutter app's
   // add-to-cart flow where the salesperson always confirms where to pull
   // the stock from.
+  // Entry point for a catalog tile tap. If the product is the trigger of an
+  // active promo and the cashier hasn't decided yet, ask whether to apply the
+  // promo before adding. Otherwise add straight away.
+  function handleTileClick(p: Product) {
+    const triggerPromos = currentPromotions.filter(
+      (promo) => promo.triggerItemCode?.trim() === p.id,
+    );
+    const alreadyChosen = Object.prototype.hasOwnProperty.call(
+      promoChoiceRef.current,
+      p.id,
+    );
+    // Set products go straight to the set-builder; promo bonuses don't apply
+    // to them, so never interrupt with the choice dialog.
+    if (triggerPromos.length > 0 && !alreadyChosen && !isAirSetProduct(p)) {
+      setPromoPrompt({ product: p, promos: triggerPromos });
+      return;
+    }
+    void addProduct(p);
+  }
+
+  // Resolve the promo-choice dialog: record the decision (promoId = use that
+  // promo, null = normal price) then continue the normal add flow.
+  function resolvePromoPrompt(choice: string | null) {
+    const prompt = promoPrompt;
+    if (!prompt) return;
+    setPromoChoiceFor(prompt.product.id, choice);
+    setPromoPrompt(null);
+    void addProduct(prompt.product);
+  }
+
   async function addProduct(p: Product) {
     setSubmitError(null);
     // Set products (ic_inventory_set) carry no pre-built stock of their own —
@@ -996,11 +1049,20 @@ export default function CreateOrderClient({
     locationCode: string,
     nextTriggerQty: number,
   ) {
-    const promos = currentPromotions.filter(
-      (promo) =>
-        promo.promoType === "bogo" &&
-        promo.triggerItemCode?.trim() === triggerProduct.id,
-    );
+    // Respect the cashier's per-product promo choice: an opted-out trigger
+    // (null) adds no bonus; a specific chosen promoId limits the bonus to
+    // that promo only; absent → default (all matching BOGO promos apply).
+    const choice = promoChoiceRef.current;
+    const promos = currentPromotions.filter((promo) => {
+      if (promo.promoType !== "bogo") return false;
+      if (promo.triggerItemCode?.trim() !== triggerProduct.id) return false;
+      if (Object.prototype.hasOwnProperty.call(choice, triggerProduct.id)) {
+        const chosen = choice[triggerProduct.id];
+        if (chosen == null || chosen === "") return false;
+        return String(promo.id) === String(chosen);
+      }
+      return true;
+    });
     for (const promo of promos) {
       const triggerQty = Number(promo.triggerQty ?? 0);
       const bonusQty = Number(promo.bonusQty ?? 0);
@@ -1253,6 +1315,18 @@ export default function CreateOrderClient({
       (it, i) => i !== idx && it.promoBonusOfCode !== target.productId,
     );
     commitItems(next);
+    // Forget the promo decision for this product so re-adding it asks again.
+    if (
+      Object.prototype.hasOwnProperty.call(
+        promoChoiceRef.current,
+        target.productId,
+      )
+    ) {
+      const nextChoice = { ...promoChoiceRef.current };
+      delete nextChoice[target.productId];
+      promoChoiceRef.current = nextChoice;
+      setPromoChoice(nextChoice);
+    }
     setSelectedLineIdx((s) => {
       if (s === null) return null;
       if (s === idx) return null;
@@ -1279,7 +1353,17 @@ export default function CreateOrderClient({
         amount: Math.max(0, gross - customerDiscount),
       };
     });
-    const lines = applyPromotions(baseLines, activePromotions, new Date());
+    // Mirror the server's effectivePromos filter so the POS preview matches
+    // what /api/orders will actually charge for the cashier's promo choices.
+    const effectivePromos = activePromotions.filter((p) => {
+      const trig = (p.triggerItemCode ?? "").trim();
+      if (!trig) return true;
+      if (!Object.prototype.hasOwnProperty.call(promoChoice, trig)) return true;
+      const chosen = promoChoice[trig];
+      if (chosen == null || chosen === "") return false;
+      return String(p.id) === String(chosen);
+    });
+    const lines = applyPromotions(baseLines, effectivePromos, new Date());
     // Two independent per-promo flags drive the post-processing:
     //   awardsMemberDiscount=false → zero out the member % on this line
     //   awardsPoints=false         → exclude from the earn calc below
@@ -1296,7 +1380,7 @@ export default function CreateOrderClient({
     // membership) re-runs the math even if the discountPct didn't
     // change — covers e.g. picking a member after items are already
     // in the cart.
-  }, [items, customer, activePromotions]);
+  }, [items, customer, activePromotions, promoChoice]);
   const afterLineDiscounts = linePricing.reduce((sum, it) => sum + it.amount, 0);
   const appliedExtraDiscount = Math.min(
     Math.max(0, extraDiscount || 0),
@@ -1389,6 +1473,10 @@ export default function CreateOrderClient({
           note: note.trim() || undefined,
           extraDiscount: appliedExtraDiscount > 0 ? appliedExtraDiscount : undefined,
           salespersonCode: salespersonCode || undefined,
+          // Per-trigger promo choices: { triggerCode: promoId | null }. The
+          // server keeps only the chosen promo (or drops all when null) so
+          // the settled price matches what the cashier picked in the cart.
+          promoSelections: promoChoice,
           items: items.map((it) => ({
             productId: it.productId,
             quantity: it.quantity,
@@ -1410,6 +1498,8 @@ export default function CreateOrderClient({
       const created = await res.json().catch(() => null);
       setItems([]);
       setCustomer(null);
+      promoChoiceRef.current = {};
+      setPromoChoice({});
       setSelectedLineIdx(null);
       setDeliveryName("");
       setNote("");
@@ -1519,7 +1609,7 @@ export default function CreateOrderClient({
                     (p) => p.code.toLowerCase() === q,
                   );
                   if (exactCode && exactCode.stock > 0) {
-                    void addProduct(exactCode);
+                    handleTileClick(exactCode);
                     setProductQuery("");
                     return;
                   }
@@ -1527,7 +1617,7 @@ export default function CreateOrderClient({
                   const single =
                     filteredProducts.length === 1 ? filteredProducts[0] : null;
                   if (single && single.stock > 0) {
-                    void addProduct(single);
+                    handleTileClick(single);
                     setProductQuery("");
                     return;
                   }
@@ -1563,7 +1653,7 @@ export default function CreateOrderClient({
                         );
                         return;
                       }
-                      await addProduct(cat);
+                      handleTileClick(cat);
                       setProductQuery("");
                     } catch (err) {
                       setSubmitError(
@@ -1636,7 +1726,7 @@ export default function CreateOrderClient({
                   <button
                     key={p.id}
                     type="button"
-                    onClick={() => addProduct(p)}
+                    onClick={() => handleTileClick(p)}
                     disabled={outOfStock}
                     className={
                       "pos-tile" +
@@ -2316,6 +2406,73 @@ export default function CreateOrderClient({
           onClose={() => setSetBuilder(null)}
         />
       ) : null}
+      {promoPrompt ? (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+          <button
+            type="button"
+            aria-label="ປິດ"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setPromoPrompt(null)}
+          />
+          <div className="relative w-full max-w-sm overflow-hidden rounded-xl bg-odoo-surface shadow-2xl">
+            <header className="bg-odoo-primary px-4 py-3 text-white">
+              <div className="text-[10px] font-bold uppercase tracking-[0.2em] text-white/70">
+                ໂປຣໂມຊັນ
+              </div>
+              <h2 className="text-base font-black leading-tight">
+                ໃຊ້ໂປຣໂມຊັນກັບສິນຄ້ານີ້ບໍ?
+              </h2>
+            </header>
+            <div className="px-4 py-3">
+              <div className="truncate text-sm font-bold text-odoo-text-strong">
+                {promoPrompt.product.name}
+              </div>
+              <div className="font-mono text-[11px] text-odoo-text-muted">
+                {promoPrompt.product.code}
+              </div>
+              <div className="mt-3 grid gap-2">
+                {promoPrompt.promos.map((promo) => (
+                  <button
+                    key={String(promo.id)}
+                    type="button"
+                    onClick={() => resolvePromoPrompt(String(promo.id))}
+                    className="flex items-center justify-between gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-left transition hover:border-emerald-400"
+                  >
+                    <div className="min-w-0">
+                      <div className="truncate text-[13px] font-bold text-emerald-800">
+                        {promo.name}
+                      </div>
+                      <div className="text-[11px] font-semibold text-emerald-600">
+                        {promoTypeLabel(promo)}
+                      </div>
+                    </div>
+                    <span className="shrink-0 rounded-md bg-emerald-500 px-2.5 py-1 text-xs font-bold text-white">
+                      ໃຊ້
+                    </span>
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => resolvePromoPrompt(null)}
+                  className="flex items-center justify-between gap-2 rounded-lg border border-odoo-border bg-odoo-surface-muted px-3 py-2 text-left transition hover:border-odoo-text-muted"
+                >
+                  <div>
+                    <div className="text-[13px] font-bold text-odoo-text-strong">
+                      ບໍ່ໃຊ້ໂປຣ
+                    </div>
+                    <div className="text-[11px] text-odoo-text-muted">
+                      ຂາຍລາຄາປົກກະຕິ
+                    </div>
+                  </div>
+                  <span className="shrink-0 rounded-md bg-odoo-text-muted px-2.5 py-1 text-xs font-bold text-white">
+                    ລາຄາປົກກະຕິ
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
       {promoListOpen ? (
         <PromotionListModal
           promotions={currentPromotions}
@@ -2336,6 +2493,9 @@ export default function CreateOrderClient({
               return;
             }
             setPromoListOpen(false);
+            // Picking from the promo list is an explicit "use this promo"
+            // action — record the choice so pricing + settlement honour it.
+            setPromoChoiceFor(triggerCode, String(promo.id));
             // addProduct handles the picker + stock check + auto-adds the
             // BOGO bonus afterwards, so one click on a promotion lands
             // both lines in the cart ready to settle.
@@ -3322,77 +3482,117 @@ function PromotionListModal({
     const p = products.find((it) => it.id === c);
     return p ? p.name : c;
   }
-  function fmtDate(v: Date | string | null) {
+  function shortDate(v: Date | string | null) {
     if (!v) return null;
     const d = typeof v === "string" ? new Date(v) : v;
     if (Number.isNaN(d.getTime())) return null;
-    return d.toLocaleString();
+    const day = String(d.getDate()).padStart(2, "0");
+    const mon = String(d.getMonth() + 1).padStart(2, "0");
+    return `${day}/${mon}/${d.getFullYear()}`;
   }
+  // Per-type visual theme: accent bar + badge colours + an icon so a
+  // cashier recognises the promo kind at a glance.
+  const TYPE_THEME: Record<
+    string,
+    { bar: string; badge: string; icon: string }
+  > = {
+    bogo: {
+      bar: "bg-emerald-500",
+      badge: "bg-emerald-100 text-emerald-700",
+      icon: "🎁",
+    },
+    item_pair_price: {
+      bar: "bg-indigo-500",
+      badge: "bg-indigo-100 text-indigo-700",
+      icon: "🔗",
+    },
+    fixed_price_period: {
+      bar: "bg-amber-500",
+      badge: "bg-amber-100 text-amber-700",
+      icon: "🏷️",
+    },
+  };
   return (
-    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/40 p-4 pt-12">
+    <div className="fixed inset-0 z-[60] flex items-start justify-center bg-black/50 p-4 pt-10 backdrop-blur-sm">
       <button
         type="button"
         aria-label="ປິດ"
         className="absolute inset-0 cursor-default"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-2xl overflow-hidden rounded-md border border-odoo-border bg-odoo-surface">
-        <header className="flex items-center justify-between border-b border-odoo-border px-5 py-4">
-          <div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-odoo-text-muted">
-              POS · Active
-            </div>
-            <h2 className="mt-1 text-base font-bold text-odoo-text-strong">
-              ໂປຣໂມຊັນທີ່ໃຊ້ໄດ້ ({promotions.length})
-            </h2>
-          </div>
+      <div className="relative flex max-h-[80vh] w-full max-w-md flex-col overflow-hidden rounded-xl bg-odoo-surface shadow-2xl">
+        <header className="flex items-center justify-between gap-3 bg-odoo-primary px-4 py-2.5 text-white">
+          <h2 className="flex items-center gap-2 text-base font-black leading-tight">
+            <span>★</span>
+            ໂປຣໂມຊັນທີ່ໃຊ້ໄດ້
+            <span className="rounded-full bg-white/25 px-2 py-0.5 text-xs font-bold">
+              {promotions.length}
+            </span>
+          </h2>
           <button
             type="button"
             onClick={onClose}
-            className="odoo-btn odoo-btn-secondary"
+            className="rounded-lg bg-white/15 px-2.5 py-1 text-sm font-semibold text-white transition hover:bg-white/30"
           >
             ປິດ
           </button>
         </header>
-        <div className="max-h-[70vh] overflow-y-auto">
+        <div className="flex-1 overflow-y-auto bg-odoo-surface-muted px-3 py-3">
           {promotions.length === 0 ? (
-            <div className="px-5 py-10 text-center text-sm text-odoo-text-muted">
-              ບໍ່ມີໂປຣໂມຊັນທີ່ active ໃນຕອນນີ້
+            <div className="flex flex-col items-center justify-center gap-2 px-5 py-12 text-center">
+              <div className="text-4xl opacity-25">🏷️</div>
+              <div className="text-sm font-semibold text-odoo-text-muted">
+                ບໍ່ມີໂປຣໂມຊັນທີ່ໃຊ້ໄດ້ໃນຕອນນີ້
+              </div>
             </div>
           ) : (
-            <ul className="divide-y divide-odoo-border">
+            <div className="grid gap-2">
               {promotions.map((p) => {
                 const triggerName = productName(p.triggerItemCode);
                 const bonusName = productName(p.bonusItemCode);
-                const start = fmtDate(p.startAt);
-                const end = fmtDate(p.endAt);
+                const end = shortDate(p.endAt);
+                const theme = TYPE_THEME[p.promoType] ?? {
+                  bar: "bg-odoo-border",
+                  badge: "bg-odoo-surface-muted text-odoo-text-muted",
+                  icon: "🏷️",
+                };
                 return (
-                  <li key={String(p.id)} className="px-5 py-4">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="text-sm font-bold text-odoo-text-strong">
-                          {p.name}
+                  <button
+                    type="button"
+                    key={String(p.id)}
+                    onClick={() => onPick(p)}
+                    className="group relative block w-full overflow-hidden rounded-xl border border-odoo-border bg-odoo-surface text-left shadow-sm transition hover:border-odoo-primary hover:bg-odoo-primary-50 hover:shadow active:scale-[0.99]"
+                  >
+                    <div
+                      className={"absolute inset-y-0 left-0 w-1 " + theme.bar}
+                    />
+                    <div className="py-2 pl-4 pr-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span
+                            className={
+                              "inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold " +
+                              theme.badge
+                            }
+                          >
+                            <span>{theme.icon}</span>
+                            {promoTypeLabel(p)}
+                          </span>
+                          <span className="truncate text-[13px] font-bold text-odoo-text-strong">
+                            {p.name}
+                          </span>
                         </div>
-                        <div className="mt-0.5 text-[11px] font-semibold text-odoo-primary">
-                          {promoTypeLabel(p)}
+                        <div className="flex shrink-0 items-center gap-2">
+                          {end ? (
+                            <span className="font-mono text-[10px] font-semibold text-odoo-text-muted">
+                              ໝົດ {end}
+                            </span>
+                          ) : null}
+                          <span className="flex h-6 w-6 items-center justify-center rounded-full bg-odoo-surface-muted text-base font-bold text-odoo-text-muted transition group-hover:bg-odoo-primary group-hover:text-white">
+                            +
+                          </span>
                         </div>
                       </div>
-                      <div className="flex shrink-0 flex-col items-end gap-1">
-                        {start || end ? (
-                          <div className="text-right text-[10px] font-mono text-odoo-text-muted">
-                            {start ?? "—"}
-                            <div>↓ {end ?? "—"}</div>
-                          </div>
-                        ) : null}
-                        <button
-                          type="button"
-                          onClick={() => onPick(p)}
-                          className="odoo-btn odoo-btn-primary"
-                        >
-                          ເລືອກ → ກະຕ່າ
-                        </button>
-                      </div>
-                    </div>
                     {(() => {
                       // Promo-type-aware rendering. The same schema fields
                       // mean different things per type, so we describe what
@@ -3413,12 +3613,12 @@ function PromotionListModal({
                       const Pill = ({ tone, text }: { tone: "main" | "bonus" | "free"; text: string }) => (
                         <span
                           className={
-                            "rounded px-1.5 py-0.5 text-[10px] font-bold " +
+                            "shrink-0 rounded px-1.5 py-0.5 text-[9px] font-bold text-white " +
                             (tone === "main"
-                              ? "bg-indigo-50 text-indigo-700"
+                              ? "bg-indigo-500"
                               : tone === "bonus"
-                                ? "bg-amber-50 text-amber-700"
-                                : "bg-emerald-50 text-emerald-700")
+                                ? "bg-amber-500"
+                                : "bg-emerald-500")
                           }
                         >
                           {text}
@@ -3439,23 +3639,30 @@ function PromotionListModal({
                         qty: number;
                         priceText: string;
                       }) => (
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 py-0.5">
                           <Pill tone={tone} text={label} />
-                          <span className="min-w-0 truncate text-odoo-text-strong">
+                          <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-odoo-text-strong">
                             {name ?? "—"}
                           </span>
-                          <span className="ml-auto flex shrink-0 items-center gap-2 font-mono text-[10px] text-odoo-text-muted">
-                            <span>{code}</span>
-                            {qty > 0 ? <span>× {qty}</span> : null}
+                          <span className="shrink-0 font-mono text-[10px] text-odoo-text-muted">
+                            {code}
+                            {qty > 0 ? ` ×${qty}` : ""}
                           </span>
-                          <span className="shrink-0 font-mono text-[11px] font-bold text-odoo-primary">
+                          <span
+                            className={
+                              "shrink-0 text-[12px] font-extrabold " +
+                              (tone === "free"
+                                ? "text-emerald-600"
+                                : "text-odoo-text-strong")
+                            }
+                          >
                             {priceText}
                           </span>
                         </div>
                       );
                       if (p.promoType === "fixed_price_period") {
                         return (
-                          <div className="mt-2 grid gap-1 text-[12px]">
+                          <div className="mt-1.5 grid gap-0.5 text-[12px]">
                             {p.triggerItemCode ? (
                               <ItemRow
                                 tone="main"
@@ -3471,7 +3678,7 @@ function PromotionListModal({
                       }
                       if (p.promoType === "item_pair_price") {
                         return (
-                          <div className="mt-2 grid gap-1 text-[12px]">
+                          <div className="mt-1.5 grid gap-0.5 text-[12px]">
                             {p.triggerItemCode ? (
                               <ItemRow
                                 tone="main"
@@ -3497,7 +3704,7 @@ function PromotionListModal({
                       }
                       if (p.promoType === "bogo") {
                         return (
-                          <div className="mt-2 grid gap-1 text-[12px]">
+                          <div className="mt-1.5 grid gap-0.5 text-[12px]">
                             {p.triggerItemCode ? (
                               <ItemRow
                                 tone="main"
@@ -3523,10 +3730,11 @@ function PromotionListModal({
                       }
                       return null;
                     })()}
-                  </li>
+                    </div>
+                  </button>
                 );
               })}
-            </ul>
+            </div>
           )}
         </div>
       </div>
