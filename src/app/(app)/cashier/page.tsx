@@ -1,7 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useTransition,
+} from "react";
 import {
   ACCEPTED_CURRENCIES,
   MAIN_CURRENCY,
@@ -112,6 +118,19 @@ export default function CashierPage() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Re-fetch the cashier data after a mutation (settle, delete, hold, …).
+  // The page loads its data client-side via a server action, so
+  // router.refresh() does NOT update the list — we must re-run
+  // getCashierData() ourselves.
+  const reload = useCallback(async () => {
+    try {
+      const res = await getCashierData();
+      setData(res);
+    } catch (err) {
+      console.error("Failed to reload cashier data:", err);
+    }
+  }, []);
+
   useEffect(() => {
     let active = true;
     async function load() {
@@ -150,6 +169,7 @@ export default function CashierPage() {
       initialOrders={data.initialOrders}
       approvedPrices={data.approvedPrices}
       currencyRates={data.currencyRates}
+      reload={reload}
     />
   );
 }
@@ -158,12 +178,13 @@ function CashierClientInner({
   initialOrders,
   approvedPrices,
   currencyRates,
+  reload,
 }: {
   initialOrders: CashierOrder[];
   approvedPrices: ApprovedPrice[];
   currencyRates: Record<CurrencyCode, number>;
+  reload: () => Promise<void>;
 }) {
-  const router = useRouter();
   const [tab, setTab] = useState<TabKey>("orders");
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
@@ -254,7 +275,7 @@ function CashierClientInner({
     [approvedPrices],
   );
 
-  // Keep the seen-set in sync with SSR refreshes (router.refresh()) so we
+  // Keep the seen-set in sync with data reloads (reload()) so we
   // don't re-notify for orders that re-appear after a settle/delete.
   useEffect(() => {
     const seen = seenCartsRef.current;
@@ -275,8 +296,7 @@ function CashierClientInner({
 
   // Poll for new pending orders every 8s. When a cart number we have not
   // seen before shows up, fire a browser notification + in-app toast and
-  // trigger router.refresh() so the SSR list updates without a manual
-  // reload.
+  // trigger reload() so the list updates without a manual reload.
   useEffect(() => {
     let cancelled = false;
     async function pollOnce() {
@@ -351,8 +371,8 @@ function CashierClientInner({
         } catch {
           // Audio is best-effort.
         }
-        // Refresh SSR data so the order shows up in the list.
-        router.refresh();
+        // Re-fetch data so the order shows up in the list.
+        void reload();
       } catch {
         // Polling is best-effort — silently keep retrying.
       }
@@ -366,7 +386,7 @@ function CashierClientInner({
       window.clearInterval(id);
       window.clearTimeout(initial);
     };
-  }, [router]);
+  }, [reload]);
 
   // Auto-dismiss the in-app toast after a few seconds.
   useEffect(() => {
@@ -396,7 +416,7 @@ function CashierClientInner({
       return;
     }
     if (selectedCart === order.cartNumber) setSelectedCart(null);
-    router.refresh();
+    await reload();
   }
 
   async function resumeOrder(order: CashierOrder) {
@@ -410,7 +430,7 @@ function CashierClientInner({
       window.alert(data?.error ?? `ຂໍ້ຜິດພາດ ${res.status}`);
       return;
     }
-    router.refresh();
+    await reload();
   }
 
   async function deleteOrder(order: CashierOrder) {
@@ -435,7 +455,7 @@ function CashierClientInner({
       return;
     }
     if (selectedCart === order.cartNumber) setSelectedCart(null);
-    router.refresh();
+    await reload();
   }
 
   return (
@@ -464,7 +484,7 @@ function CashierClientInner({
           </a>
           <button
             type="button"
-            onClick={() => router.refresh()}
+            onClick={() => reload()}
             className="odoo-btn odoo-btn-secondary"
           >
             <RefreshIcon /> ໂຫຼດໃໝ່
@@ -533,6 +553,7 @@ function CashierClientInner({
               isDeleting={deletingCart === selected.cartNumber}
               onHold={() => holdOrder(selected)}
               onResume={() => resumeOrder(selected)}
+              reload={reload}
             />
           </aside>
         </div>
@@ -1057,6 +1078,7 @@ function SettleForm({
   isDeleting,
   onHold,
   onResume,
+  reload,
 }: {
   order: CashierOrder;
   currencyRates: Record<CurrencyCode, number>;
@@ -1066,8 +1088,8 @@ function SettleForm({
   isDeleting: boolean;
   onHold: () => void;
   onResume: () => void;
+  reload: () => Promise<void>;
 }) {
-  const router = useRouter();
   // One input per (currency × method). Default: pay full bill in cash LAK.
   const [paymentInputs, setPaymentInputs] = useState<
     Record<PaymentField, string>
@@ -1364,7 +1386,9 @@ function SettleForm({
       }
       const data = await res.json();
       onSuccess({ docNo: data.docNo, change: data.change });
-      startTransition(() => router.refresh());
+      startTransition(() => {
+        void reload();
+      });
     } finally {
       setSubmitBusy(false);
     }
