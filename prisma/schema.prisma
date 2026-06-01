@@ -108,6 +108,48 @@ model AppFcmToken {
   @@map("app_fcm_token")
 }
 
+// Live presence + device telemetry for the sales mobile app. One row per
+// employee (the latest device to report wins). The app upserts this on
+// activity only — login, app resume, screen change — never on a background
+// timer, so a row counts as "online" when last_seen_at is recent (the
+// /api/monitor/devices endpoint applies the freshness threshold). Surfaced
+// to managers + heads in the /monitor dashboard. See
+// src/app/api/me/presence/route.ts.
+model AppDevicePresence {
+  employeeCode  String    @id @map("employee_code") @db.VarChar(20)
+  online        Boolean   @default(true)
+  lastSeenAt    DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  platform      String?   @db.VarChar(10)
+  appVersion    String?   @map("app_version") @db.VarChar(40)
+  deviceModel   String?   @map("device_model") @db.VarChar(160)
+  osVersion     String?   @map("os_version") @db.VarChar(60)
+  batteryPct    Int?      @map("battery_pct")
+  charging      Boolean?
+  currentScreen String?   @map("current_screen") @db.VarChar(80)
+  lat           Float?    @db.DoublePrecision
+  lng           Float?    @db.DoublePrecision
+  locationAt    DateTime? @map("location_at") @db.Timestamptz(6)
+  deviceId      String?   @map("device_id") @db.VarChar(200)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([online, lastSeenAt])
+  @@map("app_device_presence")
+}
+
+// Records which channel created each sales order — 'web' (the browser POS)
+// or 'app' (the Flutter sales app). The legacy ic_trans table has no such
+// column, so this app-owned sidecar is keyed by cart_number (the MMSSSS
+// suffix of doc_no shared across the app_* tables) and read back via a LEFT
+// JOIN in the order/history endpoints. Written once at order creation.
+model AppOrderSource {
+  cartNumber String   @id @map("cart_number") @db.VarChar(20)
+  source     String   @db.VarChar(10) // 'web' | 'app'
+  docNo      String?  @map("doc_no") @db.VarChar(25)
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("app_order_source")
+}
+
 // Per-item special-price requests. While status='pending' the order_item
 // still uses original price; only an 'approved' decision flips the price on
 // the line and recomputes the cart total. See PATCH /api/price-requests/[id].

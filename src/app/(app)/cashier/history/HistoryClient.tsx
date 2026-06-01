@@ -20,9 +20,30 @@ type Row = {
   voidDocNo: string | null;
   voidReason: string | null;
   voidedAt: string | null;
+  source: string | null;
 };
 
 const moneyFmt = new Intl.NumberFormat("en-US");
+
+// Badge for the channel that created the order: 'web' (browser POS) or 'app'
+// (Flutter sales app). Older orders have no record → show a neutral dash.
+function SourceBadge({ source }: { source: string | null }) {
+  if (source === "web") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-bold text-sky-700">
+        🖥 Web
+      </span>
+    );
+  }
+  if (source === "app") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
+        📱 App
+      </span>
+    );
+  }
+  return <span className="text-[11px] text-odoo-text-muted">—</span>;
+}
 
 export default function HistoryClient() {
   const [rows, setRows] = useState<Row[]>([]);
@@ -136,6 +157,7 @@ export default function HistoryClient() {
               <th className="px-3 py-2">ວັນທີ</th>
               <th className="px-3 py-2">ລູກຄ້າ</th>
               <th className="px-3 py-2">Cashier</th>
+              <th className="px-3 py-2">ຊ່ອງທາງ</th>
               <th className="px-3 py-2 text-right">ຍອດ (ກີບ)</th>
               <th className="px-3 py-2 text-right">ເງິນສົດ</th>
               <th className="px-3 py-2 text-right">ໂອນ</th>
@@ -146,7 +168,7 @@ export default function HistoryClient() {
             {loading ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="px-3 py-6 text-center text-odoo-text-muted"
                 >
                   ກຳລັງໂຫລດ…
@@ -155,7 +177,7 @@ export default function HistoryClient() {
             ) : rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={8}
+                  colSpan={9}
                   className="px-3 py-6 text-center text-odoo-text-muted"
                 >
                   ບໍ່ພົບຂໍ້ມູນ
@@ -190,6 +212,9 @@ export default function HistoryClient() {
                   </td>
                   <td className="px-3 py-2 text-[12px]">
                     {r.cashierName ?? r.cashierCode ?? "—"}
+                  </td>
+                  <td className="px-3 py-2">
+                    <SourceBadge source={r.source} />
                   </td>
                   <td className="px-3 py-2 text-right font-mono font-bold">
                     {moneyFmt.format(r.totalKip)}

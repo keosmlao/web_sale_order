@@ -1477,6 +1477,8 @@ export default function CreateOrderClient({
           // server keeps only the chosen promo (or drops all when null) so
           // the settled price matches what the cashier picked in the cart.
           promoSelections: promoChoice,
+          // Tag the creation channel so the order/history views can badge it.
+          source: "web",
           items: items.map((it) => ({
             productId: it.productId,
             quantity: it.quantity,

@@ -32,6 +32,7 @@ type HeaderRow = {
   discount_word_2: string | null;
   exchange_rate: string | number | null;
   source_sok_doc_no: string | null;
+  source: string | null;
   remark: string | null;
 };
 
@@ -82,6 +83,8 @@ export type ReceiptDetail = {
   branchCode: string | null;
   departmentCode: string | null;
   sourceSokDocNo: string | null;
+  // Channel that created the originating SOK order: 'web' | 'app' | null.
+  source: string | null;
   totals: {
     amountThb: number;
     amountKip: number;
@@ -158,6 +161,14 @@ export async function fetchReceipt(
         WHERE s.doc_format_code = 'SOK' AND s.tax_doc_no = t.doc_no
         LIMIT 1
       ) AS source_sok_doc_no,
+      (
+        SELECT aos.source
+        FROM app_order_source aos
+        JOIN ic_trans s2
+          ON s2.doc_format_code = 'SOK' AND s2.tax_doc_no = t.doc_no
+        WHERE aos.cart_number = SUBSTRING(s2.doc_no FROM 6)
+        LIMIT 1
+      ) AS source,
       t.remark
     FROM ic_trans t
     LEFT JOIN ar_customer ar ON ar.code = t.cust_code
@@ -250,6 +261,7 @@ export async function fetchReceipt(
     branchCode: header.branch_code,
     departmentCode: header.department_code,
     sourceSokDocNo: header.source_sok_doc_no,
+    source: header.source ?? null,
     totals: {
       amountThb: header.total_amount ? Number(header.total_amount) : 0,
       amountKip: header.total_amount_2 ? Number(header.total_amount_2) : 0,

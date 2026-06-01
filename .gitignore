@@ -52,3 +52,6 @@ query_promotions.js
 src/query_promotions.ts
 src/query_all_promotions.ts
 src/activate_promo.ts
+
+# Large APK build artifact served at /download (deploy separately)
+public/downloads/*.apk

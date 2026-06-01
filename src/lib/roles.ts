@@ -106,3 +106,10 @@ export function canApproveRefillRequests(role: AppRole): boolean {
 export function canCreateRefillRequests(role: AppRole): boolean {
   return role !== "pc";
 }
+
+// The mobile-device monitor (online status, location, battery, current
+// screen of each salesperson's phone) is a supervisory view — heads and
+// managers only. Salespeople must not see each other's whereabouts.
+export function canMonitorDevices(role: AppRole): boolean {
+  return role === "head" || role === "manager";
+}

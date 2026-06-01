@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { logoutAction } from "@/app/login/actions";
 import type { AppRole } from "@/lib/roles";
 
@@ -10,6 +10,8 @@ type NavLeaf = {
   href: string;
   label: string;
   icon: ReactNode;
+  // When set, the link is only shown to these roles. Absent → visible to all.
+  roles?: AppRole[];
 };
 
 type NavGroup = {
@@ -194,6 +196,17 @@ const sections: NavSection[] = [
         ),
       },
       {
+        href: "/monitor",
+        label: "ຕິດຕາມມືຖື sale",
+        roles: ["manager", "head"],
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <rect x="7" y="2" width="10" height="20" rx="2" />
+            <path d="M11 18h2" />
+          </svg>
+        ),
+      },
+      {
         id: "settings",
         label: "ການຕັ້ງຄ່າ",
         icon: (
@@ -274,14 +287,34 @@ type SidebarProps = {
   role: AppRole;
 };
 
-export default function Sidebar({ displayName, employeeCode, subtitle }: SidebarProps) {
+export default function Sidebar({ displayName, employeeCode, subtitle, role }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
+  // Drop links the current role isn't allowed to see (e.g. the device
+  // monitor is heads/managers only), then drop any section left empty.
+  const visibleSections = useMemo(() => {
+    const allowed = (leaf: NavLeaf) => !leaf.roles || leaf.roles.includes(role);
+    return sections
+      .map((s) => ({
+        ...s,
+        items: s.items
+          .map((item) =>
+            isNavGroup(item)
+              ? { ...item, children: item.children.filter(allowed) }
+              : item,
+          )
+          .filter((item) =>
+            isNavGroup(item) ? item.children.length > 0 : allowed(item),
+          ),
+      }))
+      .filter((s) => s.items.length > 0);
+  }, [role]);
+
   // Flatten all items for the mobile horizontal scroller.
-  const mobileNavItems = sections.flatMap((s) =>
+  const mobileNavItems = visibleSections.flatMap((s) =>
     s.items.flatMap((item) => (isNavGroup(item) ? item.children : [item])),
   );
 
@@ -383,7 +416,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle }: Sidebar
           </Link>
 
           <nav className="sbd-nav" aria-label="ເມນູຫຼັກ">
-            {sections.map((section) => (
+            {visibleSections.map((section) => (
               <div key={section.id} className="sbd-section">
                 <div className="sbd-section-label">{section.label}</div>
                 <ul>

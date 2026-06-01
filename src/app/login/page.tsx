@@ -101,6 +101,17 @@ export default async function LoginPage() {
 
           <LoginForm />
 
+          <a
+            href="/download"
+            className="mt-4 flex items-center justify-center gap-2 rounded-lg border border-odoo-border bg-odoo-surface-muted px-4 py-2.5 text-sm font-bold text-odoo-text-strong transition hover:border-odoo-primary hover:bg-odoo-primary-50"
+          >
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="7" y="2" width="10" height="20" rx="2" />
+              <path d="M11 18h2" />
+            </svg>
+            ດາວໂຫລດແອັບມືຖື (Android)
+          </a>
+
           <div className="login-foot-help">
             ມີບັນຫາການເຂົ້າລະບົບ? ຕິດຕໍ່ <strong>ຝ່າຍ IT</strong>
           </div>

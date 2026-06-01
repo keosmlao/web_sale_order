@@ -62,6 +62,12 @@ export default function ReceiptPrintView({
           {r.salesperson ? (
             <Row label="ພະນັກງານຂາຍ" value={r.salesperson.name} />
           ) : null}
+          {r.source ? (
+            <Row
+              label="ຊ່ອງທາງ"
+              value={r.source === "app" ? "ແອັບມືຖື (App)" : "ເວັບ (Web)"}
+            />
+          ) : null}
           {r.branchCode || r.departmentCode ? (
             <Row
               label="ສາຂາ / ໝວດ"

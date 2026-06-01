@@ -35,6 +35,7 @@ type Row = {
   void_doc_no: string | null;
   void_reason: string | null;
   voided_at: Date | null;
+  source: string | null;
 };
 
 export async function GET(request: NextRequest) {
@@ -99,11 +100,13 @@ export async function GET(request: NextRequest) {
       COALESCE(sa.is_voided,     FALSE)            AS is_voided,
       sa.void_doc_no,
       sa.void_reason,
-      sa.voided_at
+      sa.voided_at,
+      aos.source
     FROM ic_trans t
     LEFT JOIN ar_customer    ar ON ar.code = t.cust_code
     LEFT JOIN odg_employee   emp ON emp.employee_code = t.cashier_code
     LEFT JOIN app_settle_audit sa ON sa.doc_no = t.doc_no
+    LEFT JOIN app_order_source aos ON aos.cart_number = sa.cart_number
     ${whereSql}
     ORDER BY t.create_date_time_now DESC
     LIMIT ${limit}
@@ -127,6 +130,7 @@ export async function GET(request: NextRequest) {
       voidDocNo: r.void_doc_no,
       voidReason: r.void_reason,
       voidedAt: r.voided_at ? r.voided_at.toISOString() : null,
+      source: r.source ?? null,
     })),
   });
 }

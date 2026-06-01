@@ -65,6 +65,9 @@ type OrderRow = {
   cash_kip: string | number | null;
   transfer_kip: string | number | null;
   redeemed_kip: string | number | null;
+  // Creation channel from app_order_source — 'web' | 'app' | null (orders
+  // created before this column existed read back as null).
+  source: string | null;
   items: OrderItemJson[] | null;
 };
 
@@ -185,6 +188,9 @@ function toOrder(row: OrderRow) {
       pointName: row.point_name?.trim() || "ແຕ້ມສະສົມ",
     },
     createdAt: row.created_at,
+    // Creation channel — 'web' | 'app' | null. Older orders predate the
+    // app_order_source table and read back as null.
+    source: row.source ?? null,
     items: items.map((item) => ({
       id: String(item.id),
       productId: item.productId,
@@ -310,6 +316,7 @@ export async function GET(request: NextRequest) {
       sa.cash_kip,
       sa.transfer_kip,
       sa.redeemed_kip,
+      aos.source AS source,
       COALESCE(
         json_agg(
           json_build_object(
@@ -376,6 +383,8 @@ export async function GET(request: NextRequest) {
     LEFT JOIN app_settle_audit sa
       ON sa.doc_no = t.tax_doc_no AND sa.is_voided = FALSE
     LEFT JOIN odg_employee cemp ON cemp.employee_code = sa.cashier_code
+    LEFT JOIN app_order_source aos
+      ON aos.cart_number = SUBSTRING(t.doc_no FROM 6)
     WHERE t.doc_format_code = 'SOK'
       ${salespersonFilter}
     GROUP BY
@@ -406,7 +415,8 @@ export async function GET(request: NextRequest) {
       cemp.fullname_lo,
       sa.cash_kip,
       sa.transfer_kip,
-      sa.redeemed_kip
+      sa.redeemed_kip,
+      aos.source
     ORDER BY t.create_date_time_now DESC
     LIMIT 100
   `;
@@ -432,6 +442,7 @@ export async function POST(request: NextRequest) {
         items?: unknown;
         priceRequests?: unknown;
         promoSelections?: unknown;
+        source?: unknown;
       }
     | null;
   const customerId = typeof body?.customerId === "string" ? body.customerId.trim() : "";
@@ -463,6 +474,26 @@ export async function POST(request: NextRequest) {
       : "";
   const rawItems: unknown[] = Array.isArray(body?.items) ? body.items : [];
   const items = normalizeItems(rawItems, warehouseCode);
+
+  // Which channel created this order. An explicit body.source wins; otherwise
+  // we infer from auth style — the Flutter app sends a Bearer token, the
+  // browser POS rides the session cookie. Stored in app_order_source and
+  // surfaced as a badge in the order/history views.
+  const bodySource =
+    typeof body?.source === "string" ? body.source.trim().toLowerCase() : "";
+  const hasBearer = (
+    request.headers.get("authorization") ??
+    request.headers.get("Authorization") ??
+    ""
+  )
+    .toLowerCase()
+    .startsWith("bearer ");
+  const orderSource: "web" | "app" =
+    bodySource === "app" || bodySource === "web"
+      ? (bodySource as "web" | "app")
+      : hasBearer
+        ? "app"
+        : "web";
 
   // Per-item promotion choice from the cart: { itemCode: promoId | null }.
   // promoId  → keep only that promo on the trigger item;
@@ -1318,6 +1349,13 @@ export async function POST(request: NextRequest) {
     // the manager will fill the approved price in via PATCH at decision
     // time. We just need a row that points at (cart, item) plus the
     // requestor's reason.
+    // Stamp the creation channel (web/app) for this cart. Keyed by the same
+    // MMSSSS cart number the read paths join on. Inside the tx so a retry on
+    // doc_no collision rolls this back too — no orphan rows.
+    await tx.appOrderSource.create({
+      data: { cartNumber: cartId, docNo: sokDocNo, source: orderSource },
+    });
+
     const cartProductIds = new Set(items.map((i) => i.productId));
     for (const pr of priceRequests) {
       if (!cartProductIds.has(pr.productId)) continue;
@@ -1408,6 +1446,7 @@ export async function POST(request: NextRequest) {
       emp.fullname_en AS salesperson_name_en,
       emp.nickname AS salesperson_nickname,
       t.remark,
+      ${orderSource}::text AS source,
       COALESCE(
         json_agg(
           json_build_object(
