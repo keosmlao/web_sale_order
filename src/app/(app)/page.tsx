@@ -1,10 +1,20 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireEmployee } from "@/lib/auth";
 import { roleFromEmployee, canApprovePriceRequests } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
+
+// "ໜ້າຮ້ານ ຂົວຫຼວງ" — front-shop sales departments at the Khua Luang branch.
+// The whole dashboard is scoped to these departments so every figure reflects
+// what was sold / collected at the Khua Luang storefront.
+//   2012 ເຄື່ອງໃຊ້ໄຟຟ້າ · 2022 ແອ · 2032 ປະປາ · 2042 ອາໄຫຼ່ · 2062 ໄຟຟ້ານ້ອຍ
+// NOTE: the daily-sales report excludes 2042 (ອາໄຫຼ່) per a separate rule; the
+// dashboard keeps it so the full storefront is represented. Drop "2042" here to
+// align the two.
+const KHUA_LUANG_DEPTS = ["2012", "2022", "2032", "2042", "2062"] as const;
 
 type DayMetrics = {
   pending_count: bigint;
@@ -42,6 +52,15 @@ type DailyBar = {
 type PriceCounts = {
   pending: bigint;
   approved_today: bigint;
+};
+
+// Today's money actually received at the register — settled CAKAP receipts
+// (not SOK sales orders). Cash / transfer split comes from app_payment_line.
+type ReceivedToday = {
+  receipts: bigint;
+  received_kip: string | number | null;
+  cash_kip: string | number | null;
+  transfer_kip: string | number | null;
 };
 
 const moneyFmt = new Intl.NumberFormat("en-US", {
@@ -84,6 +103,11 @@ export default async function HomePage() {
   const greeting =
     me.nickname && me.nickname !== "0" ? me.nickname : displayName;
 
+  // Front-shop department filter, in unaliased and `t.`-aliased forms so it
+  // can drop into each query's WHERE.
+  const deptIn = Prisma.sql`department_code IN (${Prisma.join([...KHUA_LUANG_DEPTS])})`;
+  const deptInT = Prisma.sql`t.department_code IN (${Prisma.join([...KHUA_LUANG_DEPTS])})`;
+
   const [
     todayRows,
     yesterdayRows,
@@ -92,6 +116,7 @@ export default async function HomePage() {
     recentRows,
     dailyRows,
     priceCountRows,
+    receivedRows,
   ] = await Promise.all([
     prisma.$queryRaw<DayMetrics[]>`
       SELECT
@@ -104,6 +129,7 @@ export default async function HomePage() {
       FROM ic_trans
       WHERE doc_format_code = 'SOK'
         AND create_date_time_now::date = CURRENT_DATE
+        AND ${deptIn}
     `,
     prisma.$queryRaw<DayMetrics[]>`
       SELECT
@@ -116,6 +142,7 @@ export default async function HomePage() {
       FROM ic_trans
       WHERE doc_format_code = 'SOK'
         AND create_date_time_now::date = CURRENT_DATE - INTERVAL '1 day'
+        AND ${deptIn}
     `,
     prisma.$queryRaw<DayMetrics[]>`
       SELECT
@@ -129,6 +156,7 @@ export default async function HomePage() {
       WHERE doc_format_code = 'SOK'
         AND create_date_time_now >= date_trunc('month', CURRENT_DATE)
         AND create_date_time_now < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+        AND ${deptIn}
     `,
     prisma.$queryRaw<TopSalesperson[]>`
       SELECT
@@ -157,6 +185,7 @@ export default async function HomePage() {
       WHERE t.doc_format_code = 'SOK'
         AND t.create_date_time_now::date = CURRENT_DATE
         AND t.status IN (0, 1)
+        AND ${deptInT}
       GROUP BY eff.salesperson_code, emp.fullname_lo, emp.nickname
       ORDER BY total DESC
       LIMIT 5
@@ -189,6 +218,7 @@ export default async function HomePage() {
       LEFT JOIN ar_customer ar ON ar.code = t.cust_code
       LEFT JOIN odg_employee emp ON emp.employee_code = eff.salesperson_code
       WHERE t.doc_format_code = 'SOK'
+        AND ${deptInT}
       ORDER BY t.create_date_time_now DESC
       LIMIT 8
     `,
@@ -201,6 +231,7 @@ export default async function HomePage() {
       WHERE doc_format_code = 'SOK'
         AND create_date_time_now::date >= CURRENT_DATE - INTERVAL '6 days'
         AND status IN (0, 1)
+        AND ${deptIn}
       GROUP BY 1
       ORDER BY 1
     `,
@@ -212,7 +243,46 @@ export default async function HomePage() {
         )::bigint AS approved_today
       FROM app_price_request
     `,
+    prisma.$queryRaw<ReceivedToday[]>`
+      SELECT
+        (
+          SELECT COUNT(*)::bigint FROM ic_trans t
+          WHERE t.doc_format_code = 'CAKAP'
+            AND t.doc_date = CURRENT_DATE
+            AND COALESCE(t.is_cancel, 0) = 0
+            AND ${deptInT}
+        ) AS receipts,
+        (
+          SELECT COALESCE(SUM(t.total_amount_2), 0) FROM ic_trans t
+          WHERE t.doc_format_code = 'CAKAP'
+            AND t.doc_date = CURRENT_DATE
+            AND COALESCE(t.is_cancel, 0) = 0
+            AND ${deptInT}
+        ) AS received_kip,
+        (
+          SELECT COALESCE(SUM(p.amount), 0)
+          FROM app_payment_line p
+          JOIN ic_trans t ON t.doc_no = p.doc_no AND t.doc_format_code = 'CAKAP'
+          WHERE t.doc_date = CURRENT_DATE
+            AND COALESCE(t.is_cancel, 0) = 0
+            AND p.pay_method = 'cash' AND p.currency_code = '02'
+        ) AS cash_kip,
+        (
+          SELECT COALESCE(SUM(p.amount), 0)
+          FROM app_payment_line p
+          JOIN ic_trans t ON t.doc_no = p.doc_no AND t.doc_format_code = 'CAKAP'
+          WHERE t.doc_date = CURRENT_DATE
+            AND COALESCE(t.is_cancel, 0) = 0
+            AND p.pay_method = 'transfer' AND p.currency_code = '02'
+        ) AS transfer_kip
+    `,
   ]);
+
+  const received = receivedRows[0];
+  const receivedKip = Number(received?.received_kip ?? 0);
+  const receivedReceipts = Number(received?.receipts ?? 0);
+  const receivedCash = Number(received?.cash_kip ?? 0);
+  const receivedTransfer = Number(received?.transfer_kip ?? 0);
 
   const today = normalizeMetrics(todayRows[0]);
   const yesterday = normalizeMetrics(yesterdayRows[0]);
@@ -305,28 +375,28 @@ export default async function HomePage() {
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
+          title="ຮັບເງິນມື້ນີ້"
+          value={moneyFmt.format(receivedKip)}
+          unit="ກີບ"
+          sub={`${numFmt.format(receivedReceipts)} ໃບບິນ · ສົດ ${compactMoneyFmt.format(receivedCash)} · ໂອນ ${compactMoneyFmt.format(receivedTransfer)}`}
+          icon={<CashIcon />}
+          accent="primary"
+        />
+        <MetricCard
           title="ຍອດຂາຍມື້ນີ້"
           value={moneyFmt.format(todayTotal)}
           unit="ກີບ"
-          sub={`${numFmt.format(todayOrders)} ບິນ · ຮັບເງິນແລ້ວ ${numFmt.format(today.completedCount)}`}
+          sub={`${numFmt.format(todayOrders)} ບິນ · ສະເລ່ຍ ${compactMoneyFmt.format(avg)}/ບິນ`}
           delta={totalDeltaPct}
           icon={<SalesIcon />}
-          accent="primary"
+          accent="info"
         />
         <MetricCard
           title="ຈຳນວນບິນ"
           value={numFmt.format(todayOrders)}
-          sub={`ມື້ວານ ${numFmt.format(yesterdayOrders)} ບິນ`}
+          sub={`ມື້ວານ ${numFmt.format(yesterdayOrders)} ບິນ · ລໍຖ້າຊຳລະ ${numFmt.format(today.pendingCount)}`}
           delta={ordersDeltaPct}
           icon={<ReceiptIcon />}
-          accent="info"
-        />
-        <MetricCard
-          title="ສະເລ່ຍຕໍ່ບິນ"
-          value={moneyFmt.format(avg)}
-          unit="ກີບ"
-          sub={`${numFmt.format(today.pendingCount)} ບິນລໍຖ້າຊຳລະ`}
-          icon={<AverageIcon />}
           accent="success"
         />
         <MetricCard
@@ -1076,15 +1146,6 @@ function ReceiptIcon() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
       <path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2z" />
       <path d="M8 7h8M8 12h8M8 17h5" />
-    </svg>
-  );
-}
-
-function AverageIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-      <circle cx="12" cy="12" r="9" />
-      <path d="M8 12h8M12 8v8" />
     </svg>
   );
 }
