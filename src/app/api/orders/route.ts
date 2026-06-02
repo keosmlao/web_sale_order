@@ -1440,6 +1440,37 @@ export async function POST(request: NextRequest) {
   // match. yearSuffix is captured from the same Date used to allocate.
   const yearSuffix2 = new Date().getFullYear().toString().slice(-2);
   const lookupDocNo = `SOK${yearSuffix2}${cartNumber}`;
+
+  // Notify managers and unit heads that a salesperson posted a new sale order,
+  // carrying the doc number, customer, and bill value. Fire-and-forget — a
+  // push failure must never fail the order.
+  {
+    const sellerName =
+      employee.fullnameLo ?? employee.employeeCode ?? "ພະນັກງານຂາຍ";
+    const custName = isWalkIn
+      ? "ລູກຄ້າທົ່ວໄປ"
+      : customers[0]?.name_1?.trim() || "ລູກຄ້າ";
+    const amountText = new Intl.NumberFormat("en-US").format(total);
+    const orderPush = {
+      title: "ມີໃບສັ່ງຂາຍໃໝ່",
+      body: `${sellerName} ອອກບິນ #${cartNumber} · ${custName} · ${amountText} ກີບ`,
+      data: {
+        type: "order_new",
+        cartNumber,
+        docNo: lookupDocNo,
+        customer: custName,
+        total: String(total),
+        seller: sellerName,
+      },
+    };
+    void Promise.all([
+      notifyByRole("manager", orderPush),
+      notifyByRole("head", orderPush),
+    ]).catch((e) => {
+      console.warn("[notify] new-order notify(manager/head) failed:", e);
+    });
+  }
+
   const createdRows = await prisma.$queryRaw<OrderRow[]>`
     SELECT
       ${cartNumber}::text AS id,
