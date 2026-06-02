@@ -3573,3 +3573,46 @@ body {
     background: #fff !important;
   }
 }
+
+/* Keep the invoice's grid shading/borders when printing. */
+.receipt-invoice,
+.receipt-invoice * {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+/* ---- Price-tag generator ----
+   Keep the bright header/price colours when printing, and swap the editor UI
+   for a batch grid. A named @page ("tag") is used so the price-tag sheet is
+   A4 without disturbing the receipt's A5 @page rule above. */
+.pt-tag,
+.pt-tag * {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+.pt-print-area {
+  display: none;
+}
+@media print {
+  @page tag {
+    size: A4 portrait;
+    margin: 8mm;
+  }
+  .pt-screen-only {
+    display: none !important;
+  }
+  .pt-print-area {
+    display: block !important;
+    page: tag;
+  }
+  .pt-print-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 92mm);
+    gap: 6mm;
+    justify-content: center;
+    align-content: start;
+  }
+  .pt-tag {
+    break-inside: avoid;
+  }
+}

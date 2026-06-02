@@ -1,260 +1,317 @@
 import type { ReceiptDetail } from "@/lib/receipts";
+import { encodeCode128B } from "@/lib/barcode128";
 
-const moneyFmt = new Intl.NumberFormat("en-US", {
-  maximumFractionDigits: 0,
+// ---------------------------------------------------------------------------
+// Shop constants — transcribed from the printed ODIEN Mall invoice.
+// ⚠️ PLEASE PROOFREAD the Lao spelling / address / account numbers / terms;
+// these were read off a photo and may need small corrections.
+// ---------------------------------------------------------------------------
+const SHOP = {
+  nameLo: "ຮ້ານ ໂອດຽນມໍ",
+  branchLo: "ສາຂາ ຂົວທ່າງ່ອນ",
+  addressLo: "ບ. ໂພນສະຫວ່າງ ມ. ຈັນທະບູລີ ນະຄອນຫຼວງວຽງຈັນ",
+  tel: "Tel: (+856-21) 216060, 217225, 412663, 412659",
+  email: "info@odien.net",
+  service: "02077799899",
+};
+
+const BANK_ACCOUNTS = [
+  { no: "010-11-00-00101487-001", cur: "KIP" },
+  { no: "010-11-02-00101487-001", cur: "BATH" },
+  { no: "010-12-01-00101487-001", cur: "USD" },
+];
+
+const TERMS: string[] = [
+  "ຊື້ສິນຄ້າໄປແລ້ວທາງຮ້ານບໍ່ສາມາດປ່ຽນຄືນສິນຄ້າ ຫຼື ເງິນຄືນໄດ້ : ຮັບປະກັນຄຸນນະພາບ ☐2ປີ ☐1ປີ ☐3ເດືອນ ☐1ເດືອນ (ເລີ່ມແຕ່ມື້ຊື້ສິນຄ້າເປັນຕົ້ນໄປ)",
+  "ຮັບປະກັນປ່ຽນຄືນສິນຄ້າ ພາຍໃນ 7 ວັນ ຖ້າສິນຄ້າເປເພອນສາເຫດບົກພ່ອງຈາກໂຮງງານ; ກໍລະນີທີ່ລູກຄ້າໄປແຕະຕ້ອງເອງຈາກການຮັບປະກັນສ້ອມມາກ່ອນ ຖ້າເປັນຮອຍຖືກສິດຂາດຖືວ່າໝົດປະກັນ.",
+  "ກໍລະນີຊື້ສິນຄ້າແລ້ວປ່ຽນໃຈເອົາລຸ້ນອື່ນ ຫຼື ສີອື່ນ ຈະເສຍຄ່າປັບໃໝ 300,000 ກີບ",
+  "ກໍລະນີຊື້ສິນຄ້າແລ້ວເລື່ອນລູກຄ້າບໍ່ເອົາສິນຄ້າ ຈະເສຍຄ່າປັບໃໝ 30% ຂອງມູນຄ່າສິນຄ້າ",
+];
+
+const SIGNATURES = [
+  "ຜູ້ອະນຸມັດ",
+  "ຜູ້ຮັບ",
+  "ຜູ້ສັ່ງ",
+  "ຜູ້ຈ່າຍເງິນ",
+  "ຜູ້ຮັບເງິນ",
+  "ຜູ້ອອກບິນ",
+];
+
+// Minimum body rows so the grid fills the page like the printed form.
+const MIN_ITEM_ROWS = 12;
+
+const money0 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+const money2 = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
 });
 
-function formatDate(d: Date | null): string {
+function fmtDate(d: Date | null): string {
   if (!d) return "—";
-  try {
-    return new Date(d).toLocaleString("lo-LA", {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "—";
-  }
+  const dt = new Date(d);
+  const p = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+  return `${p(dt.getDate())}/${p(dt.getMonth() + 1)}/${dt.getFullYear()}`;
 }
 
-// Render a single receipt in a paper-friendly layout. The page sets up the
-// screen toolbar; this component is the actual receipt body and is what
-// shows up in the printed output.
-export default function ReceiptPrintView({
-  receipt,
-}: {
-  receipt: ReceiptDetail;
-}) {
-  const r = receipt;
+function fmtTime(d: Date | null, fallback: string | null): string {
+  if (d) {
+    const dt = new Date(d);
+    const p = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+    return `${p(dt.getHours())}:${p(dt.getMinutes())}`;
+  }
+  return fallback?.slice(0, 5) ?? "";
+}
+
+function Barcode({ value }: { value: string }) {
+  const enc = encodeCode128B(value);
+  if (!enc) return <div className="font-mono text-[10px]">{value}</div>;
+  const h = 40;
   return (
-    <article className="receipt-sheet mx-auto max-w-3xl rounded border border-odoo-border bg-white px-8 py-8 shadow-sm print:max-w-none print:border-0 print:px-0 print:py-0 print:shadow-none">
-      <header className="border-b-2 border-odoo-text-strong pb-4 text-center">
-        <h1 className="text-2xl font-bold text-odoo-text-strong">
-          ໃບຮັບເງິນ / RECEIPT
-        </h1>
-        <div className="mt-1 font-mono text-lg font-bold text-odoo-text-strong">
-          {r.docNo}
-        </div>
-        {r.sourceSokDocNo ? (
-          <div className="mt-0.5 text-xs text-odoo-text-muted">
-            Sale Order: <span className="font-mono">{r.sourceSokDocNo}</span>
+    <svg
+      viewBox={`0 0 ${enc.width} ${h}`}
+      preserveAspectRatio="none"
+      className="h-8 w-[44mm]"
+      role="img"
+      aria-label={`barcode ${value}`}
+    >
+      {enc.bars.map((b, i) => (
+        <rect key={i} x={b.x} y={0} width={b.w} height={h} fill="#000" />
+      ))}
+    </svg>
+  );
+}
+
+// Render the ODIEN Mall sales invoice (ບິນຂາຍສິນຄ້າ). The page sets up the
+// screen toolbar; this component is the printed body.
+export default function ReceiptPrintView({ receipt }: { receipt: ReceiptDetail }) {
+  const r = receipt;
+
+  const subtotal = r.items.reduce((a, it) => a + it.sumKip, 0);
+  const discount = r.totals.billDiscountKip;
+  const vat = 0; // not tracked yet
+  const advance = 0; // not tracked yet
+  const grand = r.totals.amountKip || subtotal - discount + vat - advance;
+
+  const fillerRows = Math.max(0, MIN_ITEM_ROWS - r.items.length);
+  const issuerName = r.cashier?.name ?? r.salesperson?.name ?? "";
+
+  return (
+    <article className="receipt-sheet receipt-invoice mx-auto max-w-[800px] bg-white px-6 py-6 text-black print:max-w-none print:px-0 print:py-0">
+      {/* ---- Header ---- */}
+      <header className="flex items-start justify-between gap-4 border-b-2 border-black pb-2">
+        <div className="flex items-start gap-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/odm.png" alt="ODIEN Mall" className="h-12 w-12 object-contain" />
+          <div className="text-[11px] leading-tight">
+            <div className="flex items-baseline gap-3">
+              <span className="text-[14px] font-black">{SHOP.nameLo}</span>
+              <span className="text-[12px] font-bold">{SHOP.branchLo}</span>
+            </div>
+            <div>{SHOP.addressLo}</div>
+            <div>{SHOP.tel}</div>
+            <div>{SHOP.email}</div>
           </div>
-        ) : null}
+        </div>
+        <div className="text-right">
+          <div className="text-[18px] font-black">ບິນຂາຍສິນຄ້າ(ສິດ)</div>
+          <div className="text-[11px]">(ສຳລັບລູກຄ້າ)</div>
+        </div>
       </header>
 
-      <section className="mt-4 grid grid-cols-2 gap-4 text-sm">
-        <div>
-          <Heading>ລູກຄ້າ</Heading>
-          <Row label="ຊື່" value={r.customer.name ?? "—"} />
-          <Row label="ເບີໂທ" value={r.customer.phone ?? "—"} />
-          {r.customer.code ? (
-            <Row label="ລະຫັດ" value={r.customer.code} mono />
-          ) : null}
+      {/* ---- Barcode + doc no ---- */}
+      <div className="mt-2 flex items-end justify-between">
+        <Barcode value={r.docNo} />
+        <div className="text-[12px]">
+          <span className="text-odoo-text-muted">ເລກທີ : </span>
+          <span className="font-mono text-[14px] font-bold">{r.docNo}</span>
         </div>
-        <div>
-          <Heading>ເອກະສານ</Heading>
-          <Row label="ວັນທີ" value={formatDate(r.createdAt)} />
-          {r.cashier ? (
-            <Row label="ພະນັກງານຮັບເງິນ" value={r.cashier.name} />
-          ) : null}
-          {r.salesperson ? (
-            <Row label="ພະນັກງານຂາຍ" value={r.salesperson.name} />
-          ) : null}
-          {r.source ? (
-            <Row
-              label="ຊ່ອງທາງ"
-              value={r.source === "app" ? "ແອັບມືຖື (App)" : "ເວັບ (Web)"}
-            />
-          ) : null}
-          {r.branchCode || r.departmentCode ? (
-            <Row
-              label="ສາຂາ / ໝວດ"
-              value={
-                [r.branchCode, r.departmentCode]
-                  .filter(Boolean)
-                  .join(" / ") || "—"
-              }
-            />
-          ) : null}
-        </div>
-      </section>
+      </div>
 
-      <section className="mt-6">
-        <Heading>ລາຍການສິນຄ້າ</Heading>
-        <table className="w-full text-sm">
-          <thead className="border-b border-odoo-text-strong text-left text-xs uppercase text-odoo-text-muted">
-            <tr>
-              <th className="py-2 pr-2">#</th>
-              <th className="py-2 pr-2">ສິນຄ້າ</th>
-              <th className="py-2 pr-2 text-right">ຈຳນວນ</th>
-              <th className="py-2 pr-2 text-right">ລາຄາ</th>
-              <th className="py-2 pr-2 text-right">ສ່ວນຫຼຸດ</th>
-              <th className="py-2 text-right">ລວມ</th>
+      {/* ---- Customer / document boxes ---- */}
+      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
+        <div className="border border-black p-2">
+          <Field label="ລູກຄ້າ" value={r.customer.name ?? ""} extraLabel="ເບີໂທ" extraValue={r.customer.phone ?? ""} />
+          <Field label="ທີ່ຢູ່" value="" />
+          <Field label="ສະມາຊິກ" value={r.customer.name ?? ""} />
+          <Field label="ບັດສະມາຊິກ" value="" />
+        </div>
+        <div className="border border-black p-2">
+          <Field label="ວັນທີ" value={`${fmtDate(r.createdAt ?? r.docDate)}    ${fmtTime(r.createdAt, r.docTime)}`} />
+          <Field label="ພະນັກງານຂາຍ" value={r.salesperson?.name ?? ""} />
+          <Field label="ເບີໂທ" value="" />
+          <Field label="Service" value={SHOP.service} />
+          <Field label="ປະເພດການສັ່ງ" value="ລູກຄ້າຮັບເອງ   WALKIN" />
+        </div>
+      </div>
+
+      {/* ---- Items grid ---- */}
+      <table className="mt-2 w-full table-fixed border-collapse text-[11px]">
+        <colgroup>
+          <col className="w-[6%]" />
+          <col className="w-[15%]" />
+          <col className="w-[31%]" />
+          <col className="w-[8%]" />
+          <col className="w-[8%]" />
+          <col className="w-[12%]" />
+          <col className="w-[10%]" />
+          <col className="w-[12%]" />
+        </colgroup>
+        <thead>
+          <tr className="bg-odoo-surface-muted text-center font-bold">
+            <Th>ລ/ດ</Th>
+            <Th>ລະຫັດ</Th>
+            <Th>ລາຍການ</Th>
+            <Th>ຫົວໜ່ວຍ</Th>
+            <Th>ຈຳນວນ</Th>
+            <Th>ລາຄາ</Th>
+            <Th>ສ່ວນຫຼຸດ</Th>
+            <Th>ເປັນເງິນ</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {r.items.map((it, idx) => (
+            <tr key={it.lineNumber} className="align-top">
+              <Td className="text-center">{idx + 1}</Td>
+              <Td className="font-mono">{it.itemCode}</Td>
+              <Td>{it.itemName ?? it.itemCode}</Td>
+              <Td className="text-center">{it.unitCode ?? ""}</Td>
+              <Td className="text-right font-mono">{money2.format(it.qty)}</Td>
+              <Td className="text-right font-mono">
+                {it.priceKip > 0 ? money0.format(it.priceKip) : ""}
+              </Td>
+              <Td className="text-right font-mono">
+                {it.discountAmountKip > 0 ? money0.format(it.discountAmountKip) : ""}
+              </Td>
+              <Td className="text-right font-mono">
+                {it.sumKip > 0 ? money0.format(it.sumKip) : ""}
+              </Td>
             </tr>
-          </thead>
-          <tbody>
-            {r.items.map((it) => (
-              <tr key={it.lineNumber} className="border-b border-odoo-border">
-                <td className="py-2 pr-2 text-odoo-text-muted">
-                  {it.lineNumber + 1}
-                </td>
-                <td className="py-2 pr-2">
-                  <div className="font-medium text-odoo-text-strong">
-                    {it.itemName ?? it.itemCode}
-                  </div>
-                  <div className="font-mono text-[10px] text-odoo-text-muted">
-                    {it.itemCode}
-                  </div>
-                </td>
-                <td className="py-2 pr-2 text-right font-mono">
-                  {moneyFmt.format(it.qty)}{" "}
-                  <span className="text-xs text-odoo-text-muted">
-                    {it.unitCode ?? ""}
-                  </span>
-                </td>
-                <td className="py-2 pr-2 text-right font-mono">
-                  {moneyFmt.format(it.priceKip)}
-                </td>
-                <td className="py-2 pr-2 text-right font-mono">
-                  {it.discountAmountKip > 0 ? (
-                    <>
-                      −{moneyFmt.format(it.discountAmountKip)}
-                      {it.discount ? (
-                        <span className="ml-1 text-[10px] text-odoo-text-muted">
-                          ({it.discount})
-                        </span>
-                      ) : null}
-                    </>
-                  ) : (
-                    <span className="text-odoo-text-muted">—</span>
-                  )}
-                </td>
-                <td className="py-2 text-right font-mono font-bold">
-                  {moneyFmt.format(it.sumKip)}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+          ))}
+          {Array.from({ length: fillerRows }).map((_, i) => (
+            <tr key={`f${i}`}>
+              <Td>&nbsp;</Td>
+              <Td>&nbsp;</Td>
+              <Td>&nbsp;</Td>
+              <Td>&nbsp;</Td>
+              <Td>&nbsp;</Td>
+              <Td>&nbsp;</Td>
+              <Td>&nbsp;</Td>
+              <Td>&nbsp;</Td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
 
-      <section className="mt-4 ml-auto w-full max-w-xs text-sm">
-        {r.totals.billDiscountKip > 0 ? (
-          <div className="flex items-center justify-between py-1 text-odoo-success">
-            <span>
-              ສ່ວນຫຼຸດທ້າຍບິນ
-              {r.totals.billDiscountWordKip
-                ? ` (${r.totals.billDiscountWordKip})`
-                : ""}
-            </span>
-            <span className="font-mono">
-              −{moneyFmt.format(r.totals.billDiscountKip)}
-            </span>
-          </div>
-        ) : null}
-        <div className="flex items-center justify-between border-t-2 border-odoo-text-strong py-2">
-          <span className="font-bold">ລວມຍອດ</span>
-          <span className="font-mono text-lg font-bold text-odoo-text-strong">
-            {moneyFmt.format(r.totals.amountKip)} ກີບ
-          </span>
-        </div>
-      </section>
-
-      {r.payments.length > 0 ? (
-        <section className="mt-6">
-          <Heading>ການຮັບເງິນ</Heading>
-          <table className="w-full text-sm">
-            <thead className="text-left text-xs uppercase text-odoo-text-muted">
-              <tr>
-                <th className="py-1">ສະກຸນ</th>
-                <th className="py-1">ປະເພດ</th>
-                <th className="py-1 text-right">ຈຳນວນ</th>
-                <th className="py-1 text-right">≈ ກີບ</th>
-              </tr>
-            </thead>
-            <tbody>
-              {r.payments.map((p) => (
-                <tr key={p.id} className="border-b border-odoo-border">
-                  <td className="py-1 font-mono">{p.currencyCode}</td>
-                  <td className="py-1">
-                    {p.payMethod === "cash" ? "ເງິນສົດ" : "ໂອນ"}
-                  </td>
-                  <td className="py-1 text-right font-mono">
-                    {moneyFmt.format(p.amount)}
-                  </td>
-                  <td className="py-1 text-right font-mono text-odoo-text-muted">
-                    {moneyFmt.format(p.amountInMain)}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {r.cashSummary && r.cashSummary.changeThb > 0 && r.totals.exchangeRate > 0 ? (
-            <div className="mt-2 flex items-center justify-end gap-3 text-sm">
-              <span className="text-odoo-text-muted">ເງິນທອນ</span>
-              <span className="font-mono font-bold text-odoo-success">
-                {moneyFmt.format(
-                  r.cashSummary.changeThb / r.totals.exchangeRate,
-                )}{" "}
-                ກີບ
-              </span>
+      {/* ---- Remark / terms + totals ---- */}
+      <div className="mt-2 grid grid-cols-[1fr_auto] gap-3 text-[11px]">
+        <div>
+          {r.remark ? (
+            <div className="mb-1">
+              <span className="font-bold">ໝາຍເຫດ : </span>
+              <span className="whitespace-pre-wrap">{r.remark}</span>
             </div>
           ) : null}
-        </section>
-      ) : null}
-
-      {r.remark ? (
-        <section className="mt-6">
-          <Heading>ໝາຍເຫດ</Heading>
-          <p className="whitespace-pre-wrap text-sm">{r.remark}</p>
-        </section>
-      ) : null}
-
-      <footer className="mt-10 grid grid-cols-2 gap-8 text-center text-xs text-odoo-text-muted">
-        <div>
-          <div className="mb-12">ຜູ້ຮັບເງິນ</div>
-          <div className="border-t border-odoo-text-strong pt-1">
-            {r.cashier?.name ?? "—"}
+          <div className="font-bold">ຄຳຊີ້ແຈງ :</div>
+          <ol className="mt-0.5 list-decimal pl-4 leading-snug">
+            {TERMS.map((t, i) => (
+              <li key={i} className="mb-0.5">{t}</li>
+            ))}
+          </ol>
+        </div>
+        <div className="w-[58mm] text-[11px]">
+          <TotalRow label="ລວມເງິນ" value={`${money2.format(subtotal)}`} unit="ກີບ" />
+          <TotalRow label="ສ່ວນຫຼຸດ" value={money2.format(discount)} />
+          <TotalRow label="ອມພ : 10%" value={money2.format(vat)} />
+          <TotalRow label="ຫັກເງິນລ່ວງໜ້າ" value={money2.format(advance)} />
+          <div className="mt-1 flex items-baseline justify-between border-t-2 border-black pt-1 font-black">
+            <span>ລວມເງິນທັງໝົດ :</span>
+            <span className="font-mono text-[13px]">{money2.format(grand)}</span>
+            <span>ກີບ</span>
           </div>
         </div>
-        <div>
-          <div className="mb-12">ລູກຄ້າ</div>
-          <div className="border-t border-odoo-text-strong pt-1">
-            {r.customer.name ?? "—"}
+      </div>
+
+      {/* ---- Bank accounts ---- */}
+      <div className="mt-2 border-t border-black pt-1 text-[11px]">
+        <div className="font-bold">ທະນາຄານການຄ້າ :</div>
+        {BANK_ACCOUNTS.map((b) => (
+          <div key={b.cur} className="font-mono">
+            {b.no} <span className="ml-1">{b.cur}</span>
           </div>
-        </div>
-      </footer>
+        ))}
+      </div>
+
+      {/* ---- Signatures ---- */}
+      <div className="mt-4 grid grid-cols-6 gap-2 text-center text-[10px]">
+        {SIGNATURES.map((s, i) => (
+          <div key={s}>
+            <div className="h-8 border-b border-dotted border-black">
+              {/* issuer name printed above the last signature line */}
+              {i === SIGNATURES.length - 1 ? (
+                <span className="text-[10px]">{issuerName}</span>
+              ) : null}
+            </div>
+            <div className="pt-1">{s}</div>
+          </div>
+        ))}
+      </div>
     </article>
   );
 }
 
-function Heading({ children }: { children: React.ReactNode }) {
+function Th({ children }: { children: React.ReactNode }) {
+  return <th className="border border-black px-1 py-1">{children}</th>;
+}
+
+function Td({
+  children,
+  className = "",
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return <td className={`border border-black px-1 py-0.5 ${className}`}>{children}</td>;
+}
+
+function Field({
+  label,
+  value,
+  extraLabel,
+  extraValue,
+}: {
+  label: string;
+  value: string;
+  extraLabel?: string;
+  extraValue?: string;
+}) {
   return (
-    <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-odoo-text-muted">
-      {children}
+    <div className="flex items-baseline gap-1 py-0.5">
+      <span className="text-odoo-text-muted">{label} :</span>
+      <span className="flex-1 font-semibold">{value || " "}</span>
+      {extraLabel ? (
+        <>
+          <span className="text-odoo-text-muted">{extraLabel} :</span>
+          <span className="font-semibold">{extraValue || " "}</span>
+        </>
+      ) : null}
     </div>
   );
 }
 
-function Row({
+function TotalRow({
   label,
   value,
-  mono = false,
+  unit,
 }: {
   label: string;
   value: string;
-  mono?: boolean;
+  unit?: string;
 }) {
   return (
-    <div className="flex justify-between py-0.5 text-sm">
-      <span className="text-odoo-text-muted">{label}</span>
-      <span
-        className={"text-odoo-text-strong" + (mono ? " font-mono" : "")}
-      >
-        {value}
-      </span>
+    <div className="flex items-baseline justify-between py-0.5">
+      <span>{label} :</span>
+      <span className="font-mono">{value}</span>
+      <span className="w-6 text-right">{unit ?? ""}</span>
     </div>
   );
 }

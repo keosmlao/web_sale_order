@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireEmployee } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
+import { getHiddenMenuKeys } from "@/lib/menu-visibility";
 import Sidebar from "@/components/Sidebar";
 import OrderNotifier from "@/components/OrderNotifier";
 import { logoutAction } from "@/app/login/actions";
@@ -29,6 +30,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   const displayName = employee.fullnameLo || employee.fullnameEn || employee.employeeCode || "—";
   const subtitle = employee.nickname && employee.nickname !== "0" ? employee.nickname : undefined;
+  const hiddenMenuKeys = await getHiddenMenuKeys(role);
 
   if (posOnly) {
     // POS users are the senders, not the recipients — skip the notifier
@@ -64,6 +66,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         employeeCode={employee.employeeCode ?? "—"}
         subtitle={subtitle}
         role={role}
+        hiddenMenuKeys={hiddenMenuKeys}
       />
       <main className="min-w-0 flex-1 md:h-screen md:overflow-y-auto">{children}</main>
       <OrderNotifier selfEmployeeCode={employee.employeeCode ?? null} />

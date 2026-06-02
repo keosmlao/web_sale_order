@@ -277,9 +277,9 @@ export async function GET(request: NextRequest) {
     ? Prisma.empty
     : Prisma.sql`AND eff.salesperson_code = ${employeeCode}`;
 
-  // The cart_number returned to the mobile app is the 5-digit doc_no
-  // suffix (chars 6+ of doc_no like SOK2600123 → "00123"). The Flutter app
-  // still keys orders by this 5-character id, so we strip the SOK/YY
+  // The cart_number returned to the mobile app is the doc_no suffix after
+  // SOK+YY (chars 6+ of doc_no like SOK26050001 → "050001"). The Flutter app
+  // still keys orders by this suffix, so we strip the SOK/YY
   // prefix server-side rather than break the contract.
   const rows = await prisma.$queryRaw<OrderRow[]>`
     SELECT
@@ -1113,34 +1113,56 @@ export async function POST(request: NextRequest) {
     await tx.$executeRaw`
       SELECT pg_advisory_xact_lock(hashtext(${`${SOK_DOC_PREFIX}:${yymm}`}))
     `;
+    // Next sequence = MAX over BOTH ic_trans (the SOK doc) and app_order_source
+    // (the sidecar that owns the cart_number unique key), restricted to this
+    // year+month. ic_trans SOK rows are deleted on settle/void while the
+    // app_order_source row persists; deriving seq from ic_trans alone lets it
+    // restart at 1 and collide with a surviving cart_number (P2002). Taking the
+    // greater of both keeps the sequence monotonic against the table that
+    // actually enforces uniqueness. The probe below still backstops orphans
+    // (e.g. cross-year cart_number reuse, which carries no year).
     const seqRows = await tx.$queryRaw<Array<{ next_seq: number }>>`
-      SELECT COALESCE(
-        MAX(CAST(SUBSTRING(doc_no FROM ${SOK_DOC_PREFIX.length + 5}) AS INTEGER)),
-        0
+      SELECT GREATEST(
+        COALESCE((
+          SELECT MAX(
+            CAST(SUBSTRING(doc_no FROM ${SOK_DOC_PREFIX.length + 5}) AS INTEGER)
+          )
+          FROM ic_trans
+          WHERE doc_no LIKE ${docNoPattern}
+            AND doc_format_code = ${SOK_DOC_PREFIX}
+        ), 0),
+        COALESCE((
+          SELECT MAX(CAST(SUBSTRING(cart_number FROM 3) AS INTEGER))
+          FROM app_order_source
+          WHERE doc_no LIKE ${docNoPattern}
+        ), 0)
       ) + 1 AS next_seq
-      FROM ic_trans
-      WHERE doc_no LIKE ${docNoPattern}
-        AND doc_format_code = ${SOK_DOC_PREFIX}
     `;
     let seq = seqRows[0]?.next_seq ?? 1;
     // Defensive: even though MAX(seq)+1 should be free under the advisory
-    // lock, in practice we've seen 23505 collisions when a SOK was created
-    // outside this transaction's snapshot window (manual SQL, prior crash
-    // leaving a row, etc). Probe up to 20 numbers ahead before INSERT —
-    // same pattern used by the CAKAP settle route. Caller's retry-on-23505
-    // still wraps this as a last resort.
+    // lock, in practice we've seen 23505 collisions when a SOK or sidecar
+    // row was created outside this transaction's snapshot window (manual SQL,
+    // prior crash leaving app_order_source behind, etc). Probe up to 20
+    // numbers ahead before INSERT — same pattern used by the CAKAP settle
+    // route. Caller's retry-on-23505 still wraps this as a last resort.
     let sokDocNo = `${SOK_DOC_PREFIX}${yymm}${String(seq).padStart(4, "0")}`;
     let allocated = false;
     for (let probe = 0; probe < 20; probe++) {
       if (seq > 9999) {
         throw new Error("SOK sequence exhausted for this month (max 9999)");
       }
+      const cartIdCandidate = `${monthSuffix}${String(seq).padStart(4, "0")}`;
       const existsRows = await tx.$queryRaw<Array<{ exists: boolean }>>`
-        SELECT EXISTS (
-          SELECT 1 FROM ic_trans
-          WHERE doc_no = ${sokDocNo}
-            AND trans_flag = ${SOK_TRANS_FLAG}
-        ) AS exists
+        SELECT
+          EXISTS (
+            SELECT 1 FROM ic_trans
+            WHERE doc_no = ${sokDocNo}
+              AND trans_flag = ${SOK_TRANS_FLAG}
+          )
+          OR EXISTS (
+            SELECT 1 FROM app_order_source
+            WHERE cart_number = ${cartIdCandidate}
+          ) AS exists
       `;
       if (!existsRows[0]?.exists) {
         allocated = true;

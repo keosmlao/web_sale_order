@@ -176,6 +176,16 @@ const sections: NavSection[] = [
           </svg>
         ),
       },
+      {
+        href: "/price-tags",
+        label: "ປ້າຍລາຄາ",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" />
+            <path d="M7 7h.01" />
+          </svg>
+        ),
+      },
     ],
   },
   {
@@ -281,6 +291,21 @@ const sections: NavSection[] = [
               </svg>
             ),
           },
+          {
+            href: "/settings/menu-visibility",
+            label: "ການສະແດງເມນູ",
+            roles: ["manager"],
+            icon: (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
+                <path d="M3 5h18" />
+                <path d="M3 12h18" />
+                <path d="M3 19h18" />
+                <circle cx="8" cy="5" r="1.6" fill="currentColor" />
+                <circle cx="16" cy="12" r="1.6" fill="currentColor" />
+                <circle cx="10" cy="19" r="1.6" fill="currentColor" />
+              </svg>
+            ),
+          },
         ],
       },
     ],
@@ -296,18 +321,23 @@ type SidebarProps = {
   employeeCode: string;
   subtitle?: string;
   role: AppRole;
+  // Menu keys (hrefs) hidden for this role via /settings/menu-visibility.
+  hiddenMenuKeys?: string[];
 };
 
-export default function Sidebar({ displayName, employeeCode, subtitle, role }: SidebarProps) {
+export default function Sidebar({ displayName, employeeCode, subtitle, role, hiddenMenuKeys }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
 
   // Drop links the current role isn't allowed to see (e.g. the device
-  // monitor is heads/managers only), then drop any section left empty.
+  // monitor is heads/managers only) or that an admin hid for this role via
+  // the menu-visibility settings, then drop any section left empty.
+  const hiddenSet = useMemo(() => new Set(hiddenMenuKeys ?? []), [hiddenMenuKeys]);
   const visibleSections = useMemo(() => {
-    const allowed = (leaf: NavLeaf) => !leaf.roles || leaf.roles.includes(role);
+    const allowed = (leaf: NavLeaf) =>
+      (!leaf.roles || leaf.roles.includes(role)) && !hiddenSet.has(leaf.href);
     return sections
       .map((s) => ({
         ...s,
@@ -322,7 +352,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role }: S
           ),
       }))
       .filter((s) => s.items.length > 0);
-  }, [role]);
+  }, [role, hiddenSet]);
 
   // Flatten all items for the mobile horizontal scroller.
   const mobileNavItems = visibleSections.flatMap((s) =>
