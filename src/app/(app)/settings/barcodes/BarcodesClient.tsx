@@ -246,7 +246,7 @@ export default function BarcodesClient({ canManage }: { canManage: boolean }) {
               type="button"
               onClick={addBarcode}
               disabled={busy || !newBarcode || !newItem}
-              className="odoo-btn odoo-btn-primary"
+              className="odoo-btn odoo-btn-primary w-full sm:w-auto"
             >
               ເພີ່ມ
             </button>
@@ -254,13 +254,13 @@ export default function BarcodesClient({ canManage }: { canManage: boolean }) {
         </div>
       ) : null}
 
-      <div className="mb-3 flex items-center gap-2">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <input
           type="search"
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="ຄົ້ນ barcode / ລະຫັດສິນຄ້າ / ຊື່"
-          className="odoo-input"
+          className="odoo-input w-full sm:w-auto sm:flex-1"
         />
       </div>
 
@@ -271,7 +271,7 @@ export default function BarcodesClient({ canManage }: { canManage: boolean }) {
       ) : null}
 
       <div className="overflow-x-auto rounded-md border border-odoo-border bg-odoo-surface">
-        <table className="w-full text-sm">
+        <table className="min-w-[500px] w-full text-sm">
           <thead className="bg-odoo-surface-muted text-left text-[11px] font-bold uppercase tracking-wider text-odoo-text-muted">
             <tr>
               <th className="px-3 py-2">Barcode</th>

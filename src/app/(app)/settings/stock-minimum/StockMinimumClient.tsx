@@ -254,7 +254,7 @@ export default function StockMinimumClient({
         </p>
       </header>
 
-      <div className="grid gap-4 lg:grid-cols-[360px_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[360px_1fr] grid-cols-1">
         <section className="rounded-md border border-odoo-border bg-odoo-surface">
           <div className="border-b border-odoo-border px-4 py-3">
             <div className="text-sm font-bold text-odoo-text-strong">
@@ -355,7 +355,7 @@ export default function StockMinimumClient({
                 </div>
               ) : null}
             </label>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
               <label className="grid gap-1">
                 <span className="odoo-label">ຂາຍ/ວັນ</span>
                 <input
@@ -472,7 +472,7 @@ export default function StockMinimumClient({
               <input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                className="odoo-input h-9 w-56"
+                className="odoo-input h-9 w-full sm:w-56"
                 placeholder="ຄົ້ນຫາ"
               />
               <button type="button" onClick={refresh} className="odoo-btn odoo-btn-secondary">
@@ -481,7 +481,7 @@ export default function StockMinimumClient({
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
+            <table className="min-w-[600px] w-full text-sm">
               <thead className="bg-odoo-surface-muted text-left text-xs font-bold uppercase tracking-wider text-odoo-text-muted">
                 <tr>
                   <th className="px-4 py-3">ສິນຄ້າ</th>
@@ -934,7 +934,7 @@ function ImportStockMinimumModal({
         className="absolute inset-0 cursor-default"
         onClick={done ? onDone : onClose}
       />
-      <div className="relative w-full max-w-3xl overflow-hidden rounded-md bg-white shadow-xl">
+      <div className="relative w-full max-w-3xl overflow-hidden rounded-md bg-white shadow-xl max-h-[90vh] flex flex-col">
         <header className="border-b border-odoo-border px-5 py-4">
           <h2 className="text-lg font-bold text-odoo-text-strong">
             Import Minimum Stock from Excel
@@ -944,7 +944,7 @@ function ImportStockMinimumModal({
           </p>
         </header>
 
-        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">
+        <div className="flex-1 overflow-y-auto px-5 py-4">
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <button
               type="button"
@@ -986,7 +986,7 @@ function ImportStockMinimumModal({
                 Preview ({rows.length} rows)
               </div>
               <div className="mb-4 max-h-72 overflow-auto rounded-md border border-odoo-border">
-                <table className="w-full text-[11px]">
+                <table className="min-w-[480px] w-full text-[11px]">
                   <thead className="bg-odoo-surface-muted text-odoo-text-muted">
                     <tr>
                       <th className="px-2 py-1 text-left">#</th>
@@ -1053,7 +1053,7 @@ function ImportStockMinimumModal({
           ) : null}
         </div>
 
-        <footer className="flex items-center justify-end gap-2 border-t border-odoo-border bg-odoo-surface-muted px-5 py-3">
+        <footer className="flex flex-wrap items-center justify-end gap-2 border-t border-odoo-border bg-odoo-surface-muted px-5 py-3">
           <button
             type="button"
             onClick={done ? onDone : onClose}

@@ -219,7 +219,7 @@ export default async function DailySalesReportPage({
     return (
         <div className="odoo-page">
             <div className="odoo-card mb-4 p-5">
-                <div className="flex flex-wrap items-end justify-between gap-4">
+                <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-end sm:justify-between">
                     <div>
                         <div className="odoo-label">
                             ລາຍງານຍອດຂາຍປະຈຳວັນ
@@ -348,7 +348,7 @@ export default async function DailySalesReportPage({
                     </h2>
                 </div>
                 <div className="overflow-x-auto">
-                    <table className="odoo-table">
+                    <table className="odoo-table min-w-[800px]">
                         <thead>
                             <tr>
                                 <th className="px-4 py-2.5 font-medium">ເລກທີເອກະສານ</th>

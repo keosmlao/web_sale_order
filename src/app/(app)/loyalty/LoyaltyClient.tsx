@@ -239,8 +239,8 @@ export default function LoyaltyClient({
             ບັນທຶກສຳເລັດ · {new Date(savedAt).toLocaleString()}
           </div>
         ) : null}
-        <div className="flex items-center justify-between gap-3 border-t border-odoo-border px-4 py-3">
-          <div className="text-[11px] text-odoo-text-muted">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-odoo-border px-4 py-3">
+          <div className="min-w-0 flex-1 text-[11px] text-odoo-text-muted">
             {config
               ? `${config.isActive ? "ເປີດໃຊ້" : "ປິດໃຊ້"} · ອັບເດດໂດຍ ${config.updatedBy ?? "—"} · ${new Date(config.updatedAt).toLocaleString()}`
               : "ຍັງບໍ່ມີການຕັ້ງຄ່າ — ໃສ່ຄ່າ ແລະ ກົດບັນທຶກ"}
@@ -249,7 +249,7 @@ export default function LoyaltyClient({
             type="button"
             onClick={save}
             disabled={!canManage || saving}
-            className="odoo-btn odoo-btn-primary"
+            className="odoo-btn odoo-btn-primary shrink-0"
           >
             {saving ? "ກຳລັງບັນທຶກ..." : "ບັນທຶກ"}
           </button>

@@ -88,16 +88,16 @@ export default function ItemsReportClient({
  <h1 className="odoo-page-title">ສິນຄ້າຂາຍດີ</h1>
  <p className="odoo-page-subtitle">{filters.from} → {filters.to}</p>
  </div>
- <div className="odoo-card flex flex-wrap gap-6 px-4 py-3 text-right">
- <div>
+ <div className="odoo-card flex flex-wrap gap-6 px-4 py-3 text-right w-full sm:w-auto">
+ <div className="min-w-0">
  <div className="odoo-label mb-1">ລວມ</div>
  <div className="font-mono text-xl font-bold text-odoo-text-strong">{moneyFmt.format(grandTotal)}</div>
  </div>
- <div>
+ <div className="min-w-0">
  <div className="odoo-label mb-1">ຈຳນວນ</div>
  <div className="font-mono text-xl font-bold text-odoo-text-strong">{qtyFmt.format(grandQty)}</div>
  </div>
- <div>
+ <div className="min-w-0">
  <div className="odoo-label mb-1">Top</div>
  <div className="font-mono text-xl font-bold text-odoo-text-strong">{filters.limit}</div>
  </div>
@@ -107,7 +107,7 @@ export default function ItemsReportClient({
  {/* Filters */}
  <section className="odoo-card p-4">
  <div className="flex flex-wrap items-end gap-3">
- <div>
+ <div className="w-full sm:w-auto">
  <label className="block text-[10px] font-bold uppercase tracking-widest text-odoo-text-muted">
  ຈາກວັນທີ
  </label>
@@ -115,10 +115,10 @@ export default function ItemsReportClient({
  type="date"
  defaultValue={filters.from}
  onChange={(e) => pushFilters({ from: e.target.value || null })}
- className="odoo-input mt-1"
+ className="odoo-input mt-1 w-full sm:w-auto"
  />
  </div>
- <div>
+ <div className="w-full sm:w-auto">
  <label className="block text-[10px] font-bold uppercase tracking-widest text-odoo-text-muted">
  ຫາວັນທີ
  </label>
@@ -126,7 +126,7 @@ export default function ItemsReportClient({
  type="date"
  defaultValue={filters.to}
  onChange={(e) => pushFilters({ to: e.target.value || null })}
- className="odoo-input mt-1"
+ className="odoo-input mt-1 w-full sm:w-auto"
  />
  </div>
  <div>
@@ -160,14 +160,14 @@ export default function ItemsReportClient({
  </button>
  </div>
  </div>
- <div>
+ <div className="w-full sm:w-auto">
  <label className="block text-[10px] font-bold uppercase tracking-widest text-odoo-text-muted">
  ຈຳນວນ Top
  </label>
  <select
  defaultValue={filters.limit}
  onChange={(e) => pushFilters({ limit: e.target.value })}
- className="odoo-select mt-1"
+ className="odoo-select mt-1 w-full sm:w-auto"
  >
  {[20, 50, 100, 200, 500].map((n) => (
  <option key={n} value={n}>
@@ -176,7 +176,7 @@ export default function ItemsReportClient({
  ))}
  </select>
  </div>
- <div className="flex-1 min-w-60">
+ <div className="w-full sm:flex-1 sm:min-w-60">
  <label className="block text-[10px] font-bold uppercase tracking-widest text-odoo-text-muted">
  ຄົ້ນຫາ
  </label>
@@ -185,7 +185,7 @@ export default function ItemsReportClient({
  value={search}
  onChange={(e) => setSearch(e.target.value)}
  placeholder="ລະຫັດ / ຊື່ສິນຄ້າ / ຍີ່ຫໍ້"
- className="odoo-input mt-1"
+ className="odoo-input mt-1 w-full"
  />
  </div>
  </div>

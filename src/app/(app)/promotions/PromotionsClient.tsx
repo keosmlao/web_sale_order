@@ -191,9 +191,9 @@ export default function PromotionsClient({
   }
 
   return (
-    <div className="px-6 py-6">
-      <div className="mb-5 flex items-end justify-between gap-3">
-        <div>
+    <div className="px-3 py-4 sm:px-6 sm:py-6">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+        <div className="min-w-0">
           <h1 className="text-2xl font-bold text-odoo-text-strong">
             ໂປຣໂມຊັນ
           </h1>
@@ -202,7 +202,7 @@ export default function PromotionsClient({
           </p>
         </div>
         {canManage ? (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <button
               type="button"
               className="odoo-btn odoo-btn-secondary"
@@ -242,7 +242,8 @@ export default function PromotionsClient({
       </div>
 
       <div className="overflow-hidden rounded border border-odoo-border bg-white">
-        <table className="min-w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="min-w-[600px] text-sm">
           <thead className="bg-odoo-surface-muted text-left text-[11px] uppercase text-odoo-text-muted">
             <tr>
               <th className="px-4 py-3">ປະເພດ</th>
@@ -359,6 +360,7 @@ export default function PromotionsClient({
             )}
           </tbody>
         </table>
+        </div>
       </div>
 
       {creating ? (
@@ -557,7 +559,7 @@ function PromoEditor({
         onClick={onClose}
       />
       <div className="relative w-full max-w-4xl overflow-hidden rounded-md bg-white shadow-xl">
-        <header className="border-b border-odoo-border bg-white px-6 py-5">
+        <header className="border-b border-odoo-border bg-white px-4 py-4 sm:px-6 sm:py-5">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <div className="text-[11px] font-bold uppercase tracking-widest text-odoo-text-muted">
@@ -607,14 +609,14 @@ function PromoEditor({
           </div>
         </header>
 
-        <div className="max-h-[72vh] space-y-5 overflow-y-auto px-6 py-5 text-sm">
+        <div className="max-h-[72vh] space-y-5 overflow-y-auto px-4 py-4 text-sm sm:px-6 sm:py-5">
           <section>
             <SectionTitle
               number="1"
               title="ຂໍ້ມູນຫຼັກ"
               description="ຕັ້ງຊື່ໃຫ້ສັ້ນ ແລະ ເລືອກປະເພດໂປຣໂມຊັນທີ່ຈະໃຊ້."
             />
-            <div className="mt-3 grid gap-4 md:grid-cols-[minmax(0,1fr)_280px]">
+            <div className="mt-3 grid gap-4 grid-cols-1 md:grid-cols-[minmax(0,1fr)_280px]">
               <Field label="ຫົວຂໍ້ໂປຣໂມຊັນ">
                 <input
                   type="text"
@@ -681,7 +683,7 @@ function PromoEditor({
             />
 
             {promoType === "bogo" ? (
-              <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <div className="mt-3 grid gap-4 grid-cols-1 sm:grid-cols-2">
                 <Field label="ເລືອກສິນຄ້າທີ່ລູກຄ້າຕ້ອງຊື້">
                   <ItemCodePicker
                     value={form.triggerItemCode ?? ""}
@@ -726,7 +728,7 @@ function PromoEditor({
                 </Field>
               </div>
             ) : promoType === "item_pair_price" ? (
-              <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <div className="mt-3 grid gap-4 grid-cols-1 sm:grid-cols-2">
                 <Field label="ສິນຄ້າທີ່ຕ້ອງຊື້ກ່ອນ">
                   <ItemCodePicker
                     value={form.triggerItemCode ?? ""}
@@ -751,7 +753,7 @@ function PromoEditor({
                 </Field>
               </div>
             ) : (
-              <div className="mt-3 grid gap-4 md:grid-cols-2">
+              <div className="mt-3 grid gap-4 grid-cols-1 sm:grid-cols-2">
                 <Field label="ສິນຄ້າທີ່ຈະໃຊ້ລາຄາພິເສດ">
                   <ItemCodePicker
                     value={form.triggerItemCode ?? ""}
@@ -778,7 +780,7 @@ function PromoEditor({
               title="ຊ່ວງເວລາ"
               description="ປ່ອຍວ່າງໄດ້ຖ້າຕ້ອງການໃຫ້ໃຊ້ໄດ້ຕະຫຼອດ."
             />
-            <div className="mt-3 grid gap-4 md:grid-cols-2">
+            <div className="mt-3 grid gap-4 grid-cols-1 sm:grid-cols-2">
               <Field label="ວັນເລີ່ມ">
                 <input
                   type="datetime-local"
@@ -921,7 +923,7 @@ function PromoMethodGuide({ type }: { type: PromoType }) {
       <div className="text-xs font-black text-odoo-text-strong">
         {method.title}
       </div>
-      <div className="mt-3 grid gap-2 md:grid-cols-3">
+      <div className="mt-3 grid gap-2 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
         {method.steps.map((step, idx) => (
           <div
             key={step}
@@ -1439,7 +1441,7 @@ function ImportPromotionsModal({
         onClick={done ? onDone : onClose}
       />
       <div className="relative w-full max-w-3xl overflow-hidden rounded-md bg-white shadow-xl">
-        <header className="border-b border-odoo-border px-5 py-4">
+        <header className="border-b border-odoo-border px-4 py-4 sm:px-5">
           <h2 className="text-lg font-bold text-odoo-text-strong">
             ນຳເຂົ້າ ໂປຣໂມຊັນ ຈາກ Excel
           </h2>
@@ -1448,7 +1450,7 @@ function ImportPromotionsModal({
           </p>
         </header>
 
-        <div className="max-h-[70vh] overflow-y-auto px-5 py-4">
+        <div className="max-h-[70vh] overflow-y-auto px-4 py-4 sm:px-5">
           <div className="mb-4 flex flex-wrap items-center gap-3">
             <button
               type="button"

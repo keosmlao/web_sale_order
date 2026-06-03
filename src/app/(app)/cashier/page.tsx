@@ -462,7 +462,7 @@ function CashierClientInner({
     <div className="px-4 py-5 sm:px-6 lg:px-8">
       <ShiftBar />
       <LowStockBanner />
-      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
           <div className="odoo-label">ໜ້າຮັບເງິນ</div>
           <h1 className="mt-2 text-2xl font-bold text-odoo-text-strong">
@@ -571,7 +571,7 @@ function CashierClientInner({
             setSelectedCart(newOrderToast.cartNumber);
             setNewOrderToast(null);
           }}
-          className="fixed bottom-4 right-4 z-[70] flex max-w-sm items-center gap-3 rounded-lg border border-odoo-primary bg-white px-4 py-3 text-left shadow-xl transition hover:bg-odoo-primary-50"
+          className="fixed bottom-4 right-2 z-[70] flex w-[calc(100vw-1rem)] max-w-sm items-center gap-3 rounded-lg border border-odoo-primary bg-white px-4 py-3 text-left shadow-xl transition hover:bg-odoo-primary-50 sm:right-4 sm:w-auto"
         >
           <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-odoo-primary text-white">
             <svg
@@ -645,7 +645,7 @@ function OrdersView({
 }) {
   return (
     <>
-      <div className="mb-4 grid gap-3 sm:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
         <SummaryCard label="ລໍຖ້າຮັບເງິນ" value={counts.PENDING} tone="amber" />
         <SummaryCard label="ຮັບເງິນສຳເລັດ" value={counts.COMPLETED} tone="emerald" />
         <SummaryCard label="ຈັດຖ້ຽວ" value={counts.SCHEDULED} tone="slate" />
@@ -654,7 +654,7 @@ function OrdersView({
 
       <section className="odoo-card overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-odoo-border p-4">
-          <div className="min-w-64 flex-1">
+          <div className="w-full sm:min-w-64 sm:flex-1">
             <input
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
@@ -877,7 +877,7 @@ function PricesView({
 }) {
   return (
     <>
-      <div className="mb-4 grid gap-3 sm:grid-cols-3">
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         <SummaryCard label="ລາຍການອະນຸມັດ" value={totalCount} tone="emerald" />
         <SummaryCard label="ສະແດງ" value={prices.length} tone="slate" />
         <div className="rounded-md border border-odoo-success-border bg-odoo-success-bg px-4 py-3 text-odoo-success">
@@ -892,7 +892,7 @@ function PricesView({
 
       <section className="odoo-card overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-odoo-border p-4">
-          <div className="min-w-64 flex-1">
+          <div className="w-full sm:min-w-64 sm:flex-1">
             <input
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}

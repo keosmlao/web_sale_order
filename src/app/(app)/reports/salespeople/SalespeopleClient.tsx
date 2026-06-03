@@ -80,16 +80,16 @@ export default function SalespeopleClient({
  <h1 className="odoo-page-title">ຍອດຂາຍຕາມພະນັກງານ</h1>
  <p className="odoo-page-subtitle">{filters.from} → {filters.to}</p>
  </div>
- <div className="odoo-card flex flex-wrap gap-6 px-4 py-3 text-right">
- <div>
+ <div className="odoo-card flex flex-wrap gap-6 px-4 py-3 text-right w-full sm:w-auto">
+ <div className="min-w-0">
  <div className="odoo-label mb-1">ລວມ</div>
  <div className="font-mono text-xl font-bold text-odoo-text-strong">{moneyFmt.format(grandTotal)}</div>
  </div>
- <div>
+ <div className="min-w-0">
  <div className="odoo-label mb-1">ບິນ</div>
  <div className="font-mono text-xl font-bold text-odoo-text-strong">{moneyFmt.format(grandOrders)}</div>
  </div>
- <div>
+ <div className="min-w-0">
  <div className="odoo-label mb-1">ສະເລ່ຍ</div>
  <div className="font-mono text-xl font-bold text-odoo-text-strong">
  {moneyFmt.format(grandOrders > 0 ? grandTotal / grandOrders : 0)}
@@ -101,7 +101,7 @@ export default function SalespeopleClient({
  {/* Filters */}
  <section className="odoo-card p-4">
  <div className="flex flex-wrap items-end gap-3">
- <div>
+ <div className="w-full sm:w-auto">
  <label className="block text-[10px] font-bold uppercase tracking-widest text-odoo-text-muted">
  ຈາກວັນທີ
  </label>
@@ -109,10 +109,10 @@ export default function SalespeopleClient({
  type="date"
  defaultValue={filters.from}
  onChange={(e) => pushFilters({ from: e.target.value || null })}
- className="odoo-input mt-1"
+ className="odoo-input mt-1 w-full sm:w-auto"
  />
  </div>
- <div>
+ <div className="w-full sm:w-auto">
  <label className="block text-[10px] font-bold uppercase tracking-widest text-odoo-text-muted">
  ຫາວັນທີ
  </label>
@@ -120,10 +120,10 @@ export default function SalespeopleClient({
  type="date"
  defaultValue={filters.to}
  onChange={(e) => pushFilters({ to: e.target.value || null })}
- className="odoo-input mt-1"
+ className="odoo-input mt-1 w-full sm:w-auto"
  />
  </div>
- <div>
+ <div className="w-full sm:w-auto">
  <label className="block text-[10px] font-bold uppercase tracking-widest text-odoo-text-muted">
  ຂອບເຂດ
  </label>
@@ -154,7 +154,7 @@ export default function SalespeopleClient({
  </button>
  </div>
  </div>
- <div className="ml-auto flex items-end gap-2">
+ <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto sm:ml-auto">
  <QuickRangeButton label="ມື້ນີ້" onClick={() => pushFilters(todayRange())} />
  <QuickRangeButton label="7 ມື້" onClick={() => pushFilters(lastNDaysRange(7))} />
  <QuickRangeButton label="30 ມື້" onClick={() => pushFilters(lastNDaysRange(30))} />

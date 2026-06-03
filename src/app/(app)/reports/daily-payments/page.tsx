@@ -155,7 +155,7 @@ export default async function DailyPaymentsReportPage({
 
   return (
     <div className="odoo-page">
-      <header className="mb-4 flex flex-wrap items-end justify-between gap-3">
+      <header className="mb-4 flex flex-col items-stretch gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="odoo-label">ລາຍງານ</div>
           <h1 className="mt-2 text-2xl font-bold text-odoo-text-strong">
@@ -167,7 +167,7 @@ export default async function DailyPaymentsReportPage({
         </div>
         <form
           method="get"
-          className="flex items-end gap-2"
+          className="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end"
         >
           <div>
             <label className="odoo-label mb-1 block" htmlFor="date">
@@ -178,7 +178,7 @@ export default async function DailyPaymentsReportPage({
               name="date"
               type="date"
               defaultValue={selectedDate}
-              className="odoo-input"
+              className="odoo-input w-full sm:w-auto"
             />
           </div>
           <button type="submit" className="odoo-btn odoo-btn-primary">
@@ -187,7 +187,7 @@ export default async function DailyPaymentsReportPage({
         </form>
       </header>
 
-      <section className="mb-4 grid gap-3 sm:grid-cols-4">
+      <section className="mb-4 grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
           label="ໃບຮັບເງິນ"
           value={moneyFmt.format(totalReceiptsActive)}

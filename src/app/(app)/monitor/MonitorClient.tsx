@@ -94,8 +94,8 @@ export default function MonitorClient() {
   );
 
   return (
-    <div className="px-6 py-6">
-      <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+    <div className="px-4 py-6 sm:px-6">
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-odoo-text-strong">
             ຕິດຕາມມືຖືພະນັກງານຂາຍ
@@ -105,7 +105,7 @@ export default function MonitorClient() {
             {POLL_MS / 1000} ວິນາທີ.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1.5 text-sm font-bold text-emerald-700">
             <span className="relative flex h-2.5 w-2.5">
               <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
@@ -135,7 +135,8 @@ export default function MonitorClient() {
       />
 
       <div className="mt-5 overflow-hidden rounded border border-odoo-border bg-white">
-        <table className="min-w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="min-w-[700px] w-full text-sm">
           <thead className="bg-odoo-surface-muted text-left text-[11px] uppercase text-odoo-text-muted">
             <tr>
               <th className="px-4 py-3">ສະຖານະ</th>
@@ -257,6 +258,7 @@ export default function MonitorClient() {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </div>
   );

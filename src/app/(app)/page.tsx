@@ -356,7 +356,7 @@ export default async function HomePage() {
             </p>
           </div>
           
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
             <UserBadge
               name={displayName}
               employeeCode={me.employeeCode ?? "—"}
@@ -364,7 +364,7 @@ export default async function HomePage() {
             />
             <Link
               href="/orders/new"
-              className="inline-flex h-10 items-center gap-2 rounded-xl bg-indigo-600 px-5 text-xs font-bold text-white shadow-lg shadow-indigo-600/30 transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-500 active:translate-y-0 active:scale-[0.98]"
+              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 text-xs font-bold text-white shadow-lg shadow-indigo-600/30 transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-500 active:translate-y-0 active:scale-[0.98] sm:w-auto sm:justify-start"
             >
               <PlusIcon />
               ສ້າງບິນໃໝ່
@@ -708,12 +708,12 @@ function UserBadge({
   role: string;
 }) {
   return (
-    <div className="inline-flex h-10 items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 backdrop-blur-md px-3.5 shadow-sm text-white">
+    <div className="flex h-10 w-full items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 backdrop-blur-md px-3.5 shadow-sm text-white sm:w-auto sm:inline-flex">
       <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/30 text-xs font-bold text-indigo-200">
         {name.trim().charAt(0).toUpperCase()}
       </span>
       <span className="min-w-0 text-left">
-        <span className="block max-w-32 truncate text-xs font-bold text-white leading-tight">
+        <span className="block max-w-[10rem] truncate text-xs font-bold text-white leading-tight sm:max-w-32">
           {name}
         </span>
         <span className="block text-[9px] uppercase text-slate-300 tracking-wider">

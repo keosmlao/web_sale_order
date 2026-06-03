@@ -14,14 +14,14 @@
   --background: #f8fafc;        /* slate-50 — flat app shell */
   --foreground: #0f172a;        /* slate-900 — body text */
 
-  /* Premium SaaS Brand — Indigo & Sky blue highlights */
-  --odoo-primary: #6366f1;      /* indigo-500 */
-  --odoo-primary-dark: #4f46e5; /* indigo-600 */
-  --odoo-primary-light: #818cf8;/* indigo-400 */
-  --odoo-primary-50: #f5f3ff;   /* violet-50  */
-  --odoo-primary-100: #ede9fe;  /* violet-100 */
-  --odoo-primary-200: #ddd6fe;  /* violet-200 */
-  --odoo-accent: #0284c7;       /* sky-600 — secondary highlight */
+  /* Premium SaaS Brand — Business Blue */
+  --odoo-primary: #2563eb;      /* blue-600 */
+  --odoo-primary-dark: #1d4ed8; /* blue-700 */
+  --odoo-primary-light: #60a5fa;/* blue-400 */
+  --odoo-primary-50: #eff6ff;   /* blue-50  */
+  --odoo-primary-100: #dbeafe;  /* blue-100 */
+  --odoo-primary-200: #bfdbfe;  /* blue-200 */
+  --odoo-accent: #0ea5e9;       /* sky-500 — secondary highlight */
 
   /* Surfaces and lines — Slate neutrals. */
   --odoo-surface: #ffffff;
@@ -116,6 +116,25 @@ body {
   color: var(--foreground);
   font-family: var(--font-noto-sans-lao), "Noto Sans Lao", Arial, Helvetica, sans-serif;
   font-size: 11px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* Mobile safety net: a stray wide child (table, chip row, fixed-width tag)
+     must never make the whole page scroll sideways. `clip` — not `hidden` —
+     so it doesn't create a scroll container that would break the sticky
+     mobile header and the sticky POS checkout summary. */
+  overflow-x: clip;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+}
+
+button,
+a {
+  touch-action: manipulation;
 }
 
 ::selection {
@@ -551,6 +570,99 @@ body {
   .odoo-table tbody tr:hover {
     background: rgba(99, 102, 241, 0.03);
     cursor: pointer;
+  }
+
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  @media (max-width: 640px) {
+    .odoo-page {
+      padding: 14px 12px calc(18px + env(safe-area-inset-bottom));
+    }
+
+    .odoo-page-header {
+      align-items: stretch;
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .odoo-page-header > * {
+      min-width: 0;
+    }
+
+    .odoo-page-title {
+      font-size: 18px;
+      line-height: 1.25;
+    }
+
+    .odoo-page-subtitle {
+      font-size: 11px;
+      line-height: 1.45;
+    }
+
+    .odoo-card {
+      border-radius: 10px;
+    }
+
+    .odoo-card-header {
+      padding: 10px 12px;
+      border-radius: 10px 10px 0 0;
+    }
+
+    .odoo-controlbar {
+      align-items: stretch;
+      flex-direction: column;
+      padding: 10px 12px;
+    }
+
+    .odoo-btn {
+      min-height: 40px;
+      height: auto;
+      padding: 8px 12px;
+      line-height: 1.25;
+      white-space: normal;
+    }
+
+    .odoo-page-header .odoo-btn,
+    .odoo-controlbar .odoo-btn {
+      width: 100%;
+    }
+
+    .odoo-input,
+    .odoo-select,
+    .odoo-textarea {
+      min-height: 40px;
+      font-size: 16px;
+    }
+
+    .odoo-segmented {
+      display: flex;
+      width: 100%;
+      overflow-x: auto;
+    }
+
+    .odoo-segment {
+      flex: 1 0 auto;
+      min-height: 38px;
+      padding: 9px 12px;
+      text-align: center;
+    }
+
+    .odoo-table {
+      font-size: 11px;
+    }
+
+    .odoo-table thead th,
+    .odoo-table tbody td {
+      padding: 8px 10px;
+    }
+
+    .odoo-pill {
+      min-height: 26px;
+      padding: 4px 8px;
+    }
   }
 
   .promo-page {
@@ -1416,6 +1528,104 @@ body {
     justify-content: space-between;
     gap: 9px;
     min-width: 0;
+  }
+  /* Tabular cart view — same data as the .pos-line cards, laid out in
+     columns. Sticky header rides the .pos-order-lines scroll container. */
+  .pos-cart-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+  .pos-cart-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: var(--odoo-surface-muted);
+    color: var(--odoo-text-muted);
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    text-align: left;
+    white-space: nowrap;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--odoo-border);
+  }
+  .pos-cart-th-price,
+  .pos-cart-th-discount,
+  .pos-cart-th-total {
+    text-align: right;
+  }
+  .pos-cart-th-qty,
+  .pos-cart-th-actions {
+    text-align: center;
+  }
+  .pos-cart-row {
+    cursor: pointer;
+  }
+  .pos-cart-cell {
+    padding: 9px 10px;
+    vertical-align: middle;
+    border-bottom: 1px solid #eef2f7;
+    background: var(--odoo-surface);
+    transition: background 80ms ease;
+  }
+  .pos-cart-row-bonus .pos-cart-cell {
+    background: #f0fdf4;
+  }
+  .pos-cart-row-promo .pos-cart-cell {
+    background: #fffbeb;
+  }
+  .pos-cart-row:hover .pos-cart-cell {
+    background: #f8fafc;
+  }
+  .pos-cart-row-selected .pos-cart-cell {
+    background: #eef2ff;
+  }
+  .pos-cart-name {
+    overflow-wrap: anywhere;
+    line-height: 1.25;
+  }
+  .pos-cart-price,
+  .pos-cart-discount,
+  .pos-cart-total {
+    text-align: right;
+    white-space: nowrap;
+  }
+  .pos-cart-qty {
+    width: 1%;
+    white-space: nowrap;
+  }
+  .pos-cart-stepper {
+    display: inline-flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 4px;
+    width: max-content;
+  }
+  /* Compact the shared 40×40 icon buttons / qty input down to a tidy
+     table size. Higher specificity than the global .pos-iconbtn rule, so
+     these win regardless of source order. */
+  .pos-cart-stepper .pos-iconbtn,
+  .pos-cart-actions .pos-iconbtn {
+    min-width: 32px;
+    min-height: 32px;
+    width: 32px;
+    height: 32px;
+    border-radius: 6px;
+  }
+  .pos-cart-stepper .pos-qty-input {
+    width: 46px;
+    height: 32px;
+  }
+  .pos-cart-actions {
+    width: 1%;
+    white-space: nowrap;
+    text-align: center;
+  }
+  .pos-cart-detail-cell {
+    padding: 0 10px 9px;
+    background: var(--odoo-surface);
   }
   .pos-set-detail {
     grid-column: span 2 / span 2;
@@ -2304,9 +2514,18 @@ body {
   @media (max-width: 820px) {
     .settle-layout {
       grid-template-columns: 1fr;
+      /* On a phone the two panes stack — let the whole overlay scroll as a
+         single column instead of fighting two nested scroll areas. */
+      overflow-y: auto;
     }
+    .settle-left,
     .settle-payment {
       position: static;
+      overflow: visible;
+      max-height: none;
+    }
+    .settle-items {
+      max-height: none;
     }
     .settle-payment-line {
       grid-template-columns: 1fr;
@@ -2314,6 +2533,17 @@ body {
     .settle-payment-line input,
     .settle-payment-line em {
       text-align: left;
+    }
+    /* Keep the pay / save action row reachable without scrolling to the
+       very bottom of a long payment form. */
+    .settle-actions {
+      position: sticky;
+      bottom: 0;
+      z-index: 5;
+      flex-wrap: wrap;
+      background: var(--odoo-surface-muted);
+      margin: 0 -16px -18px;
+      padding: 11px 16px calc(11px + env(safe-area-inset-bottom));
     }
   }
   @media (max-width: 900px) {
@@ -2387,9 +2617,9 @@ body {
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(120% 80% at 0% 0%, rgba(129, 140, 248, 0.55), transparent 60%),
+      radial-gradient(120% 80% at 0% 0%, rgba(96, 165, 250, 0.55), transparent 60%),
       radial-gradient(100% 70% at 100% 100%, rgba(14, 165, 233, 0.45), transparent 55%),
-      linear-gradient(135deg, #312e81 0%, #4338ca 45%, #4f46e5 100%);
+      linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 45%, #2563eb 100%);
     z-index: -1;
   }
   .login-brand-bg::before,
@@ -2784,8 +3014,23 @@ body {
     padding: 18px 20px 24px;
   }
   .pos-grid {
-    grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
     gap: 10px;
+  }
+  @media (max-width: 1280px) {
+    .pos-grid {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 1100px) {
+    .pos-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+  }
+  @media (max-width: 760px) {
+    .pos-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
   }
   .pos-tile {
     min-height: 178px;
@@ -3243,6 +3488,1322 @@ body {
     box-shadow: none;
   }
 
+  /* POS responsive shell: desktop uses split panes; tablet/mobile becomes a
+     natural single-column page so product cards, cart lines, and delivery
+     fields do not fight the 100dvh desktop constraints. */
+  @media (max-width: 960px) {
+    .pos-shell {
+      display: block;
+      height: auto;
+      min-height: 100dvh;
+      overflow: visible;
+    }
+    .pos-products,
+    .pos-order {
+      height: auto;
+      max-height: none;
+      min-height: 0;
+      overflow: visible;
+      border-right: 0;
+    }
+    .pos-products {
+      border-bottom: 1px solid var(--odoo-border);
+    }
+    .pos-product-list,
+    .pos-order-lines {
+      overflow: visible;
+      min-height: 0;
+    }
+    .pos-order {
+      box-shadow: none;
+      backdrop-filter: none;
+    }
+    .pos-order-summary {
+      position: sticky;
+      bottom: 0;
+      z-index: 20;
+    }
+    .pos-extras-panel {
+      max-height: 52dvh;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .pos-toolbar-compact {
+      padding: 10px 12px;
+    }
+    .pos-toolbar-head {
+      align-items: stretch;
+      flex-direction: column;
+    }
+    .pos-toolbar-title-line {
+      gap: 6px;
+    }
+    .pos-heading-compact {
+      width: 100%;
+      font-size: 16px;
+    }
+    .pos-promo-chip {
+      width: 100%;
+      justify-content: center;
+    }
+    .pos-product-list {
+      padding: 12px;
+    }
+    .pos-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+    .pos-tile {
+      min-height: 150px;
+      padding: 11px;
+      border-radius: 12px;
+    }
+    .pos-tile-name {
+      font-size: 12px;
+    }
+    .pos-tile-price {
+      font-size: 16px;
+    }
+    .pos-order-header {
+      padding: 12px;
+    }
+    .pos-order-title {
+      align-items: stretch;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pos-customer-card {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pos-order-lines {
+      padding: 10px;
+    }
+    .pos-line {
+      grid-template-columns: 1fr;
+      padding: 11px;
+    }
+    .pos-line-controls,
+    .pos-line-meta,
+    .pos-set-detail {
+      grid-column: auto;
+    }
+    .pos-line-controls {
+      grid-row: auto;
+      justify-content: flex-start;
+      flex-wrap: wrap;
+    }
+    .pos-line-meta {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .pos-extras-grid {
+      grid-template-columns: 1fr;
+    }
+    .pos-action-row {
+      gap: 6px;
+    }
+    .pos-iconaction {
+      width: 40px;
+      height: 44px;
+    }
+    .pos-cta {
+      min-width: 0;
+      padding: 0 12px;
+      font-size: 13px;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .pos-grid {
+      grid-template-columns: 1fr;
+    }
+    .pos-stat-chip {
+      flex: 1 1 calc(50% - 4px);
+      justify-content: space-between;
+    }
+    .pos-tile {
+      min-height: 132px;
+    }
+    .pos-total-line {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .pos-total-line .font-mono {
+      font-size: 23px !important;
+    }
+  }
+
+  /* POS visual system: practical counter-first layout. */
+  .pos-shell {
+    grid-template-columns: minmax(0, 1fr) minmax(430px, 480px);
+    background:
+      linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(241, 245, 249, 0.98)),
+      radial-gradient(90% 60% at 12% 0%, rgba(14, 165, 233, 0.12), transparent 55%);
+  }
+
+  .pos-products {
+    background: #f8fafc;
+    border-right-color: #dbe3ef;
+  }
+
+  .pos-toolbar-compact {
+    position: sticky;
+    top: 0;
+    z-index: 15;
+    border-bottom: 1px solid #dbe3ef;
+    background: rgba(255, 255, 255, 0.98);
+    padding: 14px 16px 12px;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.04);
+  }
+
+  .pos-toolbar-head {
+    margin-bottom: 12px;
+  }
+
+  .pos-heading-compact {
+    font-size: 19px;
+  }
+
+  .pos-stat-chip {
+    min-height: 32px;
+    border-color: #dbe3ef;
+    background: #f8fafc;
+  }
+
+  .pos-stat-chip-accent {
+    border-color: #bbf7d0;
+    background: #ecfdf5;
+  }
+
+  .pos-stat-chip-accent strong {
+    color: #047857;
+  }
+
+  .pos-promo-chip {
+    height: 38px;
+    border-radius: 10px;
+    background: #0f172a;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
+  }
+
+  .pos-promo-chip:hover {
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.24);
+  }
+
+  .pos-search-input {
+    height: 50px;
+    border-color: #cbd5e1;
+    border-radius: 12px;
+    background: #ffffff;
+    font-size: 15px;
+  }
+
+  .pos-search-input:focus {
+    border-color: #0284c7;
+    box-shadow: 0 0 0 4px rgba(14, 165, 233, 0.14);
+  }
+
+  .pos-product-list {
+    padding: 16px;
+  }
+
+  .pos-grid {
+    grid-template-columns: repeat(auto-fill, minmax(158px, 1fr));
+    gap: 10px;
+  }
+
+  .pos-tile {
+    min-height: 164px;
+    border-radius: 10px;
+    border-color: #dbe3ef;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  .pos-tile:hover {
+    border-color: #38bdf8;
+    box-shadow: 0 12px 22px rgba(14, 165, 233, 0.12);
+  }
+
+  .pos-tile:focus-visible {
+    outline: 3px solid rgba(14, 165, 233, 0.24);
+    outline-offset: 2px;
+  }
+
+  .pos-tile-in-cart {
+    border-color: #10b981;
+    background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 70%);
+  }
+
+  .pos-tile-name {
+    font-size: 12.5px;
+    line-height: 1.34;
+  }
+
+  .pos-tile-code {
+    color: #64748b;
+  }
+
+  .pos-tile-price-row {
+    margin-top: auto;
+    border-top-color: #dbe3ef;
+  }
+
+  .pos-tile-price {
+    color: #0f172a;
+    font-size: 18px;
+  }
+
+  .pos-tile-stock-corner {
+    top: 10px;
+    right: 10px;
+    min-height: 22px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 9px;
+  }
+
+  .pos-tile-qty {
+    top: 38px;
+    background: #10b981;
+    box-shadow: 0 5px 12px rgba(16, 185, 129, 0.26);
+  }
+
+  .pos-promo-badge {
+    border: 1px solid #fde68a;
+    background: #fffbeb;
+    color: #92400e;
+  }
+
+  .pos-order {
+    background: #ffffff;
+    border-left: 1px solid #dbe3ef;
+    box-shadow: -14px 0 28px rgba(15, 23, 42, 0.08);
+  }
+
+  .pos-order-header {
+    background: #ffffff;
+    padding: 14px 16px;
+  }
+
+  .pos-order-title {
+    align-items: center;
+  }
+
+  .pos-customer-card,
+  .pos-customer-empty {
+    border-radius: 10px;
+  }
+
+  .pos-customer-card {
+    border-color: #bae6fd;
+    background: #f0f9ff;
+  }
+
+  .pos-customer-empty {
+    min-height: 48px;
+    background: #f8fafc;
+  }
+
+  .pos-order-lines {
+    padding: 10px 12px;
+    background: #f8fafc;
+  }
+
+  .pos-line {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px 10px;
+    margin-bottom: 9px;
+    border-color: #dbe3ef;
+    border-radius: 10px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  .pos-line-selected {
+    border-color: #0284c7;
+    background: #f0f9ff;
+    box-shadow: 0 0 0 2px rgba(14, 165, 233, 0.12);
+  }
+
+  .pos-line-bonus {
+    border-color: #bbf7d0;
+    background: #f0fdf4;
+  }
+
+  .pos-line-promo {
+    border-color: #fde68a;
+    background: #fffbeb;
+  }
+
+  .pos-iconbtn,
+  .pos-iconaction {
+    min-width: 40px;
+    min-height: 40px;
+    border-radius: 9px;
+  }
+
+  .pos-qty-input {
+    height: 40px;
+    width: 58px;
+    border-radius: 9px;
+    font-size: 13px;
+  }
+
+  .pos-line-meta {
+    color: #475569;
+  }
+
+  .pos-order-summary {
+    background: #ffffff;
+    border-top-color: #cbd5e1;
+    box-shadow: 0 -12px 24px rgba(15, 23, 42, 0.08);
+  }
+
+  .pos-extras-panel {
+    background: #f8fafc;
+    padding: 14px 16px;
+  }
+
+  .pos-extras-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .pos-total-line {
+    border-radius: 12px;
+    border: 1px solid #bae6fd;
+    background: linear-gradient(135deg, #f0f9ff 0%, #ffffff 100%);
+    padding: 12px 14px;
+  }
+
+  .pos-total-line .font-mono {
+    color: #0369a1 !important;
+  }
+
+  .pos-action-row {
+    gap: 9px;
+    padding-top: 12px;
+  }
+
+  .pos-cta {
+    min-height: 50px;
+    border-radius: 12px;
+    background: #0f172a;
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.22);
+  }
+
+  .pos-cta:hover:not(:disabled) {
+    box-shadow: 0 12px 26px rgba(15, 23, 42, 0.28);
+  }
+
+  .pos-flow-panel {
+    background: #f8fafc;
+  }
+
+  .pos-flow-list {
+    display: grid;
+    align-content: start;
+    gap: 12px;
+  }
+
+  .pos-step-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 12px;
+    border: 1px solid #dbe3ef;
+    border-radius: 14px;
+    background: #ffffff;
+    padding: 14px;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  .pos-step-disabled {
+    opacity: 0.62;
+  }
+
+  .pos-step-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    background: #0f172a;
+    color: #ffffff;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 900;
+  }
+
+  .pos-step-title {
+    font-size: 14px;
+    font-weight: 900;
+    color: var(--odoo-text-strong);
+  }
+
+  .pos-step-text {
+    margin-top: 3px;
+    color: var(--odoo-text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.45;
+  }
+
+  .pos-flow-customer {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-top: 10px;
+    border: 1px solid #bae6fd;
+    border-radius: 12px;
+    background: #f0f9ff;
+    padding: 11px 12px;
+    text-align: left;
+  }
+
+  .pos-flow-primary,
+  .pos-add-item-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 11px;
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 13px;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
+    transition: transform 100ms ease, box-shadow 140ms ease, opacity 140ms ease;
+  }
+
+  .pos-flow-primary {
+    min-height: 46px;
+    margin-top: 12px;
+    padding: 0 16px;
+  }
+
+  .pos-add-item-btn {
+    min-height: 34px;
+    padding: 0 12px;
+  }
+
+  .pos-flow-primary:hover:not(:disabled),
+  .pos-add-item-btn:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.24);
+  }
+
+  .pos-flow-primary:disabled,
+  .pos-add-item-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+    box-shadow: none;
+  }
+
+  .pos-cart-empty-inner {
+    max-width: 24rem;
+  }
+
+  /* Prominent "add product" action bar — shown at the top of the cart on
+     phones (on desktop, products are added from the left browse grid). */
+  .pos-add-bar {
+    display: flex;
+    gap: 8px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--odoo-border);
+    background: var(--odoo-surface);
+  }
+  .pos-add-big {
+    flex: 1 1 auto;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    min-height: 48px;
+    border: 0;
+    border-radius: 12px;
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 14px;
+    font-weight: 900;
+    cursor: pointer;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.18);
+    transition: transform 100ms ease, box-shadow 140ms ease, opacity 140ms ease;
+  }
+  .pos-add-big:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 10px 22px rgba(15, 23, 42, 0.24);
+  }
+  .pos-add-big:active:not(:disabled) {
+    transform: translateY(0);
+  }
+  .pos-add-big:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+    box-shadow: none;
+  }
+  .pos-add-promo {
+    flex: 0 0 auto;
+  }
+  .pos-cart-empty-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto;
+    border-radius: 999px;
+    background: #eef2f7;
+    color: var(--odoo-text-soft);
+  }
+  /* Desktop (>960px): products are added from the left browse grid, so the
+     cart's big add bar is hidden. Phones (≤960px): the browse grid is hidden
+     and the add bar opens the full-screen product + warehouse modal. */
+  @media (min-width: 961px) {
+    .pos-add-bar {
+      display: none;
+    }
+  }
+  @media (max-width: 960px) {
+    .pos-browse-panel {
+      display: none;
+    }
+  }
+
+  .product-picker-modal {
+    color: var(--odoo-text);
+  }
+
+  .product-picker-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 9px;
+  }
+
+  .product-picker-item {
+    display: flex;
+    min-height: 132px;
+    flex-direction: column;
+    justify-content: space-between;
+    border: 1px solid #dbe3ef;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 12px;
+    text-align: left;
+    transition: border-color 120ms ease, box-shadow 140ms ease, transform 100ms ease;
+  }
+
+  .product-picker-item:hover:not(:disabled),
+  .product-picker-item-active {
+    border-color: #0284c7;
+    box-shadow: 0 8px 18px rgba(14, 165, 233, 0.12);
+  }
+
+  .product-picker-item-active {
+    background: #f0f9ff;
+  }
+
+  .product-picker-item-disabled {
+    cursor: not-allowed;
+    opacity: 0.52;
+  }
+
+  .product-picker-name {
+    display: -webkit-box;
+    color: var(--odoo-text-strong);
+    font-size: 13px;
+    font-weight: 900;
+    line-height: 1.3;
+    overflow: hidden;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+  }
+
+  .product-picker-location {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid #dbe3ef;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 12px;
+    text-align: left;
+    transition: border-color 120ms ease, background 120ms ease, box-shadow 140ms ease;
+  }
+
+  .product-picker-location:hover:not(:disabled) {
+    border-color: #10b981;
+    background: #f0fdf4;
+    box-shadow: 0 8px 18px rgba(16, 185, 129, 0.1);
+  }
+
+  .product-picker-location-disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+  }
+
+  /* POS customer-first flow: every viewport starts from the cart, and every
+     product add happens through the product + warehouse modal. */
+  .pos-shell {
+    display: grid;
+    grid-template-columns: minmax(0, min(100%, 1040px));
+    justify-content: center;
+    align-content: stretch;
+    padding: 16px;
+    background:
+      linear-gradient(180deg, #f8fafc 0%, #eef2ff 100%),
+      radial-gradient(80% 60% at 50% 0%, rgba(14, 165, 233, 0.12), transparent 60%);
+  }
+
+  .pos-products,
+  .pos-browse-panel {
+    display: none;
+  }
+
+  .pos-order {
+    display: flex;
+    min-height: 0;
+    width: 100%;
+    max-width: 1040px;
+    overflow: hidden;
+    border: 1px solid #dbe3ef;
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: 0 22px 50px rgba(15, 23, 42, 0.12);
+  }
+
+  .pos-flow-panel {
+    flex: 0 0 300px;
+    border-right: 1px solid #dbe3ef;
+    background: #f8fafc;
+    padding: 14px;
+    overflow-y: auto;
+  }
+
+  .pos-flow-list {
+    gap: 10px;
+  }
+
+  .pos-step-card {
+    border-radius: 12px;
+  }
+
+  .pos-step-active {
+    border-color: #0284c7;
+    background: #f0f9ff;
+    box-shadow: 0 10px 24px rgba(14, 165, 233, 0.12);
+  }
+
+  .pos-step-done {
+    border-color: #86efac;
+    background: #f0fdf4;
+  }
+
+  .pos-step-done .pos-step-badge {
+    background: #059669;
+  }
+
+  .pos-order-header,
+  .pos-add-bar,
+  .pos-order-lines,
+  .pos-order-summary {
+    min-width: 0;
+  }
+
+  .pos-add-bar {
+    display: flex;
+    flex-wrap: wrap;
+    padding: 12px 14px;
+    background: #ffffff;
+  }
+
+  .pos-add-big {
+    min-width: min(100%, 18rem);
+  }
+
+  .pos-order-lines {
+    flex: 1 1 auto;
+  }
+
+  .pos-cart-empty {
+    min-height: 280px;
+  }
+
+  .pos-cart-empty-inner {
+    max-width: 30rem;
+  }
+
+  .product-picker-modal {
+    max-width: min(1120px, calc(100vw - 24px));
+  }
+
+  .product-picker-grid {
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  }
+
+  @media (min-width: 961px) {
+    .pos-add-bar {
+      display: flex;
+    }
+  }
+
+  @media (max-width: 960px) {
+    .pos-shell {
+      display: block;
+      min-height: 100dvh;
+      padding: 10px;
+      overflow: visible;
+    }
+
+    .pos-order {
+      min-height: calc(100dvh - 20px);
+      border-radius: 14px;
+      box-shadow: 0 12px 30px rgba(15, 23, 42, 0.1);
+    }
+
+    .pos-flow-panel {
+      flex: 0 0 auto;
+      border-right: 0;
+      border-bottom: 1px solid #dbe3ef;
+      overflow: visible;
+      padding: 10px;
+    }
+
+    .pos-flow-list {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .pos-step-card {
+      grid-template-columns: 1fr;
+      gap: 8px;
+      padding: 10px;
+    }
+
+    .pos-step-badge {
+      width: 28px;
+      height: 28px;
+      font-size: 12px;
+    }
+
+    .pos-step-title {
+      font-size: 12px;
+    }
+
+    .pos-step-text {
+      font-size: 10.5px;
+      line-height: 1.35;
+    }
+
+    .product-picker-modal {
+      max-width: none;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .pos-shell {
+      padding: 0;
+    }
+
+    .pos-order {
+      min-height: 100dvh;
+      border-width: 0;
+      border-radius: 0;
+    }
+
+    .pos-flow-list {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding-bottom: 2px;
+      scroll-snap-type: x proximity;
+    }
+
+    .pos-step-card {
+      min-width: 72vw;
+      scroll-snap-align: start;
+    }
+
+    .pos-add-bar {
+      position: sticky;
+      top: 0;
+      z-index: 12;
+      gap: 8px;
+    }
+
+    .pos-add-big {
+      min-width: 0;
+      min-height: 46px;
+      font-size: 13px;
+    }
+  }
+
+  @media (max-width: 960px) {
+    .pos-shell {
+      padding-bottom: env(safe-area-inset-bottom);
+      background: #f8fafc;
+    }
+
+    .pos-products {
+      min-height: auto;
+      border-bottom: 0;
+    }
+
+    .pos-order {
+      border-left: 0;
+      border-top: 1px solid #dbe3ef;
+    }
+
+    .pos-order-summary {
+      bottom: 0;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    .pos-flow-list {
+      grid-template-columns: 1fr;
+    }
+
+    .pos-extras-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 720px) {
+    .pos-toolbar-compact {
+      padding: 10px;
+    }
+
+    .pos-toolbar-head {
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .pos-toolbar-title-line {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      width: 100%;
+      gap: 7px;
+    }
+
+    .pos-heading-compact {
+      grid-column: 1 / -1;
+      font-size: 17px;
+    }
+
+    .pos-stat-chip {
+      justify-content: space-between;
+      min-width: 0;
+      width: 100%;
+    }
+
+    .pos-promo-chip {
+      width: 100%;
+      height: 42px;
+    }
+
+    .pos-search-input {
+      height: 46px;
+      font-size: 16px;
+    }
+
+    .pos-product-list {
+      padding: 10px;
+    }
+
+    .pos-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .pos-tile {
+      min-height: 142px;
+      padding: 10px;
+    }
+
+    .pos-tile-body {
+      margin-top: 18px;
+    }
+
+    .pos-tile-price {
+      font-size: 16px;
+    }
+
+    .pos-order-header {
+      padding: 11px 10px;
+    }
+
+    .pos-order-lines {
+      padding: 9px;
+    }
+
+    .pos-line {
+      grid-template-columns: 1fr;
+      padding: 10px;
+    }
+
+    .pos-line-controls {
+      justify-content: space-between;
+      width: 100%;
+    }
+
+    .pos-line-controls .pos-iconbtn {
+      flex: 1 0 40px;
+    }
+
+    .pos-qty-input {
+      flex: 1 1 64px;
+      width: auto;
+    }
+
+    .pos-order-summary > .px-4 {
+      padding: 10px;
+    }
+
+    .pos-total-line {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 5px;
+    }
+
+    .pos-action-row {
+      position: relative;
+      gap: 7px;
+    }
+
+    .pos-iconaction {
+      width: 44px;
+      height: 46px;
+    }
+
+    .product-picker-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .pos-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .pos-tile {
+      min-height: 136px;
+    }
+
+    .pos-tile-name {
+      font-size: 11.5px;
+      height: calc(1.28em * 3);
+      max-height: calc(1.28em * 3);
+    }
+  }
+
+  /* Final POS flow guard: keep the redesigned customer-first cart layout
+     ahead of earlier POS media rules above. */
+  .pos-shell {
+    display: grid;
+    grid-template-columns: minmax(0, min(100%, 1040px));
+    justify-content: center;
+    align-content: stretch;
+    padding: 12px;
+    background: #f3f4f6;
+  }
+
+  .pos-products,
+  .pos-browse-panel {
+    display: none;
+  }
+
+  .pos-order {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    max-width: 1040px;
+    height: calc(100dvh - 24px);
+    max-height: calc(100dvh - 24px);
+    overflow: hidden;
+    border: 1px solid #d1d5db;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  }
+
+  .pos-flow-panel {
+    flex: 0 0 auto;
+    border-right: 0;
+    border-bottom: 1px solid #e5e7eb;
+    background: #ffffff;
+    padding: 10px 14px;
+    overflow: visible;
+  }
+
+  .pos-flow-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .pos-step-card {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    min-height: 46px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #ffffff;
+    padding: 8px 10px;
+    box-shadow: none;
+  }
+
+  .pos-step-active {
+    border-color: #9ca3af;
+    background: #f9fafb;
+    box-shadow: inset 0 -2px 0 #111827;
+  }
+
+  .pos-step-done {
+    border-color: #d1d5db;
+    background: #ffffff;
+  }
+
+  .pos-step-badge,
+  .pos-step-done .pos-step-badge {
+    width: 24px;
+    height: 24px;
+    background: #111827;
+    color: #ffffff;
+    font-size: 11px;
+  }
+
+  .pos-step-disabled .pos-step-badge {
+    background: #9ca3af;
+  }
+
+  .pos-step-title {
+    font-size: 12px;
+    font-weight: 800;
+    color: #111827;
+  }
+
+  .pos-step-text {
+    margin-top: 1px;
+    color: #6b7280;
+    font-size: 10px;
+    font-weight: 600;
+    line-height: 1.25;
+  }
+
+  .pos-order-header {
+    background: #ffffff;
+    padding: 12px 14px;
+  }
+
+  .pos-customer-card,
+  .pos-customer-empty {
+    border-radius: 6px;
+    box-shadow: none;
+  }
+
+  .pos-customer-card {
+    border-color: #d1d5db;
+    background: #f9fafb;
+  }
+
+  .pos-customer-card:hover {
+    border-color: #9ca3af;
+    box-shadow: none;
+    transform: none;
+  }
+
+  .pos-customer-empty {
+    min-height: 42px;
+    border-style: solid;
+    border-color: #d1d5db;
+    background: #ffffff;
+    color: #374151;
+  }
+
+  .pos-customer-empty:hover {
+    border-color: #111827;
+    background: #f9fafb;
+    color: #111827;
+  }
+
+  .pos-add-bar {
+    display: flex;
+    border-top: 1px solid #f3f4f6;
+    border-bottom: 1px solid #e5e7eb;
+    background: #ffffff;
+    padding: 10px 14px;
+  }
+
+  .pos-add-big {
+    min-height: 42px;
+    min-width: min(100%, 16rem);
+    border-radius: 6px;
+    background: #111827;
+    box-shadow: none;
+    font-size: 13px;
+  }
+
+  .pos-add-big:hover:not(:disabled) {
+    transform: none;
+    background: #030712;
+    box-shadow: none;
+  }
+
+  .pos-promo-chip,
+  .pos-add-promo {
+    height: 42px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    background: #ffffff;
+    color: #374151;
+    box-shadow: none;
+  }
+
+  .pos-promo-chip:hover,
+  .pos-add-promo:hover {
+    border-color: #9ca3af;
+    background: #f9fafb;
+    box-shadow: none;
+  }
+
+  .pos-promo-chip-count {
+    background: #111827;
+    color: #ffffff;
+  }
+
+  .pos-order-lines {
+    flex: 1 1 auto;
+    background: #f9fafb;
+    padding: 10px;
+  }
+
+  .pos-line {
+    border-radius: 6px;
+    box-shadow: none;
+  }
+
+  .pos-line-selected {
+    border-color: #111827;
+    background: #ffffff;
+    box-shadow: inset 3px 0 0 #111827;
+  }
+
+  .pos-cart-empty {
+    min-height: 260px;
+    border: 1px dashed #d1d5db;
+    border-radius: 6px;
+    background: #ffffff;
+  }
+
+  .pos-cart-empty-icon {
+    width: 52px;
+    height: 52px;
+    background: #f3f4f6;
+    color: #6b7280;
+  }
+
+  .pos-order-summary {
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .pos-total-line {
+    border-top: 1px solid #d1d5db;
+    border-radius: 0;
+    background: #ffffff;
+  }
+
+  .pos-cta {
+    border-radius: 6px;
+    background: #111827;
+    box-shadow: none;
+  }
+
+  .pos-iconaction {
+    border-radius: 6px;
+  }
+
+  @media (max-width: 960px) {
+    .pos-shell {
+      display: block;
+      min-height: 100dvh;
+      padding: 8px;
+      overflow: visible;
+    }
+
+    .pos-order {
+      height: auto;
+      max-height: none;
+      min-height: calc(100dvh - 16px);
+      border-radius: 8px;
+    }
+
+    .pos-flow-list {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .pos-order {
+      border-top: 0;
+    }
+  }
+
+  @media (max-width: 640px) {
+    .pos-shell {
+      padding: 0;
+    }
+
+    .pos-order {
+      min-height: 100dvh;
+      border-width: 0;
+      border-radius: 0;
+    }
+
+    .pos-flow-panel {
+      padding: 8px;
+    }
+
+    .pos-flow-list {
+      display: flex;
+      overflow-x: auto;
+      gap: 6px;
+      padding-bottom: 2px;
+    }
+
+    .pos-step-card {
+      min-width: 54vw;
+      min-height: 42px;
+      padding: 7px 8px;
+    }
+
+    .pos-step-text {
+      display: none;
+    }
+
+    .pos-add-bar {
+      position: sticky;
+      top: 0;
+      z-index: 12;
+      gap: 8px;
+      padding: 8px;
+    }
+
+    .pos-add-big {
+      min-width: 0;
+      min-height: 42px;
+    }
+  }
+
   /* Dark sidebar with indigo gradient and grouped sections (248px). */
   .sbd-shell {
     position: relative;
@@ -3489,7 +5050,7 @@ body {
     height: 36px;
     flex-shrink: 0;
     border-radius: 10px;
-    background: linear-gradient(135deg, #38bdf8 0%, #6366f1 100%);
+    background: linear-gradient(135deg, #38bdf8 0%, #2563eb 100%);
     color: #fff;
     font-size: 13px;
     font-weight: 900;
@@ -3593,6 +5154,131 @@ body {
 .pt-print-area {
   display: none;
 }
+
+.pt-modern {
+  position: relative;
+  isolation: isolate;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(34, 211, 238, 0.15), transparent 28%),
+    radial-gradient(circle at 100% 10%, rgba(37, 99, 235, 0.12), transparent 26%),
+    linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%);
+}
+
+.pt-modern::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.42;
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.055) 1px, transparent 1px);
+  background-size: 36px 36px;
+  mask-image: linear-gradient(180deg, #000 0%, transparent 72%);
+}
+
+.pt-modern .pt-hero {
+  position: relative;
+}
+
+.pt-modern .pt-hero::before {
+  content: "";
+  position: absolute;
+  inset: -40% -10% auto auto;
+  width: 520px;
+  height: 520px;
+  border-radius: 999px;
+  background: radial-gradient(circle, rgba(34, 211, 238, 0.32), transparent 62%);
+}
+
+.pt-modern .pt-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(115deg, transparent 0 44%, rgba(34, 211, 238, 0.12) 44% 45%, transparent 45% 100%),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.06), transparent 42%);
+  pointer-events: none;
+}
+
+.pt-modern .odoo-input {
+  border-color: #dbe5f0;
+  border-radius: 13px;
+  background: #f8fafc;
+  min-height: 42px;
+  box-shadow: inset 0 1px 0 rgba(15, 23, 42, 0.02);
+}
+
+.pt-modern .odoo-input:focus {
+  border-color: #22d3ee;
+  box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.18);
+}
+
+.pt-modern .odoo-label {
+  color: #64748b;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.pt-modern input[type="checkbox"] {
+  accent-color: #0891b2;
+}
+
+.pt-modern .pt-preview-stage {
+  background:
+    radial-gradient(circle at 50% 0%, rgba(34, 211, 238, 0.22), transparent 48%),
+    linear-gradient(135deg, #020617 0%, #0f172a 100%);
+}
+
+.pt-modern .pt-fit-wrap {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.pt-modern .pt-fit-box {
+  margin-inline: auto;
+  overflow: visible;
+}
+
+.pt-modern .pt-fit-scale {
+  transform-origin: top left;
+}
+
+.pt-modern .pt-empty-fit {
+  width: 100%;
+  aspect-ratio: 92 / 84;
+  min-height: 180px;
+}
+
+.pt-modern .pt-batch-fit {
+  min-width: 0;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  width: 100%;
+  padding: 6px;
+}
+
+.pt-modern .pt-batch-fit .pt-fit-wrap {
+  flex: 1 1 auto;
+}
+
+@media (max-width: 640px) {
+  .pt-modern {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+
+  .pt-modern .pt-segment {
+    width: 100%;
+  }
+
+  .pt-modern .pt-segment button {
+    flex: 1 1 0;
+  }
+}
+
 @media print {
   @page tag {
     size: A4 portrait;
@@ -3607,7 +5293,9 @@ body {
   }
   .pt-print-grid {
     display: grid;
-    grid-template-columns: repeat(2, 92mm);
+    /* Column width follows the selected tag size (--pt-w, set inline) so
+       smaller tags pack more per A4 row; auto-fill tiles the rest. */
+    grid-template-columns: repeat(auto-fill, var(--pt-w, 92mm));
     gap: 6mm;
     justify-content: center;
     align-content: start;
@@ -3615,4 +5303,661 @@ body {
   .pt-tag {
     break-inside: avoid;
   }
+  /* A-series mode: one tag per physical A sheet (no tiling). The @page size is
+     injected inline per the chosen A size (landscape); here we just stop the
+     grid from tiling and force a page break after each tag. */
+  .pt-print-sheet .pt-print-grid {
+    display: block;
+    gap: 0;
+  }
+  .pt-print-sheet .pt-tag {
+    break-after: page;
+    margin: 0 auto;
+  }
+  .pt-print-sheet .pt-tag:last-child {
+    break-after: auto;
+  }
+}
+
+/* ============================================================
+   POS v2 — unified top bar + product card grid + cart.
+   Declared unlayered (after @layer components) so these win over
+   any earlier duplicated .pos-* rules left by iterative edits.
+   ============================================================ */
+.pos-shell-v2 {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background: #eef2f7;
+}
+.pos-topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 9px 14px;
+  background: #ffffff;
+  border-bottom: 1px solid var(--odoo-border-strong);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.pos-topbar-brand { flex: 0 0 auto; }
+.pos-topbar-logo {
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  color: var(--odoo-primary-dark);
+}
+.pos-topbar-search { flex: 1 1 auto; min-width: 0; max-width: 560px; }
+.pos-topbar-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.pos-topbar-customer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 260px;
+  border: 1px solid var(--odoo-border-strong);
+  border-radius: 11px;
+  padding: 5px 10px 5px 6px;
+  background: #ffffff;
+  transition: border-color 120ms ease, box-shadow 140ms ease;
+}
+.pos-topbar-customer:hover {
+  border-color: var(--odoo-primary-light);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.12);
+}
+.pos-topbar-customer-avatar {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 999px;
+  background: var(--odoo-primary);
+  color: #fff;
+  font-weight: 900;
+  font-size: 13px;
+}
+.pos-topbar-customer-name {
+  display: block;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--odoo-text-strong);
+}
+.pos-topbar-customer-sub {
+  display: block;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--odoo-text-muted);
+}
+.pos-topbar-customer-empty {
+  background: var(--odoo-primary-50);
+  border-color: var(--odoo-primary-200);
+  color: var(--odoo-primary-dark);
+  font-size: 12px;
+  font-weight: 800;
+  padding: 9px 14px;
+}
+.pos-topbar-seller {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: 170px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--odoo-text-muted);
+  white-space: nowrap;
+}
+.pos-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(380px, 440px);
+  overflow: hidden;
+}
+.pos-shell-v2 .pos-add-bar {
+  display: none;
+}
+
+@media (max-width: 960px) {
+  .pos-shell-v2 {
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .pos-topbar {
+    position: sticky;
+    top: 0;
+    z-index: 30;
+  }
+  .pos-topbar-search,
+  .pos-topbar-seller {
+    display: none;
+  }
+  .pos-body {
+    display: block;
+  }
+  .pos-browse-panel {
+    display: none;
+  }
+  .pos-shell-v2 .pos-add-bar {
+    display: flex;
+  }
+  .pos-shell-v2 .pos-products,
+  .pos-shell-v2 .pos-order {
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    overflow: visible;
+  }
+  .pos-shell-v2 .pos-product-list,
+  .pos-shell-v2 .pos-order-lines {
+    overflow: visible;
+  }
+  .pos-shell-v2 .pos-order-summary {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+/* Cart split into two distinct cards: items (card 1) + summary/checkout (card 2). */
+.pos-shell-v2 .pos-order {
+  background: #eef2f7;
+}
+.pos-shell-v2 .pos-order-lines {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 12px 12px 8px;
+  padding: 6px;
+  border: 1px solid var(--odoo-border-strong);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.pos-shell-v2 .pos-order-summary {
+  margin: 0 12px 12px;
+  border: 1px solid var(--odoo-border-strong);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+@media (max-width: 960px) {
+  /* Keep the summary card lifted off the bottom edge while sticky. */
+  .pos-shell-v2 .pos-order-summary {
+    margin: 0 10px 10px;
+  }
+}
+
+/* ============================================================
+   POS single-column cart (product browse grid removed).
+   The cart fills the full width instead of leaving the old
+   460px right-pane gap. Unlayered so it wins over earlier rules.
+   ============================================================ */
+.pos-shell {
+  grid-template-columns: minmax(0, 1fr);
+}
+.pos-shell > .pos-order {
+  background: #eef2f7;
+  box-shadow: none;
+}
+/* Add-bar must stay visible on desktop now that there is no product grid. */
+.pos-shell .pos-add-bar {
+  display: flex;
+}
+/* Two distinct cards inside the cart: items (card 1) + summary/checkout (card 2). */
+.pos-shell .pos-order-lines {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 12px 12px 8px;
+  padding: 6px;
+  border: 1px solid var(--odoo-border-strong);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.pos-shell .pos-order-summary {
+  margin: 0 12px 12px;
+  border: 1px solid var(--odoo-border-strong);
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+@media (max-width: 960px) {
+  .pos-shell .pos-order-summary {
+    margin: 0 10px 10px;
+  }
+}
+
+/* ============================================================
+   POS 2-column layout: left = cart (steps + add + lines),
+   right = checkout card (totals + save). Fresh classes so they
+   don't collide with the older duplicated .pos-shell rules.
+   ============================================================ */
+.pos-shell2 {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 400px);
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  background: #eef2f7;
+}
+.pos-shell2 .pos-order-left {
+  min-width: 0;
+  box-shadow: none;
+  border-right: 1px solid var(--odoo-border-strong);
+}
+/* Add-product bar stays visible (an earlier rule hid it >960px). */
+.pos-shell2 .pos-add-bar {
+  display: flex;
+}
+.pos-checkout-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow-y: auto;
+  background: #eef2f7;
+  padding: 12px;
+}
+.pos-checkout-card {
+  border: 1px solid var(--odoo-border-strong);
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+@media (max-width: 1024px) {
+  .pos-shell2 {
+    display: block;
+    height: auto;
+    min-height: 100dvh;
+    overflow: visible;
+  }
+  .pos-shell2 .pos-order-left {
+    height: auto;
+    max-height: none;
+    min-height: 0;
+    overflow: visible;
+    border-right: 0;
+  }
+  .pos-shell2 .pos-order-lines,
+  .pos-shell2 .pos-product-list {
+    overflow: visible;
+  }
+  .pos-checkout-col {
+    position: sticky;
+    bottom: 0;
+    z-index: 20;
+    padding: 8px;
+    background: rgba(238, 242, 247, 0.96);
+    backdrop-filter: blur(4px);
+    padding-bottom: calc(8px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ============================================================
+   POS-terminal look for the 2-column layout (.pos-shell2):
+   prominent total + a hero full-width pay button on the right.
+   ============================================================ */
+.pos-shell2 .pos-order-left {
+  background: #eef2f7;
+}
+.pos-shell2 .pos-checkout-card .pos-total-line {
+  margin-top: 8px;
+  padding: 14px 16px;
+  border-top: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--odoo-primary-50), #ffffff);
+  box-shadow: inset 0 0 0 1px var(--odoo-primary-200);
+}
+.pos-shell2 .pos-checkout-card .pos-total-line .font-mono {
+  font-size: 28px;
+  line-height: 1.1;
+}
+.pos-shell2 .pos-action-row {
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+/* Pay button = the hero: full width, tall, first in the row. */
+.pos-shell2 .pos-action-row .pos-cta {
+  flex: 1 1 100%;
+  order: -1;
+  min-height: 58px;
+  font-size: 17px;
+  font-weight: 900;
+  border-radius: 14px;
+}
+.pos-shell2 .pos-action-row .pos-iconaction {
+  flex: 1 1 0;
+  min-height: 46px;
+}
+/* On a wide screen the right column reads like a fixed payment rail. */
+@media (min-width: 1025px) {
+  .pos-shell2 .pos-checkout-col {
+    background: #e2e8f0;
+  }
+  .pos-shell2 .pos-checkout-card {
+    position: sticky;
+    top: 12px;
+  }
+}
+
+/* ============================================================
+   POS compact sizing — denser layout (smaller paddings, fonts,
+   badges, buttons). Scoped + last so it wins.
+   ============================================================ */
+.pos-shell2 .pos-flow-panel {
+  padding: 8px 10px;
+}
+.pos-shell2 .pos-flow-list {
+  gap: 8px;
+}
+.pos-shell2 .pos-step-card {
+  padding: 8px 10px;
+  border-radius: 10px;
+  gap: 8px;
+}
+.pos-shell2 .pos-step-badge {
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+}
+.pos-shell2 .pos-step-title {
+  font-size: 12px;
+}
+.pos-shell2 .pos-step-text {
+  font-size: 10px;
+  margin-top: 1px;
+}
+.pos-shell2 .pos-order-header {
+  padding: 8px 10px;
+  gap: 6px;
+}
+.pos-shell2 .pos-customer-card,
+.pos-shell2 .pos-customer-empty {
+  padding: 8px 10px;
+}
+.pos-shell2 .pos-add-bar {
+  padding: 8px 10px;
+  gap: 6px;
+}
+.pos-shell2 .pos-add-big {
+  min-height: 40px;
+  font-size: 13px;
+  border-radius: 10px;
+}
+.pos-shell2 .pos-order-lines {
+  margin: 8px 8px 6px;
+  padding: 4px;
+  border-radius: 12px;
+}
+.pos-shell2 .pos-line {
+  padding: 8px;
+}
+.pos-shell2 .pos-checkout-col {
+  padding: 8px;
+}
+.pos-shell2 .pos-checkout-card .pos-total-line {
+  margin-top: 6px;
+  padding: 10px 12px;
+  border-radius: 12px;
+}
+.pos-shell2 .pos-checkout-card .pos-total-line .font-mono {
+  font-size: 22px;
+}
+.pos-shell2 .pos-action-row {
+  margin-top: 8px;
+  gap: 6px;
+}
+.pos-shell2 .pos-action-row .pos-cta {
+  min-height: 46px;
+  font-size: 14px;
+  border-radius: 12px;
+}
+.pos-shell2 .pos-action-row .pos-iconaction {
+  min-height: 40px;
+}
+
+/* ============================================================
+   PREMIUM MINIMAL — refined "blue business" pass for the POS
+   order screen (.pos-shell2). Appended last so it wins the
+   cascade over the compact/base rules above. Direction: calmer
+   whitespace, hairline borders, soft shadows, ONE confident
+   blue accent, and a clear hierarchy (pay = hero, add = primary,
+   promo = quiet). Overflow on .pos-order-lines is intentionally
+   untouched — it is the cart scroll container.
+   ============================================================ */
+
+/* — Canvas & rails ---------------------------------------- */
+.pos-shell2 {
+  background: #f1f5f9;
+}
+.pos-shell2 .pos-order-left {
+  background: #f8fafc;
+  border-right: 1px solid #e6ebf2;
+}
+.pos-shell2 .pos-checkout-col {
+  background: #f1f5f9;
+  padding: 14px;
+}
+@media (min-width: 1025px) {
+  .pos-shell2 .pos-checkout-col {
+    background: #eef2f7;
+  }
+}
+
+/* — Step flow: quiet cards, blue badge on active/done ----- */
+.pos-shell2 .pos-flow-panel {
+  background: transparent;
+  padding: 12px 12px 4px;
+}
+.pos-shell2 .pos-flow-list {
+  gap: 10px;
+}
+.pos-shell2 .pos-step-card {
+  border: 1px solid #e6ebf2;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
+}
+.pos-shell2 .pos-step-badge {
+  width: 24px;
+  height: 24px;
+  background: #e2e8f0;
+  color: #64748b;
+}
+.pos-shell2 .pos-step-done {
+  background: var(--odoo-primary-50);
+  border-color: var(--odoo-primary-200);
+}
+.pos-shell2 .pos-step-done .pos-step-badge,
+.pos-shell2 .pos-step-active .pos-step-badge {
+  background: var(--odoo-primary);
+  color: #ffffff;
+}
+.pos-shell2 .pos-step-active {
+  border-color: var(--odoo-primary);
+  box-shadow: 0 0 0 1px var(--odoo-primary), 0 6px 16px rgba(37, 99, 235, 0.12);
+}
+.pos-shell2 .pos-step-disabled {
+  opacity: 0.55;
+}
+
+/* — Order header & customer ------------------------------- */
+.pos-shell2 .pos-order-header {
+  border-bottom: 1px solid #e6ebf2;
+  background: #ffffff;
+  padding: 12px 14px;
+}
+.pos-shell2 .pos-customer-card {
+  border: 1px solid var(--odoo-primary-200);
+  border-radius: 12px;
+  background: var(--odoo-primary-50);
+}
+.pos-shell2 .pos-customer-card:hover {
+  border-color: var(--odoo-primary-light);
+  background: var(--odoo-primary-50);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.10);
+}
+.pos-shell2 .pos-customer-empty {
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+}
+.pos-shell2 .pos-customer-empty:hover {
+  border-color: var(--odoo-primary);
+  color: var(--odoo-primary);
+  background: var(--odoo-primary-50);
+}
+
+/* — Add bar: soft-blue add (primary), quiet outlined promo - */
+.pos-shell2 .pos-add-bar {
+  border-bottom: 1px solid #e6ebf2;
+  background: #ffffff;
+  padding: 10px 14px;
+}
+.pos-shell2 .pos-add-big {
+  min-height: 44px;
+  border-radius: 12px;
+  background: var(--odoo-primary-50);
+  color: var(--odoo-primary-dark);
+  border: 1.5px solid var(--odoo-primary);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  letter-spacing: 0.01em;
+}
+.pos-shell2 .pos-add-big:hover:not(:disabled) {
+  background: var(--odoo-primary-100);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.16);
+  transform: translateY(-1px);
+}
+.pos-shell2 .pos-promo-chip {
+  height: 44px;
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--odoo-primary-dark);
+  border: 1.5px solid var(--odoo-primary-200);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+}
+.pos-shell2 .pos-promo-chip:hover {
+  filter: none;
+  background: var(--odoo-primary-50);
+  border-color: var(--odoo-primary);
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.14);
+}
+.pos-shell2 .pos-promo-chip .pos-promo-chip-count {
+  background: var(--odoo-primary);
+  color: #ffffff;
+}
+
+/* — Cart card & table: airy rows, hairlines, left accent -- */
+.pos-shell2 .pos-order-lines {
+  margin: 12px 14px;
+  padding: 0;
+  border: 1px solid #e6ebf2;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+}
+.pos-shell2 .pos-cart-table thead th {
+  background: #f8fafc;
+  color: #94a3b8;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  padding: 11px 12px;
+  border-bottom: 1px solid #e6ebf2;
+}
+.pos-shell2 .pos-cart-cell {
+  padding: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+.pos-shell2 .pos-cart-row:hover .pos-cart-cell {
+  background: #f8fafc;
+}
+.pos-shell2 .pos-cart-row-selected .pos-cart-cell {
+  background: var(--odoo-primary-50);
+}
+.pos-shell2 .pos-cart-row-selected .pos-cart-product {
+  box-shadow: inset 3px 0 0 var(--odoo-primary);
+}
+.pos-shell2 .pos-cart-row-bonus .pos-cart-cell {
+  background: #f0fdf4;
+}
+.pos-shell2 .pos-cart-row-promo .pos-cart-cell {
+  background: #fffbeb;
+}
+.pos-shell2 .pos-qty-input,
+.pos-shell2 .pos-cart-stepper .pos-qty-input {
+  height: 34px;
+  width: 54px;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 9px;
+  font-size: 13px;
+}
+.pos-shell2 .pos-qty-input:focus {
+  outline: none;
+  border-color: var(--odoo-primary);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+/* — Empty state ------------------------------------------- */
+.pos-shell2 .pos-cart-empty {
+  border: 0;
+}
+.pos-shell2 .pos-cart-empty-icon {
+  width: 68px;
+  height: 68px;
+  background: var(--odoo-primary-50);
+  color: var(--odoo-primary);
+}
+
+/* — Checkout card, total & hero CTA ----------------------- */
+.pos-shell2 .pos-checkout-card {
+  border: 1px solid #e6ebf2;
+  border-radius: 18px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
+}
+.pos-shell2 .pos-checkout-card .pos-total-line {
+  margin-top: 8px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: var(--odoo-primary-50);
+  box-shadow: inset 0 0 0 1px var(--odoo-primary-100);
+}
+.pos-shell2 .pos-checkout-card .pos-total-line .font-mono {
+  font-size: 26px;
+  color: var(--odoo-primary-dark);
+}
+.pos-shell2 .pos-action-row .pos-cta {
+  min-height: 52px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--odoo-primary) 0%, var(--odoo-primary-dark) 100%);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.28);
+  letter-spacing: 0.02em;
+}
+.pos-shell2 .pos-action-row .pos-cta:hover:not(:disabled) {
+  filter: brightness(1.04);
+  box-shadow: 0 10px 26px rgba(37, 99, 235, 0.36);
+}
+.pos-shell2 .pos-action-row .pos-iconaction {
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
 }

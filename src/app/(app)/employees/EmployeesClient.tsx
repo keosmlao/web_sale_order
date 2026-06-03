@@ -191,7 +191,7 @@ export default function EmployeesClient({
         <>
           <div
             className={
-              "odoo-card overflow-hidden transition-opacity" +
+              "odoo-card overflow-hidden transition-opacity " +
               (isPending ? "opacity-60" : "opacity-100")
             }
           >
@@ -461,7 +461,7 @@ function EmployeeModal({
             </div>
           )}
 
-          <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-odoo-border pt-4">
+          <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-odoo-border pt-4 min-w-0">
             {mode === "edit" && employee && (
               <DeleteButton
                 employeeCode={employee.employeeCode}
@@ -763,7 +763,7 @@ function StatusBadge({ status }: { status: string }) {
       ? "odoo-pill-success"
       : "bg-odoo-border text-odoo-text-strong";
   return (
-    <span className={"inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-bold" + cls}>
+    <span className={"inline-flex items-center gap-1 rounded px-2 py-0.5 text-xs font-bold " + cls}>
       {label}
     </span>
   );

@@ -435,6 +435,11 @@ export async function POST(request: NextRequest) {
         customerId?: unknown;
         warehouseCode?: unknown;
         deliveryName?: unknown;
+        transportCode?: unknown;
+        transportName?: unknown;
+        receiveDate?: unknown;
+        deliveryRound?: unknown;
+        deliveryLocation?: unknown;
         discountPct?: unknown;
         note?: unknown;
         extraDiscount?: unknown;
@@ -453,6 +458,33 @@ export async function POST(request: NextRequest) {
   const deliveryName =
     typeof body?.deliveryName === "string" && body.deliveryName.trim() !== ""
       ? body.deliveryName.trim()
+      : null;
+  const transportCode =
+    typeof body?.transportCode === "string" && body.transportCode.trim() !== ""
+      ? body.transportCode.trim()
+      : null;
+  const transportName =
+    typeof body?.transportName === "string" && body.transportName.trim() !== ""
+      ? body.transportName.trim()
+      : null;
+  const receiveDateText =
+    typeof body?.receiveDate === "string" && body.receiveDate.trim() !== ""
+      ? body.receiveDate.trim()
+      : null;
+  if (receiveDateText && !/^\d{4}-\d{2}-\d{2}$/.test(receiveDateText)) {
+    return NextResponse.json(
+      { error: "receiveDate must be YYYY-MM-DD" },
+      { status: 400 },
+    );
+  }
+  const deliveryRound =
+    typeof body?.deliveryRound === "string" && body.deliveryRound.trim() !== ""
+      ? body.deliveryRound.trim()
+      : null;
+  const deliveryLocation =
+    typeof body?.deliveryLocation === "string" &&
+    body.deliveryLocation.trim() !== ""
+      ? body.deliveryLocation.trim()
       : null;
   const note =
     typeof body?.note === "string" && body.note.trim() !== ""
@@ -1006,6 +1038,16 @@ export async function POST(request: NextRequest) {
   // each piece in ic_trans.remark.
   const remarkParts: string[] = [];
   if (deliveryName) remarkParts.push(deliveryName);
+  if (transportName || transportCode) {
+    remarkParts.push(
+      `ຂົນສົ່ງ: ${transportName ?? transportCode}${
+        transportName && transportCode ? ` (${transportCode})` : ""
+      }`,
+    );
+  }
+  if (receiveDateText) remarkParts.push(`ວັນຮັບ: ${receiveDateText}`);
+  if (deliveryRound) remarkParts.push(`ຮອບສົ່ງ: ${deliveryRound}`);
+  if (deliveryLocation) remarkParts.push(`ສະຖານທີ່ຮັບ: ${deliveryLocation}`);
   if (appliedExtraDiscount > 0) {
     remarkParts.push(`ສ່ວນຫຼຸດທ້າຍບິນ: ${appliedExtraDiscount}`);
   }
@@ -1239,7 +1281,7 @@ export async function POST(request: NextRequest) {
           ${customerId},
           ${branchCode}, ${departmentCode},
           ${primaryWh}, ${defaultShelfCode},
-          CURRENT_DATE, CURRENT_DATE,
+          COALESCE(${receiveDateText}::date, CURRENT_DATE), CURRENT_DATE,
           ${KIP_CURRENCY_CODE}, ${exchangeRate},
           ${headerValueThb}, ${headerValueKip},
           ${headerDiscountThb}, ${headerDiscountKip},

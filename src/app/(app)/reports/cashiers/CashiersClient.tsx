@@ -139,7 +139,8 @@ export default function CashiersClient() {
         <div className="border-b border-odoo-border px-3 py-2 text-sm font-bold text-odoo-text-strong">
           ສະຫຼຸບຕໍ່ Cashier
         </div>
-        <table className="odoo-table">
+        <div className="overflow-x-auto">
+        <table className="odoo-table min-w-[640px]">
           <thead className="bg-odoo-surface-muted text-left text-[11px] font-bold uppercase tracking-wider text-odoo-text-muted">
             <tr>
               <th className="px-3 py-2">Cashier</th>
@@ -192,13 +193,15 @@ export default function CashiersClient() {
             )}
           </tbody>
         </table>
+        </div>
       </section>
 
       <section className="rounded-md border border-odoo-border bg-odoo-surface">
         <div className="border-b border-odoo-border px-3 py-2 text-sm font-bold text-odoo-text-strong">
           ລາຍລະອຽດຕາມວັນ
         </div>
-        <table className="odoo-table">
+        <div className="overflow-x-auto">
+        <table className="odoo-table min-w-[760px]">
           <thead className="bg-odoo-surface-muted text-left text-[11px] font-bold uppercase tracking-wider text-odoo-text-muted">
             <tr>
               <th className="px-3 py-2">ວັນ</th>
@@ -232,6 +235,7 @@ export default function CashiersClient() {
             )}
           </tbody>
         </table>
+        </div>
       </section>
     </div>
   );

@@ -111,7 +111,7 @@ export default function SalesWarehousesClient({
       ) : null}
 
       <div className="rounded-md border border-odoo-border bg-odoo-surface">
-        <div className="flex items-center justify-between gap-3 border-b border-odoo-border px-4 py-3">
+        <div className="flex flex-col gap-3 border-b border-odoo-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-sm font-bold text-odoo-text-strong">
               ສາງທີ່ເລືອກ {selected.size} ສາງ
@@ -124,7 +124,7 @@ export default function SalesWarehousesClient({
             type="button"
             onClick={save}
             disabled={!canManage || saving || selected.size === 0}
-            className="odoo-btn odoo-btn-primary"
+            className="odoo-btn odoo-btn-primary w-full sm:w-auto"
           >
             {saving ? "ກຳລັງບັນທຶກ..." : "ບັນທຶກ"}
           </button>
@@ -142,7 +142,7 @@ export default function SalesWarehousesClient({
         ) : null}
 
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+          <table className="min-w-[400px] w-full text-sm">
             <thead className="bg-odoo-surface-muted text-left text-xs font-bold uppercase tracking-wider text-odoo-text-muted">
               <tr>
                 <th className="px-4 py-3">ໃຊ້ຂາຍ</th>

@@ -1,5 +1,6 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Noto_Sans_Lao } from "next/font/google";
+import { PwaRegistrar } from "@/components/PwaRegistrar";
 import "./globals.css";
 
 const notoSansLao = Noto_Sans_Lao({
@@ -9,8 +10,29 @@ const notoSansLao = Noto_Sans_Lao({
 });
 
 export const metadata: Metadata = {
+  applicationName: "ODG Sale",
   title: "ODG ຂາຍ",
   description: "ລະບົບຈັດການການຂາຍ",
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "ODG Sale",
+  },
+  icons: {
+    icon: [
+      { url: "/odm.png", sizes: "852x606", type: "image/png" },
+    ],
+    apple: [
+      { url: "/odm.png", sizes: "852x606", type: "image/png" },
+    ],
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#4f46e5",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({
@@ -23,7 +45,10 @@ export default function RootLayout({
       lang="lo"
       className={`${notoSansLao.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <PwaRegistrar />
+        {children}
+      </body>
     </html>
   );
 }

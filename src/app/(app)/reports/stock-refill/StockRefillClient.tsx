@@ -205,7 +205,7 @@ export default function StockRefillClient({
       {/* Filters */}
       <section className="mb-4 rounded-md border border-odoo-border bg-odoo-surface px-4 py-3">
         <div className="flex flex-wrap items-end gap-3">
-          <label className="grid gap-1">
+          <label className="grid gap-1 w-full sm:w-auto">
             <span className="odoo-label">ສາງ</span>
             <select
               value={warehouseCode}
@@ -214,7 +214,7 @@ export default function StockRefillClient({
                 setWarehouseCode(next);
                 void load(next, filter);
               }}
-              className="odoo-input h-9 min-w-48"
+              className="odoo-input h-9 w-full sm:min-w-48 sm:w-auto"
             >
               <option value="">ທຸກສາງ</option>
               {warehouses.map((wh) => (
@@ -224,7 +224,7 @@ export default function StockRefillClient({
               ))}
             </select>
           </label>
-          <label className="grid gap-1">
+          <label className="grid gap-1 w-full sm:w-auto">
             <span className="odoo-label">ກອງຕາມ</span>
             <select
               value={filter}
@@ -233,7 +233,7 @@ export default function StockRefillClient({
                 setFilter(next);
                 void load(warehouseCode, next);
               }}
-              className="odoo-input h-9 min-w-48"
+              className="odoo-input h-9 w-full sm:min-w-48 sm:w-auto"
             >
               <option value="needs_refill">Stock ≤ Target</option>
               <option value="critical">Stock ≤ Minimum (ດ່ວນ)</option>
@@ -265,7 +265,7 @@ export default function StockRefillClient({
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="odoo-table">
+          <table className="odoo-table min-w-[720px]">
             <thead className="bg-odoo-surface-muted text-left text-xs font-bold uppercase tracking-wider text-odoo-text-muted">
               <tr>
                 <th className="px-4 py-3">ສິນຄ້າ</th>
@@ -380,7 +380,7 @@ export default function StockRefillClient({
           </div>
         </div>
         <div className="overflow-x-auto">
-          <table className="odoo-table">
+          <table className="odoo-table min-w-[720px]">
             <thead className="bg-odoo-surface-muted text-left text-xs font-bold uppercase tracking-wider text-odoo-text-muted">
               <tr>
                 <th className="px-4 py-3">ສິນຄ້າ</th>

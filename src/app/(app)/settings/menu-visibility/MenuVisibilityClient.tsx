@@ -152,7 +152,7 @@ export default function MenuVisibilityClient() {
         <div className="text-sm text-odoo-text-muted">ກຳລັງໂຫຼດ…</div>
       ) : (
         <div className="overflow-x-auto rounded-md border border-odoo-border bg-odoo-surface">
-          <table className="w-full border-collapse text-sm">
+          <table className="min-w-[480px] w-full border-collapse text-sm">
             <thead>
               <tr className="border-b border-odoo-border bg-odoo-surface-muted">
                 <th className="px-3 py-2 text-left font-bold text-odoo-text-strong">ເມນູ</th>
@@ -200,7 +200,7 @@ export default function MenuVisibilityClient() {
       )}
 
       {canManage ? (
-        <div className="mt-4 flex items-center gap-3">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
           <button
             type="button"
             onClick={save}

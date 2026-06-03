@@ -1,0 +1,28 @@
+{
+  "name": "ODG Sale Order",
+  "short_name": "ODG Sale",
+  "description": "ODG web POS and sale order system",
+  "lang": "lo",
+  "dir": "ltr",
+  "start_url": "/cashier",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f8fafc",
+  "theme_color": "#4f46e5",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/odm.png",
+      "sizes": "852x606",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/odm.png",
+      "sizes": "852x606",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

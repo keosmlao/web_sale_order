@@ -132,7 +132,7 @@ export default async function ShiftReportPage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
-      <header className="mb-4 flex items-end justify-between gap-3">
+      <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <div className="text-[11px] font-bold uppercase tracking-widest text-odoo-text-muted">
             Shift {isClosed ? "Z" : "X"} report
@@ -210,6 +210,7 @@ export default async function ShiftReportPage({
             ບໍ່ມີການເຄື່ອນເງິນໃນກະນີ້
           </p>
         ) : (
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-[11px] font-bold uppercase text-odoo-text-muted">
               <tr>
@@ -241,6 +242,7 @@ export default async function ShiftReportPage({
               </tr>
             </tbody>
           </table>
+          </div>
         )}
       </section>
 
@@ -301,6 +303,7 @@ export default async function ShiftReportPage({
           <h2 className="mb-3 text-sm font-bold text-odoo-text-strong">
             ບິນທີ່ຮັບ ({settleRows.length})
           </h2>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="text-left text-[11px] font-bold uppercase text-odoo-text-muted">
               <tr>
@@ -345,6 +348,7 @@ export default async function ShiftReportPage({
               ))}
             </tbody>
           </table>
+          </div>
         </section>
       ) : null}
 

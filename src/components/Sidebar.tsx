@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { logoutAction } from "@/app/login/actions";
 import type { AppRole } from "@/lib/roles";
 
@@ -330,6 +330,11 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
   const router = useRouter();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const [mobileOpen, setMobileOpen] = useState(false);
+  // Live finger offset (px, ≤ 0) while swiping the drawer left to close it.
+  const [dragX, setDragX] = useState(0);
+  const dragXRef = useRef(0);
+  const dragStartX = useRef<number | null>(null);
 
   // Drop links the current role isn't allowed to see (e.g. the device
   // monitor is heads/managers only) or that an admin hid for this role via
@@ -354,11 +359,6 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
       .filter((s) => s.items.length > 0);
   }, [role, hiddenSet]);
 
-  // Flatten all items for the mobile horizontal scroller.
-  const mobileNavItems = visibleSections.flatMap((s) =>
-    s.items.flatMap((item) => (isNavGroup(item) ? item.children : [item])),
-  );
-
   const isHrefActive = useCallback(
     (href: string) => {
       if (href === "/cashier") {
@@ -372,10 +372,34 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
     [pathname],
   );
 
+  const closeMobileMenu = useCallback(() => {
+    dragStartX.current = null;
+    dragXRef.current = 0;
+    setDragX(0);
+    setMobileOpen(false);
+  }, []);
+
   useEffect(() => {
-    const id = window.setTimeout(() => setPendingHref(null), 0);
+    const id = window.setTimeout(() => {
+      setPendingHref(null);
+      closeMobileMenu();
+    }, 0);
     return () => window.clearTimeout(id);
-  }, [pathname]);
+  }, [pathname, closeMobileMenu]);
+
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeMobileMenu();
+    };
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prevOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [mobileOpen, closeMobileMenu]);
 
   const markPending = (href: string) => {
     if (!isHrefActive(href)) setPendingHref(href);
@@ -392,51 +416,231 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
       ) : null}
 
       {/* Mobile top header */}
-      <header className="sticky top-0 z-20 border-b border-white/5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-4 py-3 shadow-md md:hidden">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-9 w-auto items-center justify-center rounded-xl bg-white px-2 shadow-sm">
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-3 pb-2.5 pt-[calc(0.625rem+env(safe-area-inset-top))] shadow-md md:hidden">
+        <div className="flex min-w-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setMobileOpen(true)}
+            aria-label="ເປີດເມນູ"
+            aria-expanded={mobileOpen}
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-slate-200 transition hover:bg-white/10 hover:text-white active:scale-95"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+              <path d="M3 6h18" />
+              <path d="M3 12h18" />
+              <path d="M3 18h18" />
+            </svg>
+          </button>
+          <div className="flex h-8 w-auto shrink-0 items-center justify-center rounded-lg bg-white px-1.5 shadow-sm">
+            <img src="/odm.png" alt="ODIEN Mall" className="h-5 w-auto object-contain" />
+          </div>
+          <div className="min-w-0 leading-none">
+            <div className="truncate text-[15px] font-extrabold tracking-tight text-white">ODG ຂາຍ</div>
+          </div>
+        </div>
+        <form action={logoutAction} className="shrink-0">
+          <button
+            type="submit"
+            aria-label="ອອກຈາກລະບົບ"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-xl border border-white/10 text-slate-300 transition hover:bg-white/10 hover:text-white active:scale-95"
+          >
+            <LogoutIcon className="h-4 w-4" />
+          </button>
+        </form>
+      </header>
+
+      <div
+        onClick={closeMobileMenu}
+        aria-hidden
+        className={
+          "fixed inset-0 z-40 bg-slate-950/60 backdrop-blur-sm transition-opacity duration-300 md:hidden " +
+          (mobileOpen ? "opacity-100" : "pointer-events-none opacity-0")
+        }
+      />
+
+      <aside
+        role="dialog"
+        aria-modal="true"
+        aria-hidden={!mobileOpen}
+        aria-label="ເມນູຫຼັກ"
+        onTouchStart={(e) => {
+          dragStartX.current = e.touches[0].clientX;
+        }}
+        onTouchMove={(e) => {
+          if (dragStartX.current === null) return;
+          // Only follow the finger when swiping left (toward closed).
+          const nextDragX = Math.min(0, e.touches[0].clientX - dragStartX.current);
+          dragXRef.current = nextDragX;
+          setDragX(nextDragX);
+        }}
+        onTouchEnd={() => {
+          const shouldClose = dragXRef.current < -60;
+          dragStartX.current = null;
+          if (shouldClose) {
+            closeMobileMenu();
+            return;
+          }
+          dragXRef.current = 0;
+          setDragX(0);
+        }}
+        // While dragging, follow the finger with no transition; otherwise let
+        // the className translate handle the open/close slide animation.
+        style={dragX ? { transform: `translateX(${dragX}px)`, transition: "none" } : undefined}
+        className={
+          "fixed left-0 top-0 z-50 flex h-dvh max-h-dvh min-h-0 w-[88vw] max-w-80 flex-col overflow-hidden bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-900 shadow-2xl transition-transform duration-300 ease-out md:hidden " +
+          (mobileOpen ? "translate-x-0" : "-translate-x-full")
+        }
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-white/10 px-4 pb-3 pt-[calc(0.75rem+env(safe-area-inset-top))]">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="flex h-9 w-auto shrink-0 items-center justify-center rounded-xl bg-white px-2 shadow-sm">
               <img src="/odm.png" alt="ODIEN Mall" className="h-6 w-auto object-contain" />
             </div>
-            <div>
-              <div className="text-base font-extrabold leading-none text-white tracking-tight">ODG ຂາຍ</div>
-              <div className="mt-1 text-[10px] font-medium text-slate-400">ລະບົບຈັດການການຂາຍ</div>
+            <div className="min-w-0 leading-none">
+              <div className="truncate text-base font-extrabold tracking-tight text-white">ODG ຂາຍ</div>
+              <div className="mt-1 truncate text-[10px] font-medium text-slate-400">ລະບົບຈັດການການຂາຍ</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={closeMobileMenu}
+            aria-label="ປິດເມນູ"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 text-slate-300 transition hover:bg-white/10 hover:text-white active:scale-95"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+
+        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3 [-webkit-overflow-scrolling:touch]" aria-label="ເມນູ">
+          {visibleSections.map((section) => (
+            <div key={section.id} className="mb-1.5">
+              <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                {section.label}
+              </div>
+              <ul className="space-y-0.5">
+                {section.items.map((item) => {
+                  if (isNavGroup(item)) {
+                    const groupActive = item.children.some((c) => isHrefActive(c.href));
+                    const open = openGroups[item.id] ?? groupActive;
+                    return (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          aria-expanded={open}
+                          onClick={() =>
+                            setOpenGroups((prev) => ({
+                              ...prev,
+                              [item.id]: !(prev[item.id] ?? groupActive),
+                            }))
+                          }
+                          className={
+                            "flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition " +
+                            (groupActive
+                              ? "bg-white/10 text-white"
+                              : "text-slate-300 hover:bg-white/10 hover:text-white")
+                          }
+                        >
+                          <span className="shrink-0 text-slate-300">{item.icon}</span>
+                          <span className="min-w-0 flex-1 truncate text-left">{item.label}</span>
+                          <svg
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className={"h-3.5 w-3.5 shrink-0 transition-transform " + (open ? "rotate-180" : "")}
+                            aria-hidden
+                          >
+                            <path d="m6 9 6 6 6-6" />
+                          </svg>
+                        </button>
+                        {open ? (
+                          <ul className="mt-0.5 ml-4 space-y-0.5 border-l border-white/10 pl-3">
+                            {item.children.map((child) => {
+                              const childActive = isHrefActive(child.href);
+                              return (
+                                <li key={child.href}>
+                                  <Link
+                                    href={child.href}
+                                    prefetch
+                                    onPointerEnter={() => router.prefetch(child.href)}
+                                    onClick={() => {
+                                      markPending(child.href);
+                                      closeMobileMenu();
+                                    }}
+                                    className={
+                                      "flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition " +
+                                      (childActive
+                                        ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
+                                        : "text-slate-400 hover:bg-white/10 hover:text-white")
+                                    }
+                                  >
+                                    <span className="shrink-0">{child.icon}</span>
+                                    <span className="min-w-0 flex-1 truncate">{child.label}</span>
+                                  </Link>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        ) : null}
+                      </li>
+                    );
+                  }
+                  const active = isHrefActive(item.href);
+                  return (
+                    <li key={item.href}>
+                      <Link
+                        href={item.href}
+                        prefetch
+                        onPointerEnter={() => router.prefetch(item.href)}
+                        onClick={() => {
+                          markPending(item.href);
+                          closeMobileMenu();
+                        }}
+                        className={
+                          "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition " +
+                          (active
+                            ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
+                            : "text-slate-300 hover:bg-white/10 hover:text-white")
+                        }
+                      >
+                        <span className="shrink-0">{item.icon}</span>
+                        <span className="flex-1 truncate">{item.label}</span>
+                        {active ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-white/90" aria-hidden /> : null}
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ))}
+        </nav>
+
+        <div className="shrink-0 border-t border-white/10 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
+          <div className="mb-2 flex items-center gap-3 px-1">
+            <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-sm font-bold text-white">
+              {userInitial}
+            </div>
+            <div className="min-w-0">
+              <div className="truncate text-sm font-bold text-white" title={displayName}>{displayName}</div>
+              <div className="font-mono text-[11px] text-slate-400">{employeeCode}</div>
             </div>
           </div>
           <form action={logoutAction}>
             <button
               type="submit"
-              aria-label="ອອກຈາກລະບົບ"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 text-slate-300 hover:bg-white/10 hover:text-white"
+              className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-sm font-semibold text-slate-200 transition hover:bg-white/10 hover:text-white active:scale-[0.99]"
             >
               <LogoutIcon className="h-4 w-4" />
+              <span>ອອກຈາກລະບົບ</span>
             </button>
           </form>
         </div>
-        <nav className="mt-3 flex gap-2 overflow-x-auto pb-1.5 scrollbar-none">
-          {mobileNavItems.map((item) => {
-            const active = isHrefActive(item.href);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                prefetch
-                onPointerEnter={() => router.prefetch(item.href)}
-                onClick={() => markPending(item.href)}
-                className={
-                  "inline-flex shrink-0 items-center gap-2 rounded-xl border px-3.5 py-1.5 text-xs font-bold transition-all " +
-                  (active
-                    ? "bg-indigo-600 border-indigo-500 text-white shadow-md shadow-indigo-600/20"
-                    : "bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white")
-                }
-              >
-                {item.icon}
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
-      </header>
+      </aside>
 
       {/* Desktop dark sidebar */}
       <aside className="sbd-shell hidden md:flex">

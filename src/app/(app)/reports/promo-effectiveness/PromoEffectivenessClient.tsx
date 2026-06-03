@@ -88,7 +88,7 @@ export default function PromoEffectivenessClient() {
           <button
             type="button"
             onClick={load}
-            className="odoo-btn odoo-btn-primary"
+            className="odoo-btn odoo-btn-primary w-full sm:w-auto"
           >
             ໂຫລດໃໝ່
           </button>
@@ -102,7 +102,7 @@ export default function PromoEffectivenessClient() {
       ) : null}
 
       <div className="overflow-x-auto rounded-md border border-odoo-border bg-odoo-surface">
-        <table className="odoo-table">
+        <table className="odoo-table min-w-[640px]">
           <thead className="bg-odoo-surface-muted text-left text-[11px] font-bold uppercase tracking-wider text-odoo-text-muted">
             <tr>
               <th className="px-3 py-2">ໂປຣໂມຊັນ</th>
