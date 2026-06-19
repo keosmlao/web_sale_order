@@ -3,28 +3,27 @@
 import { useTransition } from "react";
 import { usePathname, useRouter } from "next/navigation";
 
-export type SalespersonStat = {
- userOwner: string | null;
- employeeCode: string | null;
+// One employee's realised receipt sales (baht) broken down by 'YYYY-MM' month.
+export type MonthlyReceiptRow = {
+ code: string;
  displayName: string;
  positionCode: string | null;
- pendingCount: number;
- completedCount: number;
- cancelledCount: number;
- pendingAmount: number;
- completedAmount: number;
- cancelledAmount: number;
- activeTotal: number; // pending + completed
- activeOrders: number;
- avgOrderValue: number;
+ byMonth: Record<string, number>;
+ total: number;
 };
 
-type Filters = { from: string; to: string; status:"ACTIVE" |"ALL" };
+type Filters = { from: string; to: string };
 
 const moneyFmt = new Intl.NumberFormat("en-US", {
  minimumFractionDigits: 0,
  maximumFractionDigits: 0,
 });
+
+// 'YYYY-MM' → 'MM/YYYY' for the monthly pivot column headers.
+function fmtMonth(ym: string): string {
+ const [y, m] = ym.split("-");
+ return m && y ? `${m}/${y}` : ym;
+}
 
 const POSITION_LABEL: Record<string, string> = {
 "11":"ຜູ່ຈັດການ",
@@ -33,14 +32,16 @@ const POSITION_LABEL: Record<string, string> = {
 };
 
 export default function SalespeopleClient({
- stats,
- grandTotal,
- grandOrders,
+ grandReceipts,
+ grandBills,
+ months,
+ monthly,
  filters,
 }: {
- stats: SalespersonStat[];
- grandTotal: number;
- grandOrders: number;
+ grandReceipts: number;
+ grandBills: number;
+ months: string[];
+ monthly: MonthlyReceiptRow[];
  filters: Filters;
 }) {
  const router = useRouter();
@@ -49,9 +50,8 @@ export default function SalespeopleClient({
 
  function pushFilters(patch: Partial<Record<keyof Filters, string | null>>) {
  const params = new URLSearchParams();
- if (filters.from) params.set("from ", filters.from);
+ if (filters.from) params.set("from", filters.from);
  if (filters.to) params.set("to", filters.to);
- if (filters.status && filters.status !=="ACTIVE") params.set("status", filters.status);
  for (const [k, v] of Object.entries(patch)) {
  if (v === null || v ==="") params.delete(k);
  else params.set(k, v);
@@ -62,7 +62,7 @@ export default function SalespeopleClient({
  });
  }
 
- // Top 3 medal colors for visual ranking.
+ // Top 3 medal colours for the leaderboard ranking.
  const medal = (i: number): string => {
  if (i === 0) return"bg-odoo-primary text-white";
  if (i === 1) return"bg-odoo-primary-100 text-odoo-primary";
@@ -70,35 +70,40 @@ export default function SalespeopleClient({
  return"bg-odoo-surface-muted text-odoo-text-muted";
  };
 
- // Best for the progress bar baseline so #1 stretches across full width.
- const topAmount = stats[0]?.activeTotal ?? 0;
+ // Column totals for the monthly receipt pivot (baht).
+ const monthTotals: Record<string, number> = {};
+ for (const ym of months) {
+ monthTotals[ym] = monthly.reduce((s, r) => s + (r.byMonth[ym] ?? 0), 0);
+ }
 
  return (
  <div className="odoo-page">
  <div className="odoo-page-header">
  <div>
- <h1 className="odoo-page-title">ຍອດຂາຍຕາມພະນັກງານ</h1>
- <p className="odoo-page-subtitle">{filters.from} → {filters.to}</p>
+ <h1 className="odoo-page-title">ຍອດຂາຍຈິງຕາມພະນັກງານ</h1>
+ <p className="odoo-page-subtitle">
+ {filters.from} → {filters.to} · ໜ້າຮ້ານ ຂົວຫຼວງ
+ </p>
  </div>
  <div className="odoo-card flex flex-wrap gap-6 px-4 py-3 text-right w-full sm:w-auto">
  <div className="min-w-0">
- <div className="odoo-label mb-1">ລວມ</div>
- <div className="font-mono text-xl font-bold text-odoo-text-strong">{moneyFmt.format(grandTotal)}</div>
+ <div className="odoo-label mb-1">ຍອດຂາຍຈິງ (ບາດ)</div>
+ <div className="font-mono text-xl font-bold text-odoo-primary">{moneyFmt.format(grandReceipts)}</div>
  </div>
  <div className="min-w-0">
  <div className="odoo-label mb-1">ບິນ</div>
- <div className="font-mono text-xl font-bold text-odoo-text-strong">{moneyFmt.format(grandOrders)}</div>
+ <div className="font-mono text-xl font-bold text-odoo-text-strong">{moneyFmt.format(grandBills)}</div>
  </div>
  <div className="min-w-0">
- <div className="odoo-label mb-1">ສະເລ່ຍ</div>
+ <div className="odoo-label mb-1">ສະເລ່ຍ/ບິນ</div>
  <div className="font-mono text-xl font-bold text-odoo-text-strong">
- {moneyFmt.format(grandOrders > 0 ? grandTotal / grandOrders : 0)}
+ {moneyFmt.format(grandBills > 0 ? grandReceipts / grandBills : 0)}
  </div>
  </div>
  </div>
  </div>
 
- {/* Filters */}
+ {/* Filters — date range + quick presets */}
  <section className="odoo-card p-4">
  <div className="flex flex-wrap items-end gap-3">
  <div className="w-full sm:w-auto">
@@ -123,84 +128,53 @@ export default function SalespeopleClient({
  className="odoo-input mt-1 w-full sm:w-auto"
  />
  </div>
- <div className="w-full sm:w-auto">
- <label className="block text-[10px] font-bold uppercase tracking-widest text-odoo-text-muted">
- ຂອບເຂດ
- </label>
- <div className="odoo-segmented mt-1">
- <button
- type="button"
- onClick={() => pushFilters({ status: null })}
- className={
-"odoo-segment" +
- (filters.status ==="ACTIVE"
- ?" odoo-segment-active"
- :"")
- }
- >
- ບໍ່ນັບຍົກເລີກ
- </button>
- <button
- type="button"
- onClick={() => pushFilters({ status:"ALL" })}
- className={
-"odoo-segment" +
- (filters.status ==="ALL"
- ?" odoo-segment-active"
- :"")
- }
- >
- ນັບລວມຍົກເລີກ
- </button>
- </div>
- </div>
  <div className="flex flex-wrap items-end gap-2 w-full sm:w-auto sm:ml-auto">
  <QuickRangeButton label="ມື້ນີ້" onClick={() => pushFilters(todayRange())} />
  <QuickRangeButton label="7 ມື້" onClick={() => pushFilters(lastNDaysRange(7))} />
  <QuickRangeButton label="30 ມື້" onClick={() => pushFilters(lastNDaysRange(30))} />
  <QuickRangeButton label="ເດືອນນີ້" onClick={() => pushFilters(thisMonthRange())} />
+ <QuickRangeButton label="ປີນີ້" onClick={() => pushFilters(thisYearRange())} />
  </div>
  </div>
  </section>
 
- {/* Table */}
+ {/* Monthly realised-sales pivot (baht) */}
  <section className="odoo-card mt-4 overflow-hidden">
+ <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+ <h2 className="text-sm font-bold text-odoo-text-strong">
+ ສະຫຼຸບຍອດຂາຍຈິງ ລາຍເດືອນ (ບາດ)
+ </h2>
+ <span className="text-[11px] text-odoo-text-muted">
+ ໃບຮັບເງິນ · ສາຂາຂົວຫຼວງ · ທີມໜ້າຮ້ານ
+ </span>
+ </div>
  <div className="overflow-x-auto">
- <table className="odoo-table min-w-[900px]">
+ <table className="odoo-table min-w-[720px]">
  <thead>
  <tr>
  <th className="px-3 py-3 text-center">#</th>
  <th className="px-4 py-3">ພະນັກງານ</th>
- <th className="px-4 py-3 text-right">ບິນ</th>
- <th className="px-4 py-3 text-right">ລໍຖ້າ</th>
- <th className="px-4 py-3 text-right">ຊຳລະແລ້ວ</th>
- {filters.status ==="ALL" ? (
- <th className="px-4 py-3 text-right">ຍົກເລີກ</th>
- ) : null}
- <th className="px-4 py-3 text-right">ສະເລ່ຍ/ບິນ</th>
+ {months.map((ym) => (
+ <th key={ym} className="px-4 py-3 text-right whitespace-nowrap">
+ {fmtMonth(ym)}
+ </th>
+ ))}
  <th className="px-4 py-3 text-right">ລວມ</th>
- <th className="px-4 py-3">% ຂອງລວມ</th>
  </tr>
  </thead>
  <tbody className="divide-y divide-odoo-border">
- {stats.length === 0 ? (
+ {monthly.length === 0 || months.length === 0 ? (
  <tr>
  <td
- colSpan={filters.status ==="ALL" ? 9 : 8}
- className="px-4 py-16 text-center text-sm text-odoo-text-muted"
+ colSpan={months.length + 3}
+ className="px-4 py-12 text-center text-sm text-odoo-text-muted"
  >
- ບໍ່ມີຂໍ້ມູນໃນຊ່ວງວັນທີນີ້
+ ບໍ່ມີໃບຮັບເງິນໃນຊ່ວງວັນທີນີ້
  </td>
  </tr>
  ) : (
- stats.map((s, i) => {
- const pct = grandTotal > 0 ? (s.activeTotal / grandTotal) * 100 : 0;
- const barPct = topAmount > 0 ? (s.activeTotal / topAmount) * 100 : 0;
- return (
- <tr
- key={s.userOwner ?? s.displayName + i}
- className="text-odoo-text-strong"
- >
+ monthly.map((r, i) => (
+ <tr key={r.code} className="text-odoo-text-strong">
  <td className="px-3 py-3 text-center">
  <span
  className={`inline-flex h-7 w-7 items-center justify-center rounded font-mono text-xs font-bold ${medal(i)}`}
@@ -209,82 +183,42 @@ export default function SalespeopleClient({
  </span>
  </td>
  <td className="px-4 py-3">
- <div className="font-semibold text-odoo-text-strong">
- {s.displayName}
- </div>
+ <div className="font-semibold text-odoo-text-strong">{r.displayName}</div>
  <div className="text-[10px] text-odoo-text-muted">
- {s.userOwner ? (
- <span className="font-mono">{s.userOwner}</span>
- ) : (
- <span className="italic">ບໍ່ມີລະຫັດ</span>
- )}
- {s.positionCode ? (
+ <span className="font-mono">{r.code}</span>
+ {r.positionCode ? (
  <>
  {" ·"}
- {POSITION_LABEL[s.positionCode] ?? `pos ${s.positionCode}`}
+ {POSITION_LABEL[r.positionCode] ?? `pos ${r.positionCode}`}
  </>
  ) : null}
  </div>
  </td>
- <td className="px-4 py-3 text-right font-mono text-xs">
- {moneyFmt.format(s.activeOrders)}
+ {months.map((ym) => (
+ <td key={ym} className="px-4 py-3 text-right font-mono text-xs">
+ {r.byMonth[ym] ? moneyFmt.format(r.byMonth[ym]) :"—"}
  </td>
- <td className="px-4 py-3 text-right font-mono text-xs text-odoo-warning">
- {s.pendingCount > 0
- ? `${moneyFmt.format(s.pendingCount)} · ${moneyFmt.format(s.pendingAmount)}`
- :"—"}
- </td>
- <td className="px-4 py-3 text-right font-mono text-xs text-odoo-success">
- {s.completedCount > 0
- ? `${moneyFmt.format(s.completedCount)} · ${moneyFmt.format(s.completedAmount)}`
- :"—"}
- </td>
- {filters.status ==="ALL" ? (
- <td className="px-4 py-3 text-right font-mono text-xs text-odoo-danger">
- {s.cancelledCount > 0
- ? `${moneyFmt.format(s.cancelledCount)} · ${moneyFmt.format(s.cancelledAmount)}`
- :"—"}
- </td>
- ) : null}
- <td className="px-4 py-3 text-right font-mono text-xs text-odoo-text">
- {moneyFmt.format(s.avgOrderValue)}
- </td>
- <td className="px-4 py-3 text-right font-mono font-bold">
- {moneyFmt.format(s.activeTotal)}
- </td>
- <td className="px-4 py-3">
- <div className="flex items-center gap-2">
- <div className="odoo-progress w-32">
- <div
- className="odoo-progress-bar"
- style={{ width: `${barPct.toFixed(1)}%` }}
- />
- </div>
- <span className="w-12 text-right font-mono text-[10px] text-odoo-text-muted">
- {pct.toFixed(1)}%
- </span>
- </div>
+ ))}
+ <td className="px-4 py-3 text-right font-mono font-bold text-odoo-primary">
+ {moneyFmt.format(r.total)}
  </td>
  </tr>
- );
- })
+ ))
  )}
  </tbody>
- {stats.length > 0 ? (
+ {monthly.length > 0 && months.length > 0 ? (
  <tfoot className="border-t border-odoo-border bg-odoo-surface-muted text-xs font-bold">
  <tr>
  <td className="px-3 py-3"></td>
- <td className="px-4 py-3 text-odoo-text-strong">
- ລວມທັງໝົດ
+ <td className="px-4 py-3 text-odoo-text-strong">ລວມທັງໝົດ</td>
+ {months.map((ym) => (
+ <td key={ym} className="px-4 py-3 text-right font-mono">
+ {moneyFmt.format(monthTotals[ym] ?? 0)}
  </td>
- <td className="px-4 py-3 text-right font-mono">
- {moneyFmt.format(grandOrders)}
+ ))}
+ <td className="px-4 py-3 text-right font-mono text-base text-odoo-primary">
+ {moneyFmt.format(grandReceipts)}
  </td>
- <td colSpan={filters.status ==="ALL" ? 4 : 3}></td>
- <td className="px-4 py-3 text-right font-mono text-base font-bold">
- {moneyFmt.format(grandTotal)}
- </td>
- <td></td>
  </tr>
  </tfoot>
  ) : null}
@@ -325,6 +259,15 @@ function lastNDaysRange(n: number): Partial<Record<keyof Filters, string>> {
 function thisMonthRange(): Partial<Record<keyof Filters, string>> {
  const now = new Date();
  const from = new Date(now.getFullYear(), now.getMonth(), 1);
+ return {
+ from: from.toISOString().slice(0, 10),
+ to: now.toISOString().slice(0, 10),
+ };
+}
+
+function thisYearRange(): Partial<Record<keyof Filters, string>> {
+ const now = new Date();
+ const from = new Date(now.getFullYear(), 0, 1);
  return {
  from: from.toISOString().slice(0, 10),
  to: now.toISOString().slice(0, 10),

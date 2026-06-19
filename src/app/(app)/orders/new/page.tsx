@@ -1461,6 +1461,12 @@ function PosScreen({
     afterLineDiscounts,
   );
   const total = afterLineDiscounts - appliedExtraDiscount;
+  // Self-pickup ("ລູກຄ້າຮັບເອງ") means there's no delivery, so the
+  // "ຊື່ຜູ້ຮັບ / ຈັດສົ່ງ" field is irrelevant and hidden. Matched by name the
+  // same way the default transport is seeded on load.
+  const isSelfPickup = !!transportTypes
+    .find((t) => t.code === transportCode)
+    ?.name?.includes("ຮັບເອງ");
   // Walk-in sales (no customer) earn no loyalty points — no account to
   // credit. Lines touched by a promotion with awardsPoints=false also
   // skip the earn — the admin toggle controls whether a promo stacks
@@ -1545,7 +1551,9 @@ function PosScreen({
           // as a walk-in sale.
           customerId: customer?.id || undefined,
           warehouseCode,
-          deliveryName: deliveryName.trim() || undefined,
+          // Self-pickup has no recipient/delivery — drop the field even if a
+          // value was typed before switching transport modes.
+          deliveryName: isSelfPickup ? undefined : deliveryName.trim() || undefined,
           transportCode: transportCode || undefined,
           transportName: transport?.name || undefined,
           receiveDate: receiveDate || undefined,
@@ -2184,83 +2192,6 @@ function PosScreen({
 
       <aside className="pos-checkout-col">
         <div className="pos-order-summary pos-checkout-card">
-          <button
-            type="button"
-            onClick={() => setExtrasOpen((v) => !v)}
-            className="flex w-full items-center justify-between gap-2 border-b border-odoo-border px-4 py-2.5 text-left text-[12px] font-bold text-odoo-text-strong transition hover:bg-odoo-surface-muted"
-          >
-            <span className="flex items-center gap-2">
-              <svg
-                viewBox="0 0 24 24"
-                width="15"
-                height="15"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden
-              >
-                <rect x="1" y="3" width="15" height="13" rx="1" />
-                <path d="M16 8h4l3 3v5h-7z" />
-                <circle cx="5.5" cy="18.5" r="2" />
-                <circle cx="18.5" cy="18.5" r="2" />
-              </svg>
-              <span>ຂົນສົ່ງ · ໝາຍເຫດ</span>
-            </span>
-            <span className="text-odoo-text-muted">{extrasOpen ? "▲" : "▼"}</span>
-          </button>
-          {extrasOpen ? (
-            <div className="pos-extras-panel">
-              <div className="pos-extras-grid">
-                <div>
-                  <label className="odoo-label">ຂົນສົ່ງ</label>
-                  <select
-                    value={transportCode}
-                    onChange={(e) => setTransportCode(e.target.value)}
-                    className="odoo-input"
-                  >
-                    <option value="">ເລືອກຂົນສົ່ງ</option>
-                    {transportTypes.map((t) => (
-                      <option key={t.code} value={t.code}>
-                        {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="odoo-label">ຊື່ຜູ້ຮັບ / ຈັດສົ່ງ</label>
-                  <input
-                    type="text"
-                    value={deliveryName}
-                    onChange={(e) => setDeliveryName(e.target.value)}
-                    className="odoo-input"
-                    placeholder="ບໍ່ບັງຄັບ"
-                  />
-                </div>
-                <div>
-                  <label className="odoo-label">ວັນຮັບສິນຄ້າ</label>
-                  <input
-                    type="date"
-                    value={receiveDate}
-                    onChange={(e) => setReceiveDate(e.target.value)}
-                    className="odoo-input"
-                  />
-                </div>
-                <div className="col-span-full">
-                  <label className="odoo-label">ໝາຍເຫດ</label>
-                  <textarea
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    rows={2}
-                    className="odoo-textarea"
-                    placeholder="ບໍ່ບັງຄັບ"
-                  />
-                </div>
-              </div>
-            </div>
-          ) : null}
-
           <div className="px-4 py-3">
             <div className="space-y-1 text-sm">
               {/* Gross before any discount, then the line-level discount,
@@ -2305,6 +2236,90 @@ function PosScreen({
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* ຂົນສົ່ງ · ໝາຍເຫດ — ຍ້າຍລົງລຸ່ມຍອດລວມ */}
+            <div className="mt-3 overflow-hidden rounded-md border border-odoo-border">
+              <button
+                type="button"
+                onClick={() => setExtrasOpen((v) => !v)}
+                className="flex w-full items-center justify-between gap-2 bg-odoo-surface-muted px-3 py-2.5 text-left text-[12px] font-bold text-odoo-text-strong transition hover:brightness-95"
+              >
+                <span className="flex items-center gap-2">
+                  <svg
+                    viewBox="0 0 24 24"
+                    width="15"
+                    height="15"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <rect x="1" y="3" width="15" height="13" rx="1" />
+                    <path d="M16 8h4l3 3v5h-7z" />
+                    <circle cx="5.5" cy="18.5" r="2" />
+                    <circle cx="18.5" cy="18.5" r="2" />
+                  </svg>
+                  <span>ຂົນສົ່ງ · ໝາຍເຫດ</span>
+                </span>
+                <span className="text-odoo-text-muted">
+                  {extrasOpen ? "▲" : "▼"}
+                </span>
+              </button>
+              {extrasOpen ? (
+                <div className="border-t border-odoo-border bg-odoo-surface-muted px-3 py-3">
+                  <div className="pos-extras-grid">
+                    <div>
+                      <label className="odoo-label">ຂົນສົ່ງ</label>
+                      <select
+                        value={transportCode}
+                        onChange={(e) => setTransportCode(e.target.value)}
+                        className="odoo-input"
+                      >
+                        <option value="">ເລືອກຂົນສົ່ງ</option>
+                        {transportTypes.map((t) => (
+                          <option key={t.code} value={t.code}>
+                            {t.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    {isSelfPickup ? null : (
+                      <div>
+                        <label className="odoo-label">ຊື່ຜູ້ຮັບ / ຈັດສົ່ງ</label>
+                        <input
+                          type="text"
+                          value={deliveryName}
+                          onChange={(e) => setDeliveryName(e.target.value)}
+                          className="odoo-input"
+                          placeholder="ບໍ່ບັງຄັບ"
+                        />
+                      </div>
+                    )}
+                    <div>
+                      <label className="odoo-label">ວັນຮັບສິນຄ້າ</label>
+                      <input
+                        type="date"
+                        value={receiveDate}
+                        onChange={(e) => setReceiveDate(e.target.value)}
+                        className="odoo-input"
+                      />
+                    </div>
+                    <div className="col-span-full">
+                      <label className="odoo-label">ໝາຍເຫດ</label>
+                      <textarea
+                        value={note}
+                        onChange={(e) => setNote(e.target.value)}
+                        rows={2}
+                        className="odoo-textarea"
+                        placeholder="ບໍ່ບັງຄັບ"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
             </div>
 
             {submitError ? (
@@ -3370,6 +3385,11 @@ function NewMemberForm({
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  // ປະເພດສະມາຊິກ: "general" = ສະມາຊິກທົ່ວໄປ (ບໍ່ມີສ່ວນຫຼຸດ),
+  // "line_oa" = ສະມາຊິກ LINE O.A (Gold + ສ່ວນຫຼຸດ 3%).
+  const [memberType, setMemberType] = useState<"general" | "line_oa">(
+    "general",
+  );
   const [provinceCode, setProvinceCode] = useState("");
   const [amperCode, setAmperCode] = useState("");
   const [tambonCode, setTambonCode] = useState("");
@@ -3497,6 +3517,7 @@ function NewMemberForm({
           name: trimmedName,
           phone: digitPhone,
           address: composedAddress || undefined,
+          memberType,
         }),
       });
       const data = await res.json().catch(() => null);
@@ -3535,42 +3556,107 @@ function NewMemberForm({
           </button>
         </div>
         <div className="grid gap-4 px-5 py-5">
-          {/* Gold tier banner — mirrors the app's "ສະຖານະເລີ່ມຕົ້ນ: Gold"
-              banner so the salesperson sees the auto-assigned 3% perk
-              before filling anything in. */}
-          <div
-            className="flex items-center gap-3 rounded-md border px-3 py-3"
-            style={{
-              background:
-                "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(253,224,71,0.10))",
-              borderColor: "rgba(202,138,4,0.35)",
-            }}
-          >
-            <div
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-white"
-              style={{
-                background: "linear-gradient(135deg, #fde047, #ca8a04)",
-                boxShadow: "0 3px 8px rgba(202,138,4,0.3)",
-              }}
-            >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-                className="h-6 w-6"
+          {/* ປະເພດສະມາຊິກ — ສະມາຊິກທົ່ວໄປ (ບໍ່ມີສ່ວນຫຼຸດ) ຫຼື
+              ສະມາຊິກ LINE O.A (Gold + ສ່ວນຫຼຸດ 3%). */}
+          <div className="grid gap-2">
+            <span className="odoo-label">ປະເພດສະມາຊິກ *</span>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setMemberType("general")}
+                aria-pressed={memberType === "general"}
+                className={
+                  "flex flex-col items-start gap-0.5 rounded-md border px-3 py-2.5 text-left transition " +
+                  (memberType === "general"
+                    ? "border-odoo-primary bg-odoo-primary/10 ring-1 ring-odoo-primary"
+                    : "border-odoo-border hover:bg-odoo-surface-muted")
+                }
               >
-                <path d="M9 11.75l-2.21-1.16-1.16-2.21L4.47 10.59 2.26 11.75l2.21 1.16 1.16 2.21 1.16-2.21 2.21-1.16zM19.53 13.41L18.37 11.2l-2.21-1.16 2.21-1.16L19.53 6.67l1.16 2.21 2.21 1.16-2.21 1.16-1.16 2.21zM12 2l-2.4 5.6L4 9l4.6 3.5L7.3 18 12 14.9 16.7 18l-1.3-5.5L20 9l-5.6-1.4L12 2z" />
-              </svg>
-            </div>
-            <div className="min-w-0">
-              <div className="text-[14px] font-black text-amber-700">
-                ສະຖານະເລີ່ມຕົ້ນ: Gold
-              </div>
-              <div className="mt-0.5 text-[11px] font-bold text-amber-700/85">
-                ສ່ວນຫຼຸດ 3% ຕໍ່ບິນ ໂດຍອັດຕະໂນມັດ
-              </div>
+                <span className="text-[13px] font-bold text-odoo-text-strong">
+                  ສະມາຊິກທົ່ວໄປ
+                </span>
+                <span className="text-[11px] font-semibold text-odoo-text-muted">
+                  ບໍ່ມີສ່ວນຫຼຸດ
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setMemberType("line_oa")}
+                aria-pressed={memberType === "line_oa"}
+                className={
+                  "flex flex-col items-start gap-0.5 rounded-md border px-3 py-2.5 text-left transition " +
+                  (memberType === "line_oa"
+                    ? "border-amber-500 bg-amber-50 ring-1 ring-amber-500"
+                    : "border-odoo-border hover:bg-odoo-surface-muted")
+                }
+              >
+                <span className="text-[13px] font-bold text-odoo-text-strong">
+                  ສະມາຊິກ LINE O.A
+                </span>
+                <span className="text-[11px] font-semibold text-amber-700">
+                  Gold · ສ່ວນຫຼຸດ 3%
+                </span>
+              </button>
             </div>
           </div>
+
+          {/* ປ້າຍສະຖານະຕາມປະເພດທີ່ເລືອກ */}
+          {memberType === "line_oa" ? (
+            <div
+              className="flex items-center gap-3 rounded-md border px-3 py-3"
+              style={{
+                background:
+                  "linear-gradient(135deg, rgba(250,204,21,0.18), rgba(253,224,71,0.10))",
+                borderColor: "rgba(202,138,4,0.35)",
+              }}
+            >
+              <div
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md text-white"
+                style={{
+                  background: "linear-gradient(135deg, #fde047, #ca8a04)",
+                  boxShadow: "0 3px 8px rgba(202,138,4,0.3)",
+                }}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="h-6 w-6"
+                >
+                  <path d="M9 11.75l-2.21-1.16-1.16-2.21L4.47 10.59 2.26 11.75l2.21 1.16 1.16 2.21 1.16-2.21 2.21-1.16zM19.53 13.41L18.37 11.2l-2.21-1.16 2.21-1.16L19.53 6.67l1.16 2.21 2.21 1.16-2.21 1.16-1.16 2.21zM12 2l-2.4 5.6L4 9l4.6 3.5L7.3 18 12 14.9 16.7 18l-1.3-5.5L20 9l-5.6-1.4L12 2z" />
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <div className="text-[14px] font-black text-amber-700">
+                  ສະຖານະ: Gold
+                </div>
+                <div className="mt-0.5 text-[11px] font-bold text-amber-700/85">
+                  ສ່ວນຫຼຸດ 3% ຕໍ່ບິນ ໂດຍອັດຕະໂນມັດ
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-3 rounded-md border border-odoo-border bg-odoo-surface-muted px-3 py-3">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-slate-200 text-slate-600">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  className="h-6 w-6"
+                >
+                  <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                </svg>
+              </div>
+              <div className="min-w-0">
+                <div className="text-[14px] font-black text-odoo-text-strong">
+                  ສະມາຊິກທົ່ວໄປ
+                </div>
+                <div className="mt-0.5 text-[11px] font-bold text-odoo-text-muted">
+                  ບໍ່ມີສ່ວນຫຼຸດ
+                </div>
+              </div>
+            </div>
+          )}
 
           <label className="grid gap-1">
             <span className="odoo-label">ຊື່ *</span>

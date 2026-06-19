@@ -1,28 +1,37 @@
-import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireEmployee } from "@/lib/auth";
-import SalespeopleClient, { type SalespersonStat } from "./SalespeopleClient";
+import SalespeopleClient, { type MonthlyReceiptRow } from "./SalespeopleClient";
 
 export const dynamic ="force-dynamic";
+
+// ສາຂາ (branch) is identified by ic_trans.branch_code — each branch owns its own
+// bill-number series (Khua Luang = CAK*/INK*), NOT by department_code (which is
+// the product section). ສາຂາຂົວຫຼວງ = branch_code '01'. Branch '02' is wholesale
+// (ຄຳຈັນ), so filtering to '01' already drops it.
+const KHUA_LUANG_BRANCH_CODE = "01";
+
+// Within the branch the salesperson must also belong to the front-store sales
+// team — their HR department on odg_employee = 205 (unit 2051, the 8-person
+// front-store team). This excludes other branch-01 teams such as ພູວັນ (dept 207).
+const FRONT_STORE_SALES_DEPT = "205";
 
 type SearchParams = {
  from?: string | string[];
  to?: string | string[];
- status?: string | string[]; //"ACTIVE" (default: PENDING+COMPLETED) |"ALL"
 };
 
-type Row = {
- user_owner: string | null;
- employee_code: string | null;
+// Per-employee realised sales = cashier receipts (ic_trans, trans_flag 44),
+// keyed by sale_code = employee_code, aggregated per calendar month (ym), in
+// BAHT (total_amount). SOK sale-orders are deliberately NOT included — only real
+// realised sales count.
+type SmlRow = {
+ sale_code: string | null;
  fullname_lo: string | null;
  nickname: string | null;
  position_code: string | null;
- pending_count: bigint;
- completed_count: bigint;
- cancelled_count: bigint;
- pending_amount: string | number | null;
- completed_amount: string | number | null;
- cancelled_amount: string | number | null;
+ ym: string;
+ receipt_count: bigint;
+ receipt_baht: string | number | null;
 };
 
 function pickString(v: string | string[] | undefined): string {
@@ -53,94 +62,82 @@ export default async function SalespeopleReportPage({
  const toRaw = pickString(sp.to).trim();
  const from = /^\d{4}-\d{2}-\d{2}$/.test(fromRaw) ? fromRaw : defaultFrom();
  const to = /^\d{4}-\d{2}-\d{2}$/.test(toRaw) ? toRaw : defaultTo();
- const statusScope = pickString(sp.status).trim().toUpperCase() ==="ALL"
- ?"ALL"
- :"ACTIVE";
 
- // ACTIVE scope (default) hides cancelled orders so the totals reflect real
- // revenue. ALL includes everything for diagnostic use.
- const statusFilter =
- statusScope ==="ALL"
- ? Prisma.empty
- : Prisma.sql`AND c.status IN (0, 1)`;
-
- const rows = await prisma.$queryRaw<Row[]>`
+ // Realised sales per employee × month for the ຂົວຫຼວງ front-store team, in baht.
+ const smlRows = await prisma.$queryRaw<SmlRow[]>`
  SELECT
- eff.salesperson_code AS user_owner,
- emp.employee_code,
+ t.sale_code,
  emp.fullname_lo,
  emp.nickname,
  emp.position_code,
- COUNT(*) FILTER (WHERE c.status = 0)::bigint AS pending_count,
- COUNT(*) FILTER (WHERE c.status = 1)::bigint AS completed_count,
- COUNT(*) FILTER (WHERE c.status = 2)::bigint AS cancelled_count,
- COALESCE(SUM(c.total_amount_2) FILTER (WHERE c.status = 0), 0) AS pending_amount,
- COALESCE(SUM(c.total_amount_2) FILTER (WHERE c.status = 1), 0) AS completed_amount,
- COALESCE(SUM(c.total_amount_2) FILTER (WHERE c.status = 2), 0) AS cancelled_amount
- FROM ic_trans c
- LEFT JOIN LATERAL (
- SELECT COALESCE(
- NULLIF(NULLIF(c.sale_code,''),'00000'),
- NULLIF(NULLIF((
- SELECT d.sale_code
- FROM ic_trans_detail d
- WHERE d.doc_no = c.doc_no
- AND d.trans_type = c.trans_type
- AND d.trans_flag = c.trans_flag
- ORDER BY d.line_number
- LIMIT 1
- ),''),'00000'),
- NULLIF(c.creator_code,'')
- ) AS salesperson_code
- ) eff ON true
- LEFT JOIN odg_employee emp ON emp.employee_code = eff.salesperson_code
- WHERE c.doc_format_code = 'SOK'
- AND c.create_date_time_now >= ${from}::date
- AND c.create_date_time_now < (${to}::date + INTERVAL'1 day')
- ${statusFilter}
- GROUP BY eff.salesperson_code, emp.employee_code, emp.fullname_lo, emp.nickname, emp.position_code
- ORDER BY (
- COALESCE(SUM(c.total_amount_2) FILTER (WHERE c.status = 1), 0)
- + COALESCE(SUM(c.total_amount_2) FILTER (WHERE c.status = 0), 0)
- ) DESC
+ to_char(t.doc_date, 'YYYY-MM') AS ym,
+ COUNT(*)::bigint AS receipt_count,
+ COALESCE(SUM(t.total_amount), 0) AS receipt_baht
+ FROM ic_trans t
+ JOIN odg_employee emp ON emp.employee_code = NULLIF(NULLIF(t.sale_code, ''), '00000')
+ WHERE t.trans_flag = 44
+ AND t.branch_code = ${KHUA_LUANG_BRANCH_CODE}
+ AND emp.department_code = ${FRONT_STORE_SALES_DEPT}
+ AND t.doc_date >= ${from}::date
+ AND t.doc_date < (${to}::date + INTERVAL '1 day')
+ GROUP BY t.sale_code, emp.fullname_lo, emp.nickname, emp.position_code, to_char(t.doc_date, 'YYYY-MM')
  `;
 
- const stats: SalespersonStat[] = rows.map((r) => {
- const pending = Number(r.pending_amount ?? 0);
- const completed = Number(r.completed_amount ?? 0);
- const cancelled = Number(r.cancelled_amount ?? 0);
- const activeTotal = pending + completed;
- const orders = Number(r.pending_count) + Number(r.completed_count);
- return {
- userOwner: r.user_owner,
- employeeCode: r.employee_code,
- displayName:
- r.fullname_lo?.trim() ||
- r.nickname?.trim() ||
- r.user_owner ||
-"ບໍ່ລະບຸ",
- positionCode: r.position_code,
- pendingCount: Number(r.pending_count),
- completedCount: Number(r.completed_count),
- cancelledCount: Number(r.cancelled_count),
- pendingAmount: pending,
- completedAmount: completed,
- cancelledAmount: cancelled,
- activeTotal,
- activeOrders: orders,
- avgOrderValue: orders > 0 ? activeTotal / orders : 0,
+ // Fold the (employee × month) rows into one aggregate per employee carrying a
+ // month→baht map plus the running bill count.
+ type ReceiptAgg = {
+ code: string;
+ displayName: string;
+ positionCode: string | null;
+ byMonth: Map<string, number>;
+ count: number;
+ total: number; // baht
  };
- });
+ const monthsSet = new Set<string>();
+ const byCode = new Map<string, ReceiptAgg>();
+ for (const r of smlRows) {
+ const code = r.sale_code?.trim();
+ if (!code) continue;
+ monthsSet.add(r.ym);
+ let agg = byCode.get(code);
+ if (!agg) {
+ agg = {
+ code,
+ displayName: r.fullname_lo?.trim() || r.nickname?.trim() || code,
+ positionCode: r.position_code,
+ byMonth: new Map(),
+ count: 0,
+ total: 0,
+ };
+ byCode.set(code, agg);
+ }
+ const baht = Number(r.receipt_baht ?? 0);
+ agg.byMonth.set(r.ym, (agg.byMonth.get(r.ym) ?? 0) + baht);
+ agg.count += Number(r.receipt_count);
+ agg.total += baht;
+ }
+ const months = Array.from(monthsSet).sort();
 
- const grandTotal = stats.reduce((s, r) => s + r.activeTotal, 0);
- const grandOrders = stats.reduce((s, r) => s + r.activeOrders, 0);
+ const monthly: MonthlyReceiptRow[] = Array.from(byCode.values())
+ .map((agg) => ({
+ code: agg.code,
+ displayName: agg.displayName,
+ positionCode: agg.positionCode,
+ byMonth: Object.fromEntries(agg.byMonth),
+ total: agg.total,
+ }))
+ .sort((a, b) => b.total - a.total);
+
+ const grandReceipts = monthly.reduce((s, r) => s + r.total, 0);
+ const grandBills = Array.from(byCode.values()).reduce((s, a) => s + a.count, 0);
 
  return (
  <SalespeopleClient
- stats={stats}
- grandTotal={grandTotal}
- grandOrders={grandOrders}
- filters={{ from, to, status: statusScope }}
+ grandReceipts={grandReceipts}
+ grandBills={grandBills}
+ months={months}
+ monthly={monthly}
+ filters={{ from, to }}
  />
  );
 }

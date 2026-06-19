@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import PriceTag, {
   discountPercent,
+  isASheetSize,
   TAG_SIZES,
   type PriceTagData,
   type TagSize,
@@ -938,14 +939,21 @@ export default function PriceTagsClient() {
       </div>
 
       {/* ---- Hidden print surface (shown only when printing) ---- */}
-      <div className="pt-print-area" aria-hidden>
-        {/* Drive the print sheet from the chosen paper + orientation. Tags tile
-            onto it via .pt-print-grid (auto-fill by tag width) — so the same
-            tag size yields one-per-page on matching paper, or many per A4. */}
+      <div
+        className={`pt-print-area${isASheetSize(tagSize) ? " pt-print-sheet" : ""}`}
+        aria-hidden
+      >
+        {/* A-series sizes print one full-bleed landscape tag per sheet: the @page
+            is the tag's own size with zero margin so the tag reaches the paper
+            edges. Other sizes tile onto the chosen paper via .pt-print-grid. */}
         {(() => {
-          const d = paperDimsMm(paperSize, orientation);
+          const sheet = isASheetSize(tagSize);
+          const d = sheet
+            ? { w: TAG_SIZES[tagSize].widthMm, h: TAG_SIZES[tagSize].heightMm }
+            : paperDimsMm(paperSize, orientation);
+          const margin = sheet ? 0 : 6;
           return (
-            <style>{`@media print { @page tag { size: ${d.w}mm ${d.h}mm; margin: 6mm; } }`}</style>
+            <style>{`@media print { @page tag { size: ${d.w}mm ${d.h}mm; margin: ${margin}mm; } }`}</style>
           );
         })()}
         <div

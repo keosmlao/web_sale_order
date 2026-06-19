@@ -154,6 +154,17 @@ export async function POST(request: NextRequest) {
       ? body.address.trim()
       : null;
 
+  // Member type decides whether the customer gets a loyalty tier + discount:
+  //   "general"  → ສະມາຊິກທົ່ວໄປ: no tier, no discount (no ar_customer_detail row)
+  //   "line_oa"  → ສະມາຊິກ LINE O.A: gold tier + 3% line discount (legacy default)
+  // Any missing/unknown value falls back to "line_oa" so existing callers
+  // (e.g. the mobile app) that don't send the field keep their old behaviour.
+  const memberType =
+    typeof body?.memberType === "string" &&
+    body.memberType.trim().toLowerCase() === "general"
+      ? "general"
+      : "line_oa";
+
   if (!name) {
     return NextResponse.json({ error: "ກະລຸນາໃສ່ຊື່ລູກຄ້າ" }, { status: 400 });
   }
@@ -197,38 +208,44 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // New customers default to the "gold" tier with a 3% line discount.
-  // Resolution is tolerant — we match against both name_1 and code with
-  // ILIKE '%gold%' so renames / Lao localisations / case mismatches still
-  // find the row. Exact "gold" wins; anything else is a best-effort fallback.
-  const goldRows = await prisma.$queryRaw<
-    Array<{ code: string; name_1: string | null; rank: number }>
-  >`
-    SELECT
-      code,
-      name_1,
-      CASE
-        WHEN LOWER(TRIM(COALESCE(name_1, ''))) = 'gold' THEN 0
-        WHEN LOWER(TRIM(COALESCE(code, '')))   = 'gold' THEN 1
-        WHEN LOWER(COALESCE(name_1, ''))       LIKE '%gold%' THEN 2
-        WHEN LOWER(COALESCE(code, ''))         LIKE '%gold%' THEN 3
-        ELSE 99
-      END AS rank
-    FROM ar_group_sub
-    WHERE
-      LOWER(COALESCE(name_1, '')) LIKE '%gold%'
-      OR LOWER(COALESCE(code, '')) LIKE '%gold%'
-    ORDER BY rank, code
-    LIMIT 1
-  `;
-  const goldCode = goldRows[0]?.code?.trim() || null;
-  const goldName = goldRows[0]?.name_1?.trim() || null;
+  // LINE O.A members get the "gold" tier with a 3% line discount; general
+  // members (ສະມາຊິກທົ່ວໄປ) get no tier at all, so we only resolve gold when
+  // the type calls for it. Resolution is tolerant — we match against both
+  // name_1 and code with ILIKE '%gold%' so renames / Lao localisations / case
+  // mismatches still find the row. Exact "gold" wins; anything else is a
+  // best-effort fallback.
+  let goldCode: string | null = null;
+  let goldName: string | null = null;
   const defaultDiscount = "3";
-  if (!goldCode) {
+  if (memberType === "line_oa") {
+    const goldRows = await prisma.$queryRaw<
+      Array<{ code: string; name_1: string | null; rank: number }>
+    >`
+      SELECT
+        code,
+        name_1,
+        CASE
+          WHEN LOWER(TRIM(COALESCE(name_1, ''))) = 'gold' THEN 0
+          WHEN LOWER(TRIM(COALESCE(code, '')))   = 'gold' THEN 1
+          WHEN LOWER(COALESCE(name_1, ''))       LIKE '%gold%' THEN 2
+          WHEN LOWER(COALESCE(code, ''))         LIKE '%gold%' THEN 3
+          ELSE 99
+        END AS rank
+      FROM ar_group_sub
+      WHERE
+        LOWER(COALESCE(name_1, '')) LIKE '%gold%'
+        OR LOWER(COALESCE(code, '')) LIKE '%gold%'
+      ORDER BY rank, code
+      LIMIT 1
+    `;
+    goldCode = goldRows[0]?.code?.trim() || null;
+    goldName = goldRows[0]?.name_1?.trim() || null;
+  }
+  if (memberType === "line_oa" && !goldCode) {
     console.warn(
       "[customers] no 'gold' tier matched in ar_group_sub — verify ar_group_sub has a row whose code or name_1 contains 'gold'.",
     );
-  } else {
+  } else if (goldCode) {
     console.log(
       `[customers] resolved gold tier: code=${goldCode} name=${goldName ?? "(null)"}`,
     );
