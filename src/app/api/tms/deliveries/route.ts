@@ -81,8 +81,21 @@ export async function GET(request: NextRequest) {
   const scopeOwn = !(wantAll && allowAll);
   const myCode = employee.employeeCode ?? "";
 
+  // Bills tracked here: (a) this app's own receipts (CAKAP), plus (b) customer
+  // bills opened at the Khualuang storefront — warehouse 1101 on a detail line,
+  // with a customer (so internal stock transfers FT/FR/WEOH are excluded).
   const filters: Prisma.Sql[] = [
-    Prisma.sql`t.doc_format_code = 'CAKAP'`,
+    Prisma.sql`(
+      t.doc_format_code = 'CAKAP'
+      OR (
+        t.doc_format_code <> 'SOK'
+        AND NULLIF(t.cust_code, '') IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM ic_trans_detail td
+          WHERE td.doc_no = t.doc_no AND td.wh_code = '1101'
+        )
+      )
+    )`,
     Prisma.sql`t.doc_date = ${date}::date`,
   ];
   if (scopeOwn) filters.push(Prisma.sql`t.sale_code = ${myCode}`);

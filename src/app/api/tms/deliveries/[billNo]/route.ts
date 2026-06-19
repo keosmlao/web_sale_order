@@ -85,7 +85,18 @@ export async function GET(request: NextRequest, context: RouteContext) {
     LEFT JOIN odg_tms_delivery_route rt ON rt.code = ld.route_code
     LEFT JOIN odg_tms_car car ON car.code = ld.car
     LEFT JOIN odg_tms_driver drv ON drv.code = ld.driver
-    WHERE t.doc_no = ${bill} AND t.doc_format_code = 'CAKAP'
+    WHERE t.doc_no = ${bill}
+      AND (
+        t.doc_format_code = 'CAKAP'
+        OR (
+          t.doc_format_code <> 'SOK'
+          AND NULLIF(t.cust_code, '') IS NOT NULL
+          AND EXISTS (
+            SELECT 1 FROM ic_trans_detail td
+            WHERE td.doc_no = t.doc_no AND td.wh_code = '1101'
+          )
+        )
+      )
     LIMIT 1
   `;
 
