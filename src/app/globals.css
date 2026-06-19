@@ -2091,66 +2091,104 @@ a {
     font-size: 12px;
   }
   .cashier-drawer {
-    box-shadow: -12px 0 28px rgba(33, 37, 41, 0.16);
+    box-shadow: -24px 0 60px rgba(15, 23, 42, 0.24);
   }
   .settle-drawer {
     display: flex;
     flex-direction: column;
     height: 100dvh;
     min-height: 0;
-    background: var(--odoo-surface-muted);
+    background: #f8fafc; /* Lighter modern surface background */
   }
   .settle-header {
     position: sticky;
     top: 0;
-    z-index: 5;
+    z-index: 20;
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 12px;
-    border-bottom: 1px solid var(--odoo-border);
-    background: rgba(255, 255, 255, 0.96);
-    padding: 16px 18px;
+    border-bottom: 1px solid #dbe4ef;
+    background: rgba(255, 255, 255, 0.97);
+    padding: 16px 24px;
+    color: #0f172a;
     backdrop-filter: blur(10px);
+    box-shadow: 0 8px 30px rgba(15, 23, 42, 0.06);
+  }
+  .settle-header-identity {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    gap: 14px;
+  }
+  .settle-header-mark {
+    display: flex;
+    width: 46px;
+    height: 46px;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    color: #fff;
+    font-size: 24px;
+    font-weight: 900;
+    box-shadow: 0 8px 18px rgba(37, 99, 235, 0.24);
   }
   .settle-eyebrow {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 7px;
-    color: var(--odoo-text-muted);
+    gap: 8px;
+    color: #64748b;
     font-family: var(--font-mono);
-    font-size: 10px;
-    font-weight: 900;
+    font-size: 11px;
+    font-weight: 700;
     text-transform: uppercase;
+    letter-spacing: 0.05em;
   }
   .settle-header h2 {
-    margin-top: 5px;
-    color: var(--odoo-text-strong);
-    font-size: 19px;
-    font-weight: 900;
+    margin-top: 4px;
+    color: #0f172a;
+    font-size: 21px;
+    font-weight: 800;
     line-height: 1.2;
+    letter-spacing: -0.01em;
   }
   .settle-header p {
     margin-top: 4px;
-    color: var(--odoo-text-muted);
-    font-size: 11px;
+    color: #64748b;
+    font-size: 13px;
+  }
+  .settle-header .odoo-btn-secondary {
+    border-color: #dbe4ef;
+    background: #f8fafc;
+    color: #334155;
+    font-weight: 600;
+    border-radius: 8px;
+    padding: 6px 14px;
+    transition: all 150ms ease;
+  }
+  .settle-header .odoo-btn-secondary:hover {
+    background: #eff6ff;
+    border-color: #93c5fd;
+    color: #1d4ed8;
   }
   .settle-readonly {
-    margin: 12px 16px 0;
-    border: 1px solid var(--odoo-border);
-    border-radius: 7px;
-    background: var(--odoo-surface);
-    padding: 9px 11px;
-    color: var(--odoo-text-strong);
-    font-size: 11px;
-    font-weight: 800;
+    margin: 14px 20px 0;
+    border: 1px solid #fee2e2;
+    border-radius: 10px;
+    background: #fef2f2;
+    padding: 10px 14px;
+    color: #b91c1c;
+    font-size: 12px;
+    font-weight: 700;
   }
   .settle-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(330px, 380px);
-    gap: 12px;
-    padding: 12px 16px 18px;
+    grid-template-columns: minmax(0, 1.15fr) minmax(460px, 0.85fr);
+    gap: 18px;
+    padding: 18px;
     flex: 1 1 0;
     min-height: 0;
   }
@@ -2158,27 +2196,51 @@ a {
   .settle-payment {
     display: flex;
     flex-direction: column;
-    gap: 11px;
+    gap: 16px;
     min-width: 0;
     min-height: 0;
   }
   .settle-left {
     overflow-y: auto;
+    padding-right: 3px;
   }
   .settle-payment {
+    overflow: hidden;
+    gap: 12px;
+    border: 1px solid #dbe4ef;
+    border-radius: 20px;
+    background: #fff;
+    padding: 14px;
+    box-shadow: 0 12px 35px rgba(15, 23, 42, 0.07);
+  }
+  .settle-payment-summary {
+    display: grid;
+    flex: 0 0 auto;
+    gap: 10px;
+  }
+  .settle-payment-body {
+    display: flex;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 12px;
     overflow-y: auto;
-    align-self: start;
-    max-height: 100%;
+    padding: 2px 3px 4px 2px;
+    scrollbar-gutter: stable;
   }
   .settle-card {
-    border: 1px solid var(--odoo-border);
-    border-radius: 7px;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
     background: var(--odoo-surface);
-    padding: 12px;
+    padding: 16px;
+    box-shadow: 0 4px 18px rgba(15, 23, 42, 0.03);
+    transition: box-shadow 200ms ease;
+  }
+  .settle-card:hover {
+    box-shadow: 0 6px 24px rgba(15, 23, 42, 0.05);
   }
   /* Grow modifier for cards that should fill the remaining vertical space
-     in `.settle-left` (e.g. the items list so the modal "fits" the screen
-     height instead of leaving a blank tail under a short list). */
+     in `.settle-left`. */
   .settle-card--grow {
     flex: 1 1 0;
     min-height: 0;
@@ -2190,24 +2252,30 @@ a {
     align-items: center;
     justify-content: space-between;
     gap: 9px;
-    margin-bottom: 9px;
+    margin-bottom: 16px;
   }
   .settle-card-title span {
     color: var(--odoo-text-strong);
-    font-size: 11px;
-    font-weight: 900;
+    font-size: 14px;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
   .settle-card-title strong {
     border-radius: 879px;
     background: var(--odoo-surface-muted);
-    padding: 3px 7px;
+    padding: 3px 9px;
     color: var(--odoo-text-muted);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    border: 1px solid var(--odoo-border);
   }
   .settle-detail-grid {
     display: grid;
-    gap: 4px 12px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px 24px;
   }
   .settle-items {
     display: flex;
@@ -2217,8 +2285,6 @@ a {
     max-height: 46dvh;
     overflow-y: auto;
   }
-  /* When the items card uses `settle-card--grow`, the items list takes the
-     remaining vertical space of the card instead of the 46dvh cap. */
   .settle-card--grow .settle-items {
     max-height: none;
   }
@@ -2226,96 +2292,148 @@ a {
     display: grid;
     grid-template-columns: minmax(0, 1fr) auto auto;
     align-items: center;
-    gap: 11px;
+    gap: 12px;
     border-top: 1px solid var(--odoo-border);
-    padding: 9px 0;
+    padding: 14px 0;
   }
   .settle-item-row:first-child {
     border-top: 0;
   }
   .settle-item-name {
     color: var(--odoo-text-strong);
-    font-size: 11px;
-    font-weight: 800;
-    line-height: 1.35;
+    font-size: 13.5px;
+    font-weight: 700;
+    line-height: 1.4;
     overflow-wrap: anywhere;
   }
   .settle-item-code {
-    margin-top: 2px;
+    margin-top: 3px;
     color: var(--odoo-text-muted);
     font-family: var(--font-mono);
-    font-size: 10px;
+    font-size: 11px;
   }
   .settle-item-qty {
-    border-radius: 5px;
+    border-radius: 6px;
     background: var(--odoo-surface-muted);
-    padding: 4px 7px;
+    padding: 4px 8px;
     color: var(--odoo-text-strong);
     font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 900;
+    font-size: 12px;
+    font-weight: 700;
+    border: 1px solid var(--odoo-border);
   }
   .settle-item-amount {
-    min-width: 86px;
+    min-width: 110px;
     text-align: right;
     color: var(--odoo-text-strong);
     font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 900;
+    font-size: 14px;
+    font-weight: 700;
   }
   .settle-total-card {
-    border-radius: 8px;
-    background: var(--odoo-primary);
-    padding: 14px;
-    color: var(--odoo-surface);
+    position: relative;
+    overflow: hidden;
+    min-height: 92px;
+    border-radius: 16px;
+    background:
+      radial-gradient(circle at 92% -10%, rgba(255, 255, 255, 0.18), transparent 38%),
+      linear-gradient(135deg, #1d4ed8 0%, #2563eb 55%, #0f5bc4 100%);
+    border: 0;
+    padding: 18px 20px;
+    color: #ffffff;
+    box-shadow:
+      0 10px 25px -5px rgba(37, 99, 235, 0.22),
+      0 8px 10px -6px rgba(37, 99, 235, 0.16),
+      inset 0 1px 1px rgba(255, 255, 255, 0.1);
+    transition: transform 200ms ease, box-shadow 200ms ease;
   }
-  .settle-total-card span,
-  .settle-total-card small,
-  .settle-total-card p {
-    color: rgba(255, 255, 255, 0.82);
-    font-size: 12px;
-    font-weight: 800;
+  .settle-total-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .settle-total-main span {
+    font-size: 13px;
+    font-weight: 700;
+    color: #dbeafe;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  .settle-total-main > div {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
   }
   .settle-total-card strong {
-    display: block;
-    margin-top: 5px;
     font-family: var(--font-mono);
-    font-size: 32px;
-    font-weight: 900;
-    line-height: 1;
+    font-size: clamp(30px, 3vw, 42px);
+    font-weight: 800;
+    line-height: 1.1;
+    color: #ffffff;
+    text-shadow: none;
+  }
+  .settle-total-card small {
+    font-size: 14px;
+    font-weight: 700;
+    color: #dbeafe;
   }
   .settle-total-card p {
-    margin-top: 7px;
+    margin-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+    padding-top: 10px;
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.7);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
   }
   .settle-paid-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 7px;
+    gap: 12px;
   }
   .settle-paid-grid > div {
-    border: 1px solid var(--odoo-border);
-    border-radius: 8px;
-    background: var(--odoo-surface);
-    padding: 11px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    background: #ffffff;
+    padding: 12px 15px;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.02);
+    transition: all 150ms ease;
   }
   .settle-paid-grid span {
     display: block;
     color: var(--odoo-text-muted);
-    font-size: 12px;
-    font-weight: 800;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
   }
   .settle-paid-grid strong {
     display: block;
-    margin-top: 4px;
+    margin-top: 6px;
     font-family: var(--font-mono);
     font-size: 22px;
-    font-weight: 900;
+    font-weight: 800;
+    line-height: 1.2;
+  }
+  .settle-paid-ok {
+    border-color: #a7f3d0 !important;
+    background: #f0fdf4 !important;
   }
   .settle-paid-ok strong {
-    color: var(--odoo-success);
+    color: #047857;
+  }
+  .settle-paid-danger {
+    border-color: #fecaca !important;
+    background: #fef2f2 !important;
   }
   .settle-paid-danger strong {
-    color: var(--odoo-danger);
+    color: #b91c1c;
+  }
+  .settle-paid-neutral {
+    border-color: #e2e8f0;
+    background: #ffffff;
   }
   .settle-paid-neutral strong {
     color: var(--odoo-text-strong);
@@ -2361,6 +2479,8 @@ a {
   }
   .settle-money-input {
     position: relative;
+    display: flex;
+    align-items: center;
   }
   .settle-simple-payments input {
     width: 100%;
@@ -2397,66 +2517,145 @@ a {
     font-size: 10px;
     font-weight: 900;
   }
+  .settle-step {
+    display: inline-flex;
+    width: 26px;
+    height: 26px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    color: #fff;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-style: normal;
+    font-weight: 700;
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.2);
+  }
   .settle-pay-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-    margin-bottom: 10px;
+    grid-template-columns: 1fr;
+    gap: 14px;
+    margin-bottom: 14px;
   }
   .settle-pay-field {
-    display: grid;
-    gap: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .settle-method-card {
+    border-radius: 12px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 13px;
+    transition: all 150ms ease;
+  }
+  .settle-method-card:hover {
+    border-color: #cbd5e1;
+    background: #f1f5f9;
   }
   .settle-pay-label {
     color: var(--odoo-text-strong);
-    font-size: 13px;
-    font-weight: 800;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
   }
   .settle-pay-label b {
-    color: var(--odoo-accent);
-    font-weight: 900;
+    color: var(--odoo-primary);
+    font-weight: 700;
+    background: var(--odoo-primary-50);
+    padding: 1px 5px;
+    border-radius: 4px;
+    margin-left: 4px;
   }
   .settle-money-input input {
     width: 100%;
-    height: 54px;
-    border: 1px solid var(--odoo-border-strong);
-    border-radius: 8px;
-    background: var(--odoo-surface);
-    padding: 8px 58px 8px 12px;
+    height: 56px;
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #ffffff;
+    padding: 8px 62px 8px 12px;
     color: var(--odoo-text-strong);
     font-family: var(--font-mono);
     font-size: 22px;
-    font-weight: 900;
+    font-weight: 700;
     text-align: right;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.05);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
   }
   .settle-money-input input:focus {
-    outline: 2px solid var(--odoo-primary);
-    outline-offset: -1px;
+    border-color: var(--odoo-primary);
+    box-shadow:
+      0 0 0 3px rgba(37, 99, 235, 0.15),
+      inset 0 1px 2px rgba(15, 23, 42, 0.05);
+    outline: none;
   }
   .settle-money-input input:disabled {
-    background: var(--odoo-surface-muted);
-    opacity: 0.7;
+    background: #f1f5f9;
+    color: var(--odoo-text-soft);
+    cursor: not-allowed;
   }
   .settle-exact {
     position: absolute;
-    right: 6px;
+    right: 8px;
     top: 50%;
     transform: translateY(-50%);
     border: 0;
-    border-radius: 6px;
-    background: var(--odoo-primary);
-    padding: 7px 11px;
-    color: #fff;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    padding: 8px 14px;
+    color: #ffffff;
     font-size: 12px;
-    font-weight: 900;
+    font-weight: 700;
     cursor: pointer;
+    box-shadow: 0 2px 4px rgba(37, 99, 235, 0.15);
+    transition: transform 100ms ease, filter 150ms ease;
   }
   .settle-exact:hover:not(:disabled) {
-    filter: brightness(1.05);
+    filter: brightness(1.08);
+  }
+  .settle-exact:active:not(:disabled) {
+    transform: translateY(-50%) scale(0.96);
   }
   .settle-exact:disabled {
     opacity: 0.5;
     cursor: not-allowed;
+  }
+  .settle-qr-method {
+    display: flex;
+    width: 100%;
+    height: 74px;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    background: #ffffff;
+    padding: 14px 16px;
+    color: var(--odoo-text-strong);
+    text-align: left;
+    cursor: pointer;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.02);
+    transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .settle-qr-method:hover:not(:disabled) {
+    border-color: var(--odoo-primary);
+    background: var(--odoo-primary-50);
+    box-shadow: 0 4px 12px rgba(37, 99, 235, 0.08);
+  }
+  .settle-qr-method--active {
+    border-color: #059669 !important;
+    background: #f0fdf4 !important;
+    color: #065f46 !important;
+    box-shadow: 0 4px 14px rgba(5, 150, 105, 0.12), inset 0 0 0 1px #059669 !important;
+  }
+  .settle-qr-method--active small {
+    color: #047857 !important;
+  }
+  .settle-qr-card {
+    border: 1px solid #bfdbfe;
+    background: linear-gradient(180deg, #f0f7ff 0%, #ffffff 100%);
+    box-shadow: 0 4px 20px rgba(59, 130, 246, 0.06);
   }
   .settle-thb-toggle {
     display: flex;
@@ -2464,34 +2663,42 @@ a {
     justify-content: space-between;
     gap: 8px;
     width: 100%;
-    border: 1px dashed var(--odoo-border-strong);
-    border-radius: 8px;
-    background: var(--odoo-surface-muted);
-    padding: 11px 12px;
-    margin-bottom: 10px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+    padding: 10px 14px;
+    margin-bottom: 12px;
     color: var(--odoo-text-strong);
     font-size: 13px;
-    font-weight: 800;
+    font-weight: 600;
     cursor: pointer;
+    transition: all 150ms ease;
   }
   .settle-thb-toggle:hover {
-    background: var(--odoo-primary-50);
+    border-color: #cbd5e1;
+    background: #f1f5f9;
   }
   .settle-thb-toggle em {
-    color: var(--odoo-success);
+    color: #059669;
     font-family: var(--font-mono);
-    font-size: 11px;
+    font-size: 12px;
     font-style: normal;
-    font-weight: 800;
+    font-weight: 700;
+    background: #ecfdf5;
+    padding: 2px 8px;
+    border-radius: 6px;
+    border: 1px solid #a7f3d0;
   }
   .settle-simple-hint {
-    border-radius: 6px;
-    background: var(--odoo-surface-muted);
-    padding: 7px 9px;
+    border-radius: 8px;
+    background: #f1f5f9;
+    border-left: 4px solid var(--odoo-text-muted);
+    padding: 8px 12px;
     color: var(--odoo-text-muted);
-    font-size: 10px;
-    font-weight: 700;
-    line-height: 1.45;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.5;
+    margin-top: 8px;
   }
   .settle-payment-line {
     display: grid;
@@ -2531,32 +2738,38 @@ a {
     text-align: right;
   }
   .settle-slip-empty {
-    margin-top: 8px;
-    border: 1px dashed var(--odoo-border-strong);
-    border-radius: 6px;
-    padding: 11px;
-    color: var(--odoo-text-muted);
+    margin-top: 10px;
+    border: 1px dashed #f87171;
+    border-radius: 10px;
+    background: #fef2f2;
+    padding: 12px;
+    color: #b91c1c;
     text-align: center;
     font-size: 11px;
-    font-weight: 800;
+    font-weight: 600;
   }
   .settle-slip-required {
-    border-color: var(--odoo-danger);
-    background: var(--odoo-danger-bg);
-    color: var(--odoo-danger);
+    border-color: #ef4444;
+    background: #fef2f2;
+    color: #b91c1c;
   }
   .settle-slip-grid {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 7px;
-    margin-top: 9px;
+    gap: 10px;
+    margin-top: 12px;
   }
   .settle-slip {
     position: relative;
     overflow: hidden;
-    border: 1px solid var(--odoo-border);
-    border-radius: 6px;
-    background: var(--odoo-surface);
+    border: 1px solid #cbd5e1;
+    border-radius: 10px;
+    background: #ffffff;
+    box-shadow: 0 2px 4px rgba(15, 23, 42, 0.05);
+    transition: border-color 150ms ease;
+  }
+  .settle-slip:hover {
+    border-color: #94a3b8;
   }
   .settle-slip img {
     display: block;
@@ -2566,20 +2779,35 @@ a {
   }
   .settle-slip button {
     position: absolute;
-    top: 4px;
-    right: 4px;
+    top: 6px;
+    right: 6px;
     width: 22px;
-    height: 19px;
-    border-radius: 879px;
-    background: var(--odoo-danger);
-    color: var(--odoo-surface);
-    font-weight: 900;
+    height: 22px;
+    border-radius: 999px;
+    background: rgba(239, 68, 68, 0.9);
+    color: #ffffff;
+    font-weight: 700;
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    cursor: pointer;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+    transition: background 150ms ease;
+  }
+  .settle-slip button:hover {
+    background: #dc2626;
   }
   .settle-slip span {
     display: block;
-    padding: 4px 4px;
+    padding: 6px 8px;
     color: var(--odoo-text-muted);
-    font-size: 9px;
+    font-size: 10px;
+    font-weight: 600;
+    text-align: center;
+    border-top: 1px solid #f1f5f9;
+    background: #f8fafc;
   }
   .settle-note {
     display: block;
@@ -2596,20 +2824,50 @@ a {
     text-align: left;
   }
   .settle-actions {
+    position: sticky;
+    bottom: -4px;
+    z-index: 10;
     display: flex;
     justify-content: space-between;
-    gap: 9px;
-    border-top: 1px solid var(--odoo-border);
-    padding-top: 11px;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid rgba(226, 232, 240, 0.8);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.9);
+    margin-top: 14px;
+    padding: 16px;
+    box-shadow: 0 -10px 25px rgba(15, 23, 42, 0.05);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
   }
   .settle-actions .odoo-btn-primary {
-    height: 39px;
-    flex: 1 1 auto;
+    height: 50px;
+    flex: 2 1 auto;
     justify-content: center;
-    font-size: 12px;
-    font-weight: 900;
+    font-size: 15px;
+    font-weight: 700;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
+    transition: transform 150ms ease, box-shadow 150ms ease;
+  }
+  @media (max-width: 1050px) {
+    .settle-layout {
+      grid-template-columns: minmax(0, 1fr) minmax(390px, 440px);
+      padding: 14px;
+    }
+    .settle-detail-grid {
+      grid-template-columns: 1fr;
+    }
   }
   @media (max-width: 820px) {
+    .settle-header {
+      align-items: flex-start;
+      padding: 16px;
+    }
+    .settle-header h2 {
+      font-size: 20px;
+    }
     .settle-layout {
       grid-template-columns: 1fr;
       /* On a phone the two panes stack — let the whole overlay scroll as a
@@ -2622,8 +2880,24 @@ a {
       overflow: visible;
       max-height: none;
     }
+    .settle-payment {
+      padding: 10px;
+    }
+    .settle-payment-body {
+      overflow: visible;
+    }
     .settle-items {
       max-height: none;
+    }
+    .settle-detail-grid,
+    .settle-pay-grid {
+      grid-template-columns: 1fr;
+    }
+    .settle-total-card strong {
+      font-size: 32px;
+    }
+    .settle-qr-method {
+      height: 76px;
     }
     .settle-payment-line {
       grid-template-columns: 1fr;
@@ -2639,7 +2913,8 @@ a {
       bottom: 0;
       z-index: 5;
       flex-wrap: wrap;
-      background: var(--odoo-surface-muted);
+      border-radius: 0;
+      background: rgba(255, 255, 255, 0.98);
       margin: 0 -16px -18px;
       padding: 11px 16px calc(11px + env(safe-area-inset-bottom));
     }
@@ -3105,7 +3380,7 @@ a {
   }
   .pos-toolbar {
     border-bottom: 1px solid var(--odoo-border);
-    background: rgba(255, 255, 255, 0.96);
+    background: rgba(255, 255, 255, 0.98);
     backdrop-filter: blur(12px);
   }
   .pos-product-list {

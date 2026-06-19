@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getEmployeeFromRequest } from "@/lib/auth";
-import { buildDynamicQr } from "@/lib/lao-qr";
+import { buildDynamicQr, buildOnePayStaticQr } from "@/lib/lao-qr";
 
 // GET /api/cashier/customer-qr?amount=250000
 //
@@ -15,10 +15,20 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const base = (process.env.BCEL_QR_PAYLOAD ?? "").trim();
+  let base = (process.env.BCEL_QR_PAYLOAD ?? "").trim();
   if (!base) {
-    // Not configured yet — the display shows a "paste your BCEL QR" hint.
-    return NextResponse.json({ configured: false, payload: null });
+    const mcid = (process.env.ONEPAY_MCID ?? "").trim();
+    const merchantName = (process.env.ONEPAY_MERCHANT_NAME ?? "").trim();
+    const mcc = (process.env.ONEPAY_MCC ?? "").trim();
+    if (!mcid || !merchantName || !mcc) {
+      return NextResponse.json({ configured: false, payload: null });
+    }
+    base = buildOnePayStaticQr({
+      mcid,
+      merchantName,
+      mcc,
+      provinceCode: process.env.ONEPAY_PROVINCE_CODE,
+    });
   }
 
   const amount = Number(request.nextUrl.searchParams.get("amount"));

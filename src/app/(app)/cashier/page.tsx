@@ -22,6 +22,7 @@ import {
   subscribeCustomerDisplay,
   IDLE_DISPLAY_STATE,
 } from "@/lib/customer-display";
+import TransferQr from "@/components/TransferQr";
 import {
   getCashierData,
   type CashierOrder,
@@ -553,7 +554,7 @@ function CashierClientInner({
             className="absolute inset-0 cursor-default"
             onClick={() => setSelectedCart(null)}
           />
-          <aside className="relative flex h-dvh max-h-dvh w-full max-w-6xl flex-col overflow-hidden border-l border-odoo-border bg-odoo-surface">
+          <aside className="cashier-drawer relative flex h-dvh max-h-dvh w-full max-w-[1180px] flex-col overflow-hidden border-l border-odoo-border bg-odoo-surface">
             <SettleForm
               order={selected}
               currencyRates={currencyRates}
@@ -1121,6 +1122,7 @@ function SettleForm({
   // THB is the secondary currency — keep its inputs collapsed until needed so
   // the common LAK-only flow stays uncluttered.
   const [showThb, setShowThb] = useState(false);
+  const [qrPaymentSelected, setQrPaymentSelected] = useState(false);
   const [slips, setSlips] = useState<AttachedSlip[]>([]);
   const [slipBusy, setSlipBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1202,7 +1204,6 @@ function SettleForm({
   }, [paymentInputs, currencyRates]);
 
   const paidInMain = numericPayments.reduce((s, p) => s + p.inMain, 0);
-  const hasAnyTransfer = numericPayments.some((p) => p.method === "transfer");
   const isApprovedBillDiscount = billDiscountReq?.status === "approved";
   const billDiscountAmount = isApprovedBillDiscount
     ? Math.max(
@@ -1219,8 +1220,10 @@ function SettleForm({
   const remainingDue = Math.max(0, -change);
   const canSettle =
     order.statusLabel === "PENDING" || order.statusLabel === "HELD";
-  const needsSlip = hasAnyTransfer;
-  const slipsMissing = needsSlip && slips.length === 0;
+  // Transfer-slip upload removed — QR payment replaces the manual slip, so the
+  // section is hidden and settlement is never blocked on a slip.
+  const needsSlip = false;
+  const slipsMissing = false;
   const awaitingApproval = billDiscountReq?.status === "pending";
   const itemQuantity = useMemo(
     () => order.items.reduce((sum, item) => sum + item.quantity, 0),
@@ -1235,6 +1238,14 @@ function SettleForm({
   const transferKipKey = paymentKey(MAIN_CURRENCY, "transfer");
   const cashKipInput = paymentInputs[cashKipKey] ?? "0";
   const transferKipInput = paymentInputs[transferKipKey] ?? "0";
+
+  // QR transfer is always the exact bill balance. If a discount or points
+  // redemption changes the balance after QR was selected, refresh the amount
+  // automatically so the cashier never has to type or correct it.
+  useEffect(() => {
+    if (!qrPaymentSelected) return;
+    resetPayments({ [transferKipKey]: String(effectiveTotal) });
+  }, [effectiveTotal, qrPaymentSelected, transferKipKey]);
 
   // Total transfer in KIP (any currency) — drives the BCEL QR on the customer
   // screen.
@@ -1306,6 +1317,12 @@ function SettleForm({
     const reset: Record<PaymentField, string> = {} as Record<PaymentField, string>;
     for (const k of PAYMENT_FIELDS) reset[k] = "0";
     setPaymentInputs({ ...reset, ...next });
+  }
+
+  function selectQrPayment() {
+    setQrPaymentSelected(true);
+    resetPayments({ [transferKipKey]: String(effectiveTotal) });
+    openCustomerDisplay();
   }
 
   async function handleSlipFiles(files: FileList | null) {
@@ -1480,7 +1497,9 @@ function SettleForm({
   return (
     <div className="settle-drawer">
       <header className="settle-header">
-        <div className="min-w-0">
+        <div className="settle-header-identity">
+          <div className="settle-header-mark">₭</div>
+          <div className="min-w-0">
           <div className="settle-eyebrow">
             Sale Order {order.docNo}
             {order.receiptDocNo
@@ -1493,6 +1512,7 @@ function SettleForm({
             {order.customerPhone ? `${order.customerPhone} · ` : ""}
             {order.salespersonName ?? order.userOwner ?? "—"}
           </p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -1504,7 +1524,7 @@ function SettleForm({
             ໜ້າຈໍລູກຄ້າ
           </button>
           <button type="button" onClick={onClose} className="odoo-btn odoo-btn-secondary">
-            ປິດ
+            ✕ ປິດ
           </button>
         </div>
       </header>
@@ -1604,39 +1624,47 @@ function SettleForm({
         </section>
 
         <aside className="settle-payment">
-          <div className="settle-total-card">
-            <div>
-              <span>ຍອດຕ້ອງຮັບ</span>
-              <strong>{moneyFmt.format(effectiveTotal)}</strong>
-              <small>ກີບ</small>
+          <div className="settle-payment-summary">
+            <div className="settle-total-card">
+              <div className="settle-total-main">
+                <span>ຍອດຕ້ອງຮັບ</span>
+                <div>
+                  <strong>{moneyFmt.format(effectiveTotal)}</strong>
+                  <small>ກີບ</small>
+                </div>
+              </div>
+              {billDiscountAmount > 0 ? (
+                <p>ຫຼຸດອະນຸມັດ {moneyFmt.format(billDiscountAmount)} ກີບ ຈາກ {moneyFmt.format(order.totalAmount)}</p>
+              ) : billDifference !== 0 ? (
+                <p>ປັບຍອດ {moneyFmt.format(billDifference)} ກີບ</p>
+              ) : null}
             </div>
-            {billDiscountAmount > 0 ? (
-              <p>ຫຼຸດອະນຸມັດ {moneyFmt.format(billDiscountAmount)} ກີບ ຈາກ {moneyFmt.format(order.totalAmount)}</p>
-            ) : billDifference !== 0 ? (
-              <p>ປັບຍອດ {moneyFmt.format(billDifference)} ກີບ</p>
-            ) : null}
+
+            <div className="settle-paid-grid">
+              <div className={paidInMain < effectiveTotal ? "settle-paid-danger" : "settle-paid-ok"}>
+                <span>ຮັບຈິງ</span>
+                <strong>{moneyFmt.format(paidInMain)}</strong>
+              </div>
+              <div className={remainingDue > 0 ? "settle-paid-danger" : changeDue > 0 ? "settle-paid-ok" : "settle-paid-neutral"}>
+                <span>{remainingDue > 0 ? "ຍັງຂາດ" : "ຕ້ອງທອນ"}</span>
+                <strong>{moneyFmt.format(remainingDue > 0 ? remainingDue : changeDue)}</strong>
+              </div>
+            </div>
           </div>
 
-          <div className="settle-paid-grid">
-            <div className={paidInMain < effectiveTotal ? "settle-paid-danger" : "settle-paid-ok"}>
-              <span>ຮັບຈິງ</span>
-              <strong>{moneyFmt.format(paidInMain)}</strong>
-            </div>
-            <div className={remainingDue > 0 ? "settle-paid-danger" : changeDue > 0 ? "settle-paid-ok" : "settle-paid-neutral"}>
-              <span>{remainingDue > 0 ? "ຍັງຂາດ" : "ຕ້ອງທອນ"}</span>
-              <strong>{moneyFmt.format(remainingDue > 0 ? remainingDue : changeDue)}</strong>
-            </div>
-          </div>
-
+          <div className="settle-payment-body">
           <div className="settle-card">
             <div className="settle-card-title">
-              <span>ຮັບເງິນ</span>
+              <span className="flex items-center gap-2">
+                <i className="settle-step">1</i>
+                ເລືອກວິທີຮັບເງິນ
+              </span>
               <strong className="settle-pay-curtag">ກີບ · ບາດ</strong>
             </div>
 
             {/* ກີບ — ສະກຸນຫຼັກ. ປຸ່ມ “ຄົບ” ຕື່ມຍອດເຕັມໃຫ້ທັນທີ. */}
             <div className="settle-pay-grid">
-              <label className="settle-pay-field">
+              <label className="settle-pay-field settle-method-card">
                 <span className="settle-pay-label">ເງິນສົດ <b>ກີບ</b></span>
                 <div className="settle-money-input">
                   <input
@@ -1646,50 +1674,51 @@ function SettleForm({
                     step={1000}
                     value={cashKipInput}
                     disabled={!canSettle}
-                    onChange={(e) =>
+                    onChange={(e) => {
+                      setQrPaymentSelected(false);
                       setPaymentInputs((prev) => ({
                         ...prev,
                         [cashKipKey]: e.target.value,
-                      }))
-                    }
+                      }));
+                    }}
                   />
                   <button
                     type="button"
                     className="settle-exact"
                     disabled={!canSettle}
-                    onClick={() => resetPayments({ [cashKipKey]: String(effectiveTotal) })}
+                    onClick={() => {
+                      setQrPaymentSelected(false);
+                      resetPayments({ [cashKipKey]: String(effectiveTotal) });
+                    }}
                   >
                     ຄົບ
                   </button>
                 </div>
               </label>
-              <label className="settle-pay-field">
-                <span className="settle-pay-label">ເງິນໂອນ <b>ກີບ</b></span>
-                <div className="settle-money-input">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step={1000}
-                    value={transferKipInput}
-                    disabled={!canSettle}
-                    onChange={(e) =>
-                      setPaymentInputs((prev) => ({
-                        ...prev,
-                        [transferKipKey]: e.target.value,
-                      }))
-                    }
-                  />
-                  <button
-                    type="button"
-                    className="settle-exact"
-                    disabled={!canSettle}
-                    onClick={() => resetPayments({ [transferKipKey]: String(effectiveTotal) })}
-                  >
-                    ຄົບ
-                  </button>
-                </div>
-              </label>
+              <div className="settle-pay-field">
+                <span className="settle-pay-label">ເງິນໂອນ <b>ຜ່ານ QR</b></span>
+                <button
+                  type="button"
+                  disabled={!canSettle}
+                  onClick={selectQrPayment}
+                  className={
+                    "settle-qr-method " +
+                    (qrPaymentSelected
+                      ? "settle-qr-method--active"
+                      : "")
+                  }
+                >
+                  <span>
+                    <strong className="block text-sm">
+                      {qrPaymentSelected ? "✓ ເລືອກ QR ແລ້ວ" : "▦ ເລືອກໂອນຜ່ານ QR"}
+                    </strong>
+                    <small className="text-[10px] opacity-70">ບໍ່ຕ້ອງປ້ອນຈຳນວນເງິນ</small>
+                  </span>
+                  <strong className="font-mono text-lg">
+                    {moneyFmt.format(qrPaymentSelected ? Number(transferKipInput) : effectiveTotal)} ₭
+                  </strong>
+                </button>
+              </div>
             </div>
 
             {/* ບາດ — ເປີດເມື່ອລູກຄ້າຈ່າຍເປັນເງິນບາດ */}
@@ -1716,12 +1745,13 @@ function SettleForm({
                       step={1}
                       value={paymentInputs[paymentKey("01", "cash")] ?? "0"}
                       disabled={!canSettle}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        setQrPaymentSelected(false);
                         setPaymentInputs((prev) => ({
                           ...prev,
                           [paymentKey("01", "cash")]: e.target.value,
-                        }))
-                      }
+                        }));
+                      }}
                     />
                     <em className="settle-unit">฿</em>
                   </div>
@@ -1736,12 +1766,13 @@ function SettleForm({
                       step={1}
                       value={paymentInputs[paymentKey("01", "transfer")] ?? "0"}
                       disabled={!canSettle}
-                      onChange={(e) =>
+                      onChange={(e) => {
+                        setQrPaymentSelected(false);
                         setPaymentInputs((prev) => ({
                           ...prev,
                           [paymentKey("01", "transfer")]: e.target.value,
-                        }))
-                      }
+                        }));
+                      }}
                     />
                     <em className="settle-unit">฿</em>
                   </div>
@@ -1750,9 +1781,29 @@ function SettleForm({
             ) : null}
 
             <div className="settle-simple-hint">
-              ກົດ “ຄົບ” ເພື່ອຮັບເຕັມຍອດ · ລະບົບແປງເງິນບາດເປັນກີບໃຫ້ອັດຕະໂນມັດ.
+              ເລືອກ QR ແລ້ວລະບົບຈະໃສ່ຍອດເຕັມ ແລະເປີດໜ້າ QR ໃຫ້ອັດຕະໂນມັດ.
             </div>
           </div>
+
+          {transferInMain > 0 ? (
+            <div className="settle-card settle-qr-card">
+              <div className="settle-card-title">
+                <span className="flex items-center gap-2">
+                  <i className="settle-step">2</i>
+                  ໃຫ້ລູກຄ້າສະແກນ QR
+                </span>
+                <strong className="settle-pay-curtag">
+                  {moneyFmt.format(Math.round(transferInMain))} ₭
+                </strong>
+              </div>
+              <div className="flex justify-center py-1">
+                <TransferQr amount={Math.round(transferInMain)} size={210} />
+              </div>
+              <p className="mt-1 text-center text-xs text-odoo-text-muted">
+                ໃຫ້ລູກຄ້າສະແກນເພື່ອໂອນ · QR ດຽວກັນສະແດງຢູ່ໜ້າຈໍລູກຄ້າ
+              </p>
+            </div>
+          ) : null}
 
           <BillDiscountPanel
             canSettle={canSettle}
@@ -1807,7 +1858,10 @@ function SettleForm({
           {canSettle && needsSlip ? (
             <div className="settle-card">
               <div className="settle-card-title">
-                <span>ສະລິບການໂອນ</span>
+                <span className="flex items-center gap-2">
+                  <i className="settle-step">3</i>
+                  ສະລິບການໂອນ
+                </span>
                 <strong>{slips.length}/{SLIP_MAX_COUNT}</strong>
               </div>
               <button
@@ -1908,6 +1962,7 @@ function SettleForm({
                   ? "ລໍຖ້າອະນຸມັດສ່ວນຫຼຸດ..."
                   : "ບັນທຶກ ແລະ ຮັບເງິນ"}
             </button>
+          </div>
           </div>
         </aside>
       </div>

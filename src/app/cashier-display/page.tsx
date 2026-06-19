@@ -26,38 +26,95 @@ export default function CustomerDisplayPage() {
 
   if (!hasBill) {
     return (
-      <main className="flex h-screen flex-col items-center justify-center bg-slate-900 text-white">
-        <div className="text-5xl font-black tracking-tight">ODG</div>
-        <p className="mt-4 text-xl text-slate-300">ຍິນດີຕ້ອນຮັບ · Welcome</p>
+      <main className="relative flex h-screen overflow-hidden bg-[#071426] text-white">
+        <div className="absolute -left-40 -top-40 h-[520px] w-[520px] rounded-full bg-cyan-400/10 blur-3xl" />
+        <div className="absolute -bottom-56 -right-28 h-[620px] w-[620px] rounded-full bg-blue-500/20 blur-3xl" />
+        <div className="relative m-auto flex flex-col items-center px-8 text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/odm.png"
+            alt="ODIEN Mall"
+            className="h-48 w-80 object-contain drop-shadow-[0_20px_35px_rgba(34,211,238,0.18)]"
+          />
+          <div className="mt-8 rounded-full border border-white/10 bg-white/5 px-7 py-3 text-xl font-bold tracking-[0.2em] text-cyan-200 backdrop-blur">
+            ODIEN MALL
+          </div>
+          <h1 className="mt-8 text-6xl font-black leading-tight">
+            ຍິນດີຕ້ອນຮັບ
+          </h1>
+          <p className="mt-4 text-3xl text-slate-300">
+            ຂອບໃຈທີ່ເລືອກຊື້ສິນຄ້າກັບພວກເຮົາ
+          </p>
+          <div className="mt-12 flex items-center gap-3 text-lg text-slate-400">
+            <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-400" />
+            ພ້ອມໃຫ້ບໍລິການ
+          </div>
+        </div>
       </main>
     );
   }
 
   return (
-    <main className="flex h-screen bg-slate-100 text-slate-900">
-      {/* Items + totals */}
+    <main className="flex h-screen overflow-hidden bg-[#eef3f8] text-slate-900">
       <section className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-baseline justify-between bg-slate-900 px-8 py-5 text-white">
-          <div className="text-3xl font-black">ODG</div>
-          <div className="text-right">
-            <div className="text-sm text-slate-300">ບິນ #{state.cartNumber}</div>
+        <header className="flex min-h-[118px] items-center justify-between bg-[#071426] px-10 text-white shadow-xl">
+          <div className="flex items-center gap-6">
+            <div className="flex h-20 w-32 items-center justify-center rounded-2xl bg-white p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src="/odm.png" alt="ODIEN Mall" className="h-full w-full object-contain" />
+            </div>
+            <div>
+              <div className="text-3xl font-black">ODIEN MALL</div>
+              <div className="mt-1 text-lg text-cyan-200">ລາຍການສິນຄ້າຂອງທ່ານ</div>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-white/5 px-6 py-3 text-right">
+            <div className="text-base font-bold text-slate-300">ເລກບິນ</div>
+            <div className="font-mono text-2xl font-black">#{state.cartNumber}</div>
             {state.customerName ? (
-              <div className="text-lg font-bold">{state.customerName}</div>
+              <div className="mt-1 text-lg font-bold text-cyan-200">{state.customerName}</div>
             ) : null}
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-8 py-4">
-          <table className="w-full text-lg">
+        <div className="flex items-center justify-between border-b border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 px-10 py-5 shadow-sm">
+          <div>
+            <div className="text-lg font-bold text-blue-600">
+              {state.items.length} ລາຍການ
+            </div>
+            <div className="mt-1 text-3xl font-black">ລວມຍອດທັງໝົດ</div>
+          </div>
+          <div className="text-right">
+            <span className="text-6xl font-black leading-none tabular-nums text-blue-700">
+              {kip.format(state.total)}
+            </span>
+            <span className="ml-3 text-3xl font-black text-blue-700">₭</span>
+          </div>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-8">
+          <div className="mb-3 grid grid-cols-[1fr_110px_210px] gap-4 px-6 text-base font-black text-slate-500">
+            <span>ລາຍການສິນຄ້າ</span>
+            <span className="text-center">ຈຳນວນ</span>
+            <span className="text-right">ມູນຄ່າ</span>
+          </div>
+          <table className="w-full border-separate border-spacing-y-3 text-2xl">
             <tbody>
               {state.items.map((it, i) => (
-                <tr key={i} className="border-b border-slate-200">
-                  <td className="py-3 pr-3 font-semibold">{it.name}</td>
-                  <td className="w-20 py-3 text-right text-slate-500">
-                    x{kip.format(it.qty)}
+                <tr key={i} className="bg-white shadow-sm">
+                  <td className="rounded-l-2xl border-y border-l border-slate-200 px-6 py-5 font-bold">
+                    <span className="mr-4 inline-flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-base font-black text-blue-600">
+                      {i + 1}
+                    </span>
+                    {it.name}
                   </td>
-                  <td className="w-40 py-3 text-right font-bold tabular-nums">
-                    {kip.format(it.amount)}
+                  <td className="w-[110px] border-y border-slate-200 py-5 text-center">
+                    <span className="inline-flex min-w-16 justify-center rounded-xl bg-slate-100 px-3 py-2 font-black text-slate-700">
+                      {kip.format(it.qty)}
+                    </span>
+                  </td>
+                  <td className="w-[210px] rounded-r-2xl border-y border-r border-slate-200 px-6 py-5 text-right text-3xl font-black tabular-nums">
+                    {kip.format(it.amount)} <span className="text-xl text-slate-500">₭</span>
                   </td>
                 </tr>
               ))}
@@ -65,27 +122,12 @@ export default function CustomerDisplayPage() {
           </table>
         </div>
 
-        <footer className="border-t-4 border-slate-900 bg-white px-8 py-5">
-          <div className="flex items-baseline justify-between">
-            <span className="text-2xl font-bold">ລວມທັງໝົດ</span>
-            <span className="text-4xl font-black tabular-nums">
-              {kip.format(state.total)} ₭
-            </span>
-          </div>
-          <div className="mt-2 flex items-baseline justify-between text-lg">
-            <span className="text-slate-500">ຮັບເງິນ</span>
-            <span className="tabular-nums">{kip.format(state.paid)} ₭</span>
-          </div>
-          {state.changeDue > 0 ? (
-            <div className="mt-1 flex items-baseline justify-between text-lg text-emerald-600">
-              <span>ເງິນທອນ</span>
-              <span className="tabular-nums">{kip.format(state.changeDue)} ₭</span>
-            </div>
-          ) : null}
-          {state.remainingDue > 0 ? (
-            <div className="mt-1 flex items-baseline justify-between text-lg text-rose-600">
-              <span>ຍັງຄ້າງ</span>
-              <span className="tabular-nums">{kip.format(state.remainingDue)} ₭</span>
+        <footer className="border-t border-slate-200 bg-white px-10 py-5 shadow-[0_-12px_35px_rgba(15,23,42,0.08)]">
+          {(state.paid > 0 || state.changeDue > 0 || state.remainingDue > 0) ? (
+            <div className="grid grid-cols-3 gap-3 text-xl">
+              <DisplayTotal label="ຮັບເງິນ" value={state.paid} tone="slate" />
+              <DisplayTotal label="ຍັງຄ້າງ" value={state.remainingDue} tone="red" />
+              <DisplayTotal label="ເງິນທອນ" value={state.changeDue} tone="green" />
             </div>
           ) : null}
         </footer>
@@ -108,9 +150,11 @@ function TransferQrPanel({ amount }: { amount: number }) {
 
   useEffect(() => {
     let cancelled = false;
-    setStatus("loading");
-    setDataUrl(null);
     (async () => {
+      await Promise.resolve();
+      if (cancelled) return;
+      setStatus("loading");
+      setDataUrl(null);
       try {
         const res = await fetch(
           `/api/cashier/customer-qr?amount=${encodeURIComponent(amount)}`,
@@ -126,7 +170,7 @@ function TransferQrPanel({ amount }: { amount: number }) {
           return;
         }
         const url = await QRCode.toDataURL(data.payload as string, {
-          width: 360,
+          width: 520,
           margin: 1,
         });
         if (!cancelled) {
@@ -143,28 +187,64 @@ function TransferQrPanel({ amount }: { amount: number }) {
   }, [amount]);
 
   return (
-    <aside className="flex w-[420px] flex-col items-center justify-center gap-5 border-l border-slate-200 bg-white px-8">
-      <div className="text-center">
-        <div className="text-xl font-bold text-slate-500">ໂອນຜ່ານ BCEL One</div>
-        <div className="mt-1 text-4xl font-black tabular-nums">{amountLabel} ₭</div>
+    <aside className="relative flex w-[570px] shrink-0 flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-[#0b1e37] to-[#071426] px-10 text-white">
+      <div className="absolute -right-40 -top-36 h-96 w-96 rounded-full bg-cyan-400/10 blur-3xl" />
+      <div className="relative text-center">
+        <div className="inline-flex items-center gap-3 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-5 py-2 text-xl font-black text-cyan-200">
+          <span className="h-3 w-3 animate-pulse rounded-full bg-emerald-400" />
+          BCEL OnePay
+        </div>
+        <div className="mt-6 text-2xl font-bold text-slate-300">ຈຳນວນທີ່ຕ້ອງໂອນ</div>
+        <div className="mt-2 text-6xl font-black tabular-nums text-white">{amountLabel} ₭</div>
       </div>
-      <div className="flex h-[360px] w-[360px] items-center justify-center rounded-2xl border-4 border-slate-900 bg-white p-3">
+      <div className="relative mt-8 flex h-[460px] w-[460px] items-center justify-center rounded-[32px] bg-white p-5 shadow-[0_28px_65px_rgba(0,0,0,0.4)]">
+        <span className="absolute -left-2 -top-2 h-16 w-16 rounded-tl-[28px] border-l-8 border-t-8 border-cyan-400" />
+        <span className="absolute -right-2 -top-2 h-16 w-16 rounded-tr-[28px] border-r-8 border-t-8 border-cyan-400" />
+        <span className="absolute -bottom-2 -left-2 h-16 w-16 rounded-bl-[28px] border-b-8 border-l-8 border-cyan-400" />
+        <span className="absolute -bottom-2 -right-2 h-16 w-16 rounded-br-[28px] border-b-8 border-r-8 border-cyan-400" />
         {status === "ok" && dataUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={dataUrl} alt="BCEL transfer QR" className="h-full w-full" />
         ) : status === "loading" ? (
-          <span className="text-slate-400">ກຳລັງສ້າງ QR...</span>
+          <span className="text-xl text-slate-500">ກຳລັງສ້າງ QR...</span>
         ) : status === "unconfigured" ? (
-          <span className="px-4 text-center text-sm text-amber-600">
+          <span className="px-4 text-center text-xl text-amber-600">
             ຍັງບໍ່ໄດ້ຕັ້ງຄ່າ BCEL QR (BCEL_QR_PAYLOAD)
           </span>
         ) : (
-          <span className="text-rose-500">ສ້າງ QR ບໍ່ສຳເລັດ</span>
+          <span className="text-xl text-rose-500">ສ້າງ QR ບໍ່ສຳເລັດ</span>
         )}
       </div>
-      <p className="text-center text-sm text-slate-500">
-        ສະແກນດ້ວຍແອັບທະນາຄານ ເພື່ອໂອນຕາມຈຳນວນຂ້າງເທິງ
+      <p className="relative mt-8 max-w-md text-center text-xl leading-relaxed text-slate-300">
+        ເປີດແອັບທະນາຄານ ແລ້ວສະແກນ QR
+        <br />
+        <strong className="text-white">ຈຳນວນເງິນຖືກໃສ່ໄວ້ແລ້ວ</strong>
       </p>
     </aside>
+  );
+}
+
+function DisplayTotal({
+  label,
+  value,
+  tone,
+}: {
+  label: string;
+  value: number;
+  tone: "slate" | "red" | "green";
+}) {
+  const color =
+    tone === "green"
+      ? "text-emerald-600"
+      : tone === "red"
+        ? "text-rose-600"
+        : "text-slate-700";
+  return (
+    <div className="rounded-xl bg-slate-50 px-4 py-3">
+      <span className="block text-sm font-bold text-slate-500">{label}</span>
+      <strong className={`mt-1 block font-mono text-2xl tabular-nums ${color}`}>
+        {kip.format(value)} ₭
+      </strong>
+    </div>
   );
 }

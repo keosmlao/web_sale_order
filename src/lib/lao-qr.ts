@@ -92,3 +92,46 @@ export function buildDynamicQr(basePayload: string, amount: number): string {
     .padStart(4, "0");
   return withCrcTag + crc;
 }
+
+// Build a valid static OnePay merchant payload from the merchant information
+// supplied by BCEL. This removes the need to manually scan/copy a static QR
+// string before the customer display can generate amount-bearing QR codes.
+export function buildOnePayStaticQr(config: {
+  mcid: string;
+  merchantName: string;
+  mcc: string;
+  provinceCode?: string;
+}): string {
+  const mcid = config.mcid.trim();
+  const mcc = config.mcc.trim();
+  const merchantName = config.merchantName.trim().slice(0, 25);
+  const provinceCode = (config.provinceCode?.trim() || "VT").slice(0, 25);
+
+  if (!mcid) throw new Error("missing OnePay MCID");
+  if (!mcc) throw new Error("missing OnePay MCC");
+  if (!merchantName) throw new Error("missing OnePay merchant name");
+
+  const merchantAccount = serializeEmv([
+    { id: "00", value: "BCEL" },
+    { id: "01", value: "ONEPAY" },
+    { id: "02", value: mcid },
+  ]);
+
+  const fields: EmvField[] = [
+    { id: "00", value: "01" },
+    { id: "01", value: "11" },
+    { id: "33", value: merchantAccount },
+    { id: "52", value: mcc.padStart(4, "0").slice(0, 4) },
+    { id: "53", value: "418" },
+    { id: "58", value: "LA" },
+    { id: "59", value: merchantName },
+    { id: "60", value: provinceCode },
+  ];
+
+  const withCrcTag = serializeEmv(fields) + "6304";
+  const crc = crc16ccitt(withCrcTag)
+    .toString(16)
+    .toUpperCase()
+    .padStart(4, "0");
+  return withCrcTag + crc;
+}

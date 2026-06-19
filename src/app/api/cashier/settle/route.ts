@@ -265,16 +265,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // When the cashier records any transfer (any currency), at least one slip
-  // image is mandatory — the receipt-image is the audit trail for non-cash
-  // money. Cash-only settlements do not require a slip.
-  const hasAnyTransfer = payments.some((p) => p.method === "transfer");
-  if (hasAnyTransfer && transferSlips.length === 0) {
-    return NextResponse.json(
-      { error: "ກະລຸນາແນບຮູບສະລິບການໂອນເງິນຢ່າງໜ້ອຍ 1 ຮູບ" },
-      { status: 400 },
-    );
-  }
+  // Transfer-slip images are optional — with QR payment the slip is no longer
+  // required. Any slips the cashier does attach are still saved as audit trail.
   if (transferSlips.length > MAX_SLIPS) {
     return NextResponse.json(
       { error: `ແນບຮູບໄດ້ສູງສຸດ ${MAX_SLIPS} ຮູບເທົ່ານັ້ນ` },
