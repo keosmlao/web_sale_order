@@ -18,6 +18,10 @@ import {
   type EnginePromotion,
 } from "@/lib/promotions-engine";
 import { STOCK_BALANCE_AS_OF_DATE } from "@/lib/inventory-config";
+import {
+  getPaymentAccountMap,
+  resolvePaymentAccount,
+} from "@/lib/payment-accounts";
 
 // Settlement: turn a draft order_cart into ic_trans + ic_trans_detail
 // (inventory sale) and cb_trans (cash receipt).
@@ -361,6 +365,11 @@ export async function POST(request: NextRequest) {
   }
 
   try {
+    // GL account each (currency, method) posts to on cb_trans_detail. Loaded
+    // once before the retry loop; defaults apply if /settings/payment-accounts
+    // hasn't been configured yet.
+    const paymentAccounts = await getPaymentAccountMap();
+
     let result: SettlementResult | null = null;
     for (let attempt = 1; attempt <= 3; attempt++) {
       try {
@@ -874,18 +883,24 @@ export async function POST(request: NextRequest) {
       // KIP terms — the cashier sees this on screen; total_amount_pay in
       // cb_trans is the same number converted to THB for SML compatibility.
       //
-      // cb_trans header convention (verified against legacy CAK rows):
-      //   cash_amount           = THB-cash payments only (currency=base)
-      //   tranfer_amount        = THB-transfer payments only (currency=base)
-      //   total_other_currency  = THB equivalent of foreign-currency payments
-      //                           (KIP cash OR KIP transfer — SML's UI shows
-      //                           this in the "ສະກຸນເງິນອື່ນ ໆ" field).
-      // The per-line cash/transfer breakdown still lives in cb_trans_detail
-      // (ref1 = 'cash' | 'transfer'), so no audit information is lost.
+      // cb_trans header convention (verified against live SML CAK/POS rows —
+      // e.g. CAK26007661 KIP-cash → cash_amount, POS26060405 KIP-transfer →
+      // tranfer_amount, CAK26007602 KIP-mixed → both, all with
+      // total_other_currency = 0):
+      //   cash_amount           = ALL cash payments, any currency, in THB-equiv
+      //   tranfer_amount        = ALL transfer payments, any currency, in THB-equiv
+      //   total_other_currency  = 0 — SML buckets KIP into cash/tranfer by
+      //                           METHOD (converted to THB via exchange_rate),
+      //                           NOT into the "ສະກຸນເງິນອື່ນ ໆ" field. Routing
+      //                           KIP here is what made every transfer show as
+      //                           cash, since KIP is the main currency.
+      // pay_type stays 1 for all (cash AND transfer) — SML never uses it to
+      // distinguish the two. The per-line breakdown also lives in
+      // cb_trans_detail (ref1 = 'cash' | 'transfer').
       let receivedInMain = 0;
-      let cashAmountThb = 0;          // base-currency cash only
-      let transferAmountThb = 0;      // base-currency transfer only
-      let otherCurrencyThb = 0;       // THB equiv of all foreign-currency payments
+      let cashAmountThb = 0;          // all cash, any currency, in THB
+      let transferAmountThb = 0;      // all transfer, any currency, in THB
+      const otherCurrencyThb = 0;     // always 0 — KIP is split by method above
       const paymentBreakdown: Array<{
         currency: CurrencyCode;
         method: PayMethod;
@@ -905,12 +920,10 @@ export async function POST(request: NextRequest) {
         const amountInMain = roundMoney(p.amount * toMain);
         receivedInMain += amountInMain;
         const amountInBase = roundMoney(p.amount * toBase);
-        if (p.currency === BASE_CURRENCY) {
-          if (p.method === "cash") cashAmountThb += amountInBase;
-          else transferAmountThb += amountInBase;
-        } else {
-          otherCurrencyThb += amountInBase;
-        }
+        // Split by METHOD across every accepted currency (KIP + THB). SML
+        // stores the THB-equivalent here regardless of native currency.
+        if (p.method === "cash") cashAmountThb += amountInBase;
+        else transferAmountThb += amountInBase;
         paymentBreakdown.push({
           currency: p.currency,
           method: p.method,
@@ -922,7 +935,6 @@ export async function POST(request: NextRequest) {
       receivedInMain = roundMoney(receivedInMain);
       cashAmountThb = roundMoney(cashAmountThb);
       transferAmountThb = roundMoney(transferAmountThb);
-      otherCurrencyThb = roundMoney(otherCurrencyThb);
       const receivedAmountThb = roundMoney(
         cashAmountThb + transferAmountThb + otherCurrencyThb,
       );
@@ -1172,6 +1184,15 @@ export async function POST(request: NextRequest) {
           pb.amount * (rateToBase[pb.currency] ?? 1),
         );
         const sumAmount2 = pb.currency === BASE_CURRENCY ? payAmountThb : 0;
+        // trans_number is the cash/bank GL account this line posts to, keyed
+        // on (currency, method) — e.g. KIP transfer → '1010201' (BCEL LAK).
+        // SML's bank reconciliation reads this; writing the currency code '02'
+        // here (the old behaviour) left every line unreconcilable.
+        const accountCode = resolvePaymentAccount(
+          paymentAccounts,
+          pb.currency,
+          pb.method,
+        );
         await tx.$executeRaw`
           INSERT INTO cb_trans_detail (
             trans_type, trans_flag,
@@ -1190,7 +1211,7 @@ export async function POST(request: NextRequest) {
             CURRENT_DATE, ${docNo}, to_char(NOW(), 'HH24:MI'),
             ${i},
             19,
-            ${pb.currency},
+            ${accountCode},
             ${pb.amount}, 0, 0,
             ${payAmountThb}, ${sumAmount2},
             ${pb.currency}, ${rateToBase[pb.currency] ?? 1},

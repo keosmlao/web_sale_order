@@ -16,6 +16,7 @@ type HeaderRow = {
   cust_code: string | null;
   customer_name: string | null;
   customer_phone: string | null;
+  customer_address: string | null;
   sale_code: string | null;
   salesperson_name_lo: string | null;
   salesperson_nickname: string | null;
@@ -77,7 +78,12 @@ export type ReceiptDetail = {
   docDate: Date | null;
   docTime: string | null;
   createdAt: Date | null;
-  customer: { code: string | null; name: string | null; phone: string | null };
+  customer: {
+    code: string | null;
+    name: string | null;
+    phone: string | null;
+    address: string | null;
+  };
   salesperson: { code: string; name: string } | null;
   cashier: { code: string; name: string } | null;
   branchCode: string | null;
@@ -141,6 +147,7 @@ export async function fetchReceipt(
       t.cust_code,
       ar.name_1 AS customer_name,
       ar.telephone AS customer_phone,
+      ar.address AS customer_address,
       NULLIF(t.sale_code, '') AS sale_code,
       sp.fullname_lo AS salesperson_name_lo,
       sp.nickname AS salesperson_nickname,
@@ -239,6 +246,7 @@ export async function fetchReceipt(
       code: header.cust_code,
       name: header.customer_name,
       phone: header.customer_phone,
+      address: header.customer_address,
     },
     salesperson: header.sale_code
       ? {

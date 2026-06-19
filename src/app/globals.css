@@ -2272,15 +2272,15 @@ a {
   .settle-total-card span,
   .settle-total-card small,
   .settle-total-card p {
-    color: rgba(255, 255, 255, 0.76);
-    font-size: 10px;
+    color: rgba(255, 255, 255, 0.82);
+    font-size: 12px;
     font-weight: 800;
   }
   .settle-total-card strong {
     display: block;
-    margin-top: 4px;
+    margin-top: 5px;
     font-family: var(--font-mono);
-    font-size: 26px;
+    font-size: 32px;
     font-weight: 900;
     line-height: 1;
   }
@@ -2294,21 +2294,21 @@ a {
   }
   .settle-paid-grid > div {
     border: 1px solid var(--odoo-border);
-    border-radius: 7px;
+    border-radius: 8px;
     background: var(--odoo-surface);
-    padding: 9px;
+    padding: 11px 12px;
   }
   .settle-paid-grid span {
     display: block;
     color: var(--odoo-text-muted);
-    font-size: 10px;
+    font-size: 12px;
     font-weight: 800;
   }
   .settle-paid-grid strong {
     display: block;
     margin-top: 4px;
     font-family: var(--font-mono);
-    font-size: 16px;
+    font-size: 22px;
     font-weight: 900;
   }
   .settle-paid-ok strong {
@@ -2385,6 +2385,104 @@ a {
     font-style: normal;
     font-weight: 900;
     pointer-events: none;
+  }
+
+  /* --- Redesigned payment inputs (clearer, larger) --------------------- */
+  .settle-pay-curtag {
+    border-radius: 879px;
+    background: var(--odoo-primary-50);
+    padding: 3px 9px;
+    color: var(--odoo-accent);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 900;
+  }
+  .settle-pay-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .settle-pay-field {
+    display: grid;
+    gap: 6px;
+  }
+  .settle-pay-label {
+    color: var(--odoo-text-strong);
+    font-size: 13px;
+    font-weight: 800;
+  }
+  .settle-pay-label b {
+    color: var(--odoo-accent);
+    font-weight: 900;
+  }
+  .settle-money-input input {
+    width: 100%;
+    height: 54px;
+    border: 1px solid var(--odoo-border-strong);
+    border-radius: 8px;
+    background: var(--odoo-surface);
+    padding: 8px 58px 8px 12px;
+    color: var(--odoo-text-strong);
+    font-family: var(--font-mono);
+    font-size: 22px;
+    font-weight: 900;
+    text-align: right;
+  }
+  .settle-money-input input:focus {
+    outline: 2px solid var(--odoo-primary);
+    outline-offset: -1px;
+  }
+  .settle-money-input input:disabled {
+    background: var(--odoo-surface-muted);
+    opacity: 0.7;
+  }
+  .settle-exact {
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    border: 0;
+    border-radius: 6px;
+    background: var(--odoo-primary);
+    padding: 7px 11px;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 900;
+    cursor: pointer;
+  }
+  .settle-exact:hover:not(:disabled) {
+    filter: brightness(1.05);
+  }
+  .settle-exact:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .settle-thb-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    border: 1px dashed var(--odoo-border-strong);
+    border-radius: 8px;
+    background: var(--odoo-surface-muted);
+    padding: 11px 12px;
+    margin-bottom: 10px;
+    color: var(--odoo-text-strong);
+    font-size: 13px;
+    font-weight: 800;
+    cursor: pointer;
+  }
+  .settle-thb-toggle:hover {
+    background: var(--odoo-primary-50);
+  }
+  .settle-thb-toggle em {
+    color: var(--odoo-success);
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-style: normal;
+    font-weight: 800;
   }
   .settle-simple-hint {
     border-radius: 6px;
@@ -5114,7 +5212,7 @@ a {
    shell and the cashier receipt page's toolbar. */
 @media print {
   @page {
-    size: A5 portrait;
+    size: A4 portrait;
     margin: 10mm;
   }
   aside,

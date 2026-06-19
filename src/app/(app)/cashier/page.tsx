@@ -17,6 +17,12 @@ import {
 import ShiftBar from "./ShiftBar";
 import LowStockBanner from "./LowStockBanner";
 import {
+  publishCustomerDisplay,
+  openCustomerDisplayWindow,
+  subscribeCustomerDisplay,
+  IDLE_DISPLAY_STATE,
+} from "@/lib/customer-display";
+import {
   getCashierData,
   type CashierOrder,
   type ApprovedPrice,
@@ -484,6 +490,14 @@ function CashierClientInner({
           </a>
           <button
             type="button"
+            onClick={() => openCustomerDisplayWindow()}
+            className="odoo-btn odoo-btn-secondary"
+            title="ເປີດໜ້າຈໍລູກຄ້າ (ໜ້າຕ່າງໃໝ່)"
+          >
+            ໜ້າຈໍລູກຄ້າ
+          </button>
+          <button
+            type="button"
             onClick={() => reload()}
             className="odoo-btn odoo-btn-secondary"
           >
@@ -539,7 +553,7 @@ function CashierClientInner({
             className="absolute inset-0 cursor-default"
             onClick={() => setSelectedCart(null)}
           />
-          <aside className="relative flex h-dvh max-h-dvh w-full max-w-3xl flex-col overflow-hidden border-l border-odoo-border bg-odoo-surface">
+          <aside className="relative flex h-dvh max-h-dvh w-full max-w-6xl flex-col overflow-hidden border-l border-odoo-border bg-odoo-surface">
             <SettleForm
               order={selected}
               currencyRates={currencyRates}
@@ -1104,6 +1118,9 @@ function SettleForm({
   });
   const [remark, setRemark] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // THB is the secondary currency — keep its inputs collapsed until needed so
+  // the common LAK-only flow stays uncluttered.
+  const [showThb, setShowThb] = useState(false);
   const [slips, setSlips] = useState<AttachedSlip[]>([]);
   const [slipBusy, setSlipBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1218,6 +1235,72 @@ function SettleForm({
   const transferKipKey = paymentKey(MAIN_CURRENCY, "transfer");
   const cashKipInput = paymentInputs[cashKipKey] ?? "0";
   const transferKipInput = paymentInputs[transferKipKey] ?? "0";
+
+  // Total transfer in KIP (any currency) — drives the BCEL QR on the customer
+  // screen.
+  const transferInMain = numericPayments
+    .filter((p) => p.method === "transfer")
+    .reduce((s, p) => s + p.inMain, 0);
+
+  // Keep the THB inputs revealed whenever they already hold a value, so a
+  // collapsed section never hides money the cashier entered.
+  const thbHasValue =
+    (Number(paymentInputs[paymentKey("01", "cash")]) || 0) > 0 ||
+    (Number(paymentInputs[paymentKey("01", "transfer")]) || 0) > 0;
+  const showThbInputs = showThb || thbHasValue;
+
+  // Snapshot of the live bill for the customer-facing display window.
+  const displaySnapshot = useMemo(
+    () => ({
+      cartNumber: order.cartNumber,
+      customerName: order.customerName ?? null,
+      items: order.items.map((it) => ({
+        name: it.itemName ?? it.itemCode ?? "—",
+        qty: it.quantity,
+        amount: it.amount,
+      })),
+      total: effectiveTotal,
+      paid: paidInMain,
+      changeDue,
+      remainingDue,
+      transferAmount: Math.round(transferInMain),
+      updatedAt: Date.now(),
+    }),
+    [
+      order,
+      effectiveTotal,
+      paidInMain,
+      changeDue,
+      remainingDue,
+      transferInMain,
+    ],
+  );
+
+  // Mirror the bill onto the display window (if one is open) on every change.
+  useEffect(() => {
+    publishCustomerDisplay(displaySnapshot);
+  }, [displaySnapshot]);
+
+  // Answer a display window that just opened and asked for the current bill.
+  const snapshotRef = useRef(displaySnapshot);
+  snapshotRef.current = displaySnapshot;
+  useEffect(() => {
+    return subscribeCustomerDisplay({
+      onHello: () => publishCustomerDisplay(snapshotRef.current),
+    });
+  }, []);
+
+  // When the settle drawer closes, send the customer screen back to welcome.
+  useEffect(() => {
+    return () => publishCustomerDisplay(IDLE_DISPLAY_STATE);
+  }, []);
+
+  function openCustomerDisplay() {
+    openCustomerDisplayWindow();
+    // The fresh window mounts its listener async; re-publish shortly after so
+    // it shows the current bill without waiting for the next edit.
+    window.setTimeout(() => publishCustomerDisplay(displaySnapshot), 900);
+  }
 
   function resetPayments(next: Partial<Record<PaymentField, string>>) {
     const reset: Record<PaymentField, string> = {} as Record<PaymentField, string>;
@@ -1411,9 +1494,19 @@ function SettleForm({
             {order.salespersonName ?? order.userOwner ?? "—"}
           </p>
         </div>
-        <button type="button" onClick={onClose} className="odoo-btn odoo-btn-secondary">
-          ປິດ
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={openCustomerDisplay}
+            className="odoo-btn odoo-btn-secondary"
+            title="ເປີດໜ້າຈໍລູກຄ້າ (ໜ້າຕ່າງໃໝ່)"
+          >
+            ໜ້າຈໍລູກຄ້າ
+          </button>
+          <button type="button" onClick={onClose} className="odoo-btn odoo-btn-secondary">
+            ປິດ
+          </button>
+        </div>
       </header>
 
       {!canSettle ? (
@@ -1538,157 +1631,126 @@ function SettleForm({
           <div className="settle-card">
             <div className="settle-card-title">
               <span>ຮັບເງິນ</span>
-              <strong className="bg-indigo-600 text-white font-semibold px-2 py-0.5 rounded text-[10px]">LAK / THB</strong>
+              <strong className="settle-pay-curtag">ກີບ · ບາດ</strong>
             </div>
-            <div className="settle-quick-row grid grid-cols-2 gap-2 mb-3">
-              <button
-                type="button"
-                disabled={!canSettle}
-                onClick={() => resetPayments({ [cashKipKey]: String(effectiveTotal) })}
-                className="text-xs py-1 px-2 border rounded hover:bg-indigo-50 transition"
-              >
-                ຊຳລະສົດ LAK ພໍດີ
-              </button>
-              <button
-                type="button"
-                disabled={!canSettle}
-                onClick={() => resetPayments({ [transferKipKey]: String(effectiveTotal) })}
-                className="text-xs py-1 px-2 border rounded hover:bg-indigo-50 transition"
-              >
-                ໂອນ LAK ພໍດີ
-              </button>
-              <button
-                type="button"
-                disabled={!canSettle}
-                onClick={() => {
-                  const rate = currencyRates["01"] || 1;
-                  resetPayments({ [paymentKey("01", "cash")]: String(Math.ceil(effectiveTotal / rate)) });
-                }}
-                className="text-xs py-1 px-2 border rounded hover:bg-indigo-50 transition"
-              >
-                ຊຳລະສົດ THB ພໍດີ
-              </button>
-              <button
-                type="button"
-                disabled={!canSettle}
-                onClick={() => {
-                  const rate = currencyRates["01"] || 1;
-                  resetPayments({ [paymentKey("01", "transfer")]: String(Math.ceil(effectiveTotal / rate)) });
-                }}
-                className="text-xs py-1 px-2 border rounded hover:bg-indigo-50 transition"
-              >
-                ໂອນ THB ພໍດີ
-              </button>
-            </div>
-            <div className="settle-simple-payments space-y-3">
-              <div className="border-t pt-3">
-                <div className="text-xs font-bold text-slate-800 mb-2 flex items-center justify-between">
-                  <span>ສະກຸນເງິນ LAK (ກີບ)</span>
-                  <span className="text-[10px] text-indigo-600 font-semibold bg-indigo-50 px-1.5 py-0.5 rounded">ຫຼັກ</span>
-                </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="block">
-                    <span className="text-[10px] text-slate-500 font-medium">ເງິນສົດ LAK</span>
-                    <div className="settle-money-input mt-1">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        step={1000}
-                        value={cashKipInput}
-                        disabled={!canSettle}
-                        onChange={(e) =>
-                          setPaymentInputs((prev) => ({
-                            ...prev,
-                            [cashKipKey]: e.target.value,
-                          }))
-                        }
-                        className="w-full text-right"
-                      />
-                      <em>KIP</em>
-                    </div>
-                  </label>
-                  <label className="block">
-                    <span className="text-[10px] text-slate-500 font-medium">ຍອດໂອນ LAK</span>
-                    <div className="settle-money-input mt-1">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        step={1000}
-                        value={transferKipInput}
-                        disabled={!canSettle}
-                        onChange={(e) =>
-                          setPaymentInputs((prev) => ({
-                            ...prev,
-                            [transferKipKey]: e.target.value,
-                          }))
-                        }
-                        className="w-full text-right"
-                      />
-                      <em>KIP</em>
-                    </div>
-                  </label>
-                </div>
-              </div>
 
-              <div className="border-t pt-3">
-                <div className="text-xs font-bold text-slate-800 mb-2 flex items-center justify-between">
-                  <span>ສະກຸນເງິນ THB (ບາດ)</span>
-                  {currencyRates["01"] ? (
-                    <span className="text-[10px] text-emerald-600 font-semibold bg-emerald-50 px-1.5 py-0.5 rounded">
-                      1 ບາດ ≈ {moneyFmt.format(currencyRates["01"])} ກີບ
-                    </span>
-                  ) : null}
+            {/* ກີບ — ສະກຸນຫຼັກ. ປຸ່ມ “ຄົບ” ຕື່ມຍອດເຕັມໃຫ້ທັນທີ. */}
+            <div className="settle-pay-grid">
+              <label className="settle-pay-field">
+                <span className="settle-pay-label">ເງິນສົດ <b>ກີບ</b></span>
+                <div className="settle-money-input">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1000}
+                    value={cashKipInput}
+                    disabled={!canSettle}
+                    onChange={(e) =>
+                      setPaymentInputs((prev) => ({
+                        ...prev,
+                        [cashKipKey]: e.target.value,
+                      }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="settle-exact"
+                    disabled={!canSettle}
+                    onClick={() => resetPayments({ [cashKipKey]: String(effectiveTotal) })}
+                  >
+                    ຄົບ
+                  </button>
                 </div>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="block">
-                    <span className="text-[10px] text-slate-500 font-medium">ເງິນສົດ THB</span>
-                    <div className="settle-money-input mt-1">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        step={1}
-                        value={paymentInputs[paymentKey("01", "cash")] ?? "0"}
-                        disabled={!canSettle}
-                        onChange={(e) =>
-                          setPaymentInputs((prev) => ({
-                            ...prev,
-                            [paymentKey("01", "cash")]: e.target.value,
-                          }))
-                        }
-                        className="w-full text-right"
-                      />
-                      <em>THB</em>
-                    </div>
-                  </label>
-                  <label className="block">
-                    <span className="text-[10px] text-slate-500 font-medium">ຍອດໂອນ THB</span>
-                    <div className="settle-money-input mt-1">
-                      <input
-                        type="number"
-                        inputMode="numeric"
-                        min={0}
-                        step={1}
-                        value={paymentInputs[paymentKey("01", "transfer")] ?? "0"}
-                        disabled={!canSettle}
-                        onChange={(e) =>
-                          setPaymentInputs((prev) => ({
-                            ...prev,
-                            [paymentKey("01", "transfer")]: e.target.value,
-                          }))
-                        }
-                        className="w-full text-right"
-                      />
-                      <em>THB</em>
-                    </div>
-                  </label>
+              </label>
+              <label className="settle-pay-field">
+                <span className="settle-pay-label">ເງິນໂອນ <b>ກີບ</b></span>
+                <div className="settle-money-input">
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min={0}
+                    step={1000}
+                    value={transferKipInput}
+                    disabled={!canSettle}
+                    onChange={(e) =>
+                      setPaymentInputs((prev) => ({
+                        ...prev,
+                        [transferKipKey]: e.target.value,
+                      }))
+                    }
+                  />
+                  <button
+                    type="button"
+                    className="settle-exact"
+                    disabled={!canSettle}
+                    onClick={() => resetPayments({ [transferKipKey]: String(effectiveTotal) })}
+                  >
+                    ຄົບ
+                  </button>
                 </div>
+              </label>
+            </div>
+
+            {/* ບາດ — ເປີດເມື່ອລູກຄ້າຈ່າຍເປັນເງິນບາດ */}
+            <button
+              type="button"
+              className="settle-thb-toggle"
+              onClick={() => setShowThb((v) => !v)}
+              aria-expanded={showThbInputs}
+            >
+              <span>{showThbInputs ? "▾" : "▸"} ຮັບເປັນເງິນບາດ (THB)</span>
+              {currencyRates["01"] ? (
+                <em>1 ฿ ≈ {moneyFmt.format(currencyRates["01"])} ກີບ</em>
+              ) : null}
+            </button>
+            {showThbInputs ? (
+              <div className="settle-pay-grid">
+                <label className="settle-pay-field">
+                  <span className="settle-pay-label">ເງິນສົດ <b>ບາດ</b></span>
+                  <div className="settle-money-input">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      step={1}
+                      value={paymentInputs[paymentKey("01", "cash")] ?? "0"}
+                      disabled={!canSettle}
+                      onChange={(e) =>
+                        setPaymentInputs((prev) => ({
+                          ...prev,
+                          [paymentKey("01", "cash")]: e.target.value,
+                        }))
+                      }
+                    />
+                    <em className="settle-unit">฿</em>
+                  </div>
+                </label>
+                <label className="settle-pay-field">
+                  <span className="settle-pay-label">ເງິນໂອນ <b>ບາດ</b></span>
+                  <div className="settle-money-input">
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      step={1}
+                      value={paymentInputs[paymentKey("01", "transfer")] ?? "0"}
+                      disabled={!canSettle}
+                      onChange={(e) =>
+                        setPaymentInputs((prev) => ({
+                          ...prev,
+                          [paymentKey("01", "transfer")]: e.target.value,
+                        }))
+                      }
+                    />
+                    <em className="settle-unit">฿</em>
+                  </div>
+                </label>
               </div>
-              <div className="settle-simple-hint text-[10px] text-slate-500 mt-2 bg-slate-50 p-2 rounded">
-                ປ້ອນຈຳນວນຮັບຈິງ. ລະບົບຈະແປງຍອດ THB ເປັນ LAK ອັດຕະໂນມັດ ຕາມອັດຕາແລກປ່ຽນ.
-              </div>
+            ) : null}
+
+            <div className="settle-simple-hint">
+              ກົດ “ຄົບ” ເພື່ອຮັບເຕັມຍອດ · ລະບົບແປງເງິນບາດເປັນກີບໃຫ້ອັດຕະໂນມັດ.
             </div>
           </div>
 

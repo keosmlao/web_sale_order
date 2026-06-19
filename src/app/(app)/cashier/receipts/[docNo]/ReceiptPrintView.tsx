@@ -37,8 +37,8 @@ const SIGNATURES = [
   "ຜູ້ອອກບິນ",
 ];
 
-// Minimum body rows so the grid fills the page like the printed form.
-const MIN_ITEM_ROWS = 12;
+// Keep the ruled item area at the same visual height as the paper form.
+const MIN_ITEM_ROWS = 11;
 
 const money0 = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const money2 = new Intl.NumberFormat("en-US", {
@@ -96,46 +96,44 @@ export default function ReceiptPrintView({ receipt }: { receipt: ReceiptDetail }
   const issuerName = r.cashier?.name ?? r.salesperson?.name ?? "";
 
   return (
-    <article className="receipt-sheet receipt-invoice mx-auto max-w-[800px] bg-white px-6 py-6 text-black print:max-w-none print:px-0 print:py-0">
+    <article className="receipt-sheet receipt-invoice mx-auto min-h-[277mm] w-[190mm] bg-white px-[5mm] py-[4mm] text-black shadow-sm print:min-h-0 print:w-auto print:px-0 print:py-0">
       {/* ---- Header ---- */}
-      <header className="flex items-start justify-between gap-4 border-b-2 border-black pb-2">
-        <div className="flex items-start gap-3">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/odm.png" alt="ODIEN Mall" className="h-12 w-12 object-contain" />
-          <div className="text-[11px] leading-tight">
-            <div className="flex items-baseline gap-3">
-              <span className="text-[14px] font-black">{SHOP.nameLo}</span>
-              <span className="text-[12px] font-bold">{SHOP.branchLo}</span>
-            </div>
-            <div>{SHOP.addressLo}</div>
-            <div>{SHOP.tel}</div>
-            <div>{SHOP.email}</div>
+      <header className="grid grid-cols-[28mm_1fr_55mm] items-start gap-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/odm.png" alt="ODIEN Mall" className="mt-1 h-[18mm] w-[27mm] object-contain" />
+        <div className="text-center text-[10px] leading-[1.35]">
+          <div className="flex items-baseline justify-center gap-8">
+            <span className="text-[15px] font-black">{SHOP.nameLo}</span>
+            <span className="text-[13px] font-bold">{SHOP.branchLo}</span>
           </div>
+          <div>{SHOP.addressLo}</div>
+          <div className="text-[11px]">{SHOP.tel}</div>
+          <div className="text-[11px]">{SHOP.email}</div>
         </div>
         <div className="text-right">
-          <div className="text-[18px] font-black">ບິນຂາຍສິນຄ້າ(ສິດ)</div>
+          <div className="text-[19px] font-black">ບິນຂາຍສິນຄ້າ(ສົດ)</div>
           <div className="text-[11px]">(ສຳລັບລູກຄ້າ)</div>
         </div>
       </header>
 
       {/* ---- Barcode + doc no ---- */}
-      <div className="mt-2 flex items-end justify-between">
+      <div className="mt-1 flex items-end justify-between px-1">
         <Barcode value={r.docNo} />
         <div className="text-[12px]">
-          <span className="text-odoo-text-muted">ເລກທີ : </span>
-          <span className="font-mono text-[14px] font-bold">{r.docNo}</span>
+          <span>ເລກທີ : </span>
+          <span className="font-mono text-[13px]">{r.docNo}</span>
         </div>
       </div>
 
       {/* ---- Customer / document boxes ---- */}
-      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px]">
-        <div className="border border-black p-2">
+      <div className="mt-1 grid grid-cols-[58%_42%] text-[11px]">
+        <div className="border border-black px-3 py-1">
           <Field label="ລູກຄ້າ" value={r.customer.name ?? ""} extraLabel="ເບີໂທ" extraValue={r.customer.phone ?? ""} />
-          <Field label="ທີ່ຢູ່" value="" />
+          <Field label="ທີ່ຢູ່" value={r.customer.address ?? ""} />
           <Field label="ສະມາຊິກ" value={r.customer.name ?? ""} />
           <Field label="ບັດສະມາຊິກ" value="" />
         </div>
-        <div className="border border-black p-2">
+        <div className="-ml-px border border-black px-3 py-1">
           <Field label="ວັນທີ" value={`${fmtDate(r.createdAt ?? r.docDate)}    ${fmtTime(r.createdAt, r.docTime)}`} />
           <Field label="ພະນັກງານຂາຍ" value={r.salesperson?.name ?? ""} />
           <Field label="ເບີໂທ" value="" />
@@ -145,24 +143,22 @@ export default function ReceiptPrintView({ receipt }: { receipt: ReceiptDetail }
       </div>
 
       {/* ---- Items grid ---- */}
-      <table className="mt-2 w-full table-fixed border-collapse text-[11px]">
+      <table className="-mt-px w-full table-fixed border-collapse border-b border-black text-[10px]">
         <colgroup>
-          <col className="w-[6%]" />
-          <col className="w-[15%]" />
-          <col className="w-[31%]" />
-          <col className="w-[8%]" />
-          <col className="w-[8%]" />
+          <col className="w-[5%]" />
+          <col className="w-[14%]" />
+          <col className="w-[36%]" />
+          <col className="w-[14%]" />
           <col className="w-[12%]" />
-          <col className="w-[10%]" />
-          <col className="w-[12%]" />
+          <col className="w-[8%]" />
+          <col className="w-[11%]" />
         </colgroup>
         <thead>
           <tr className="bg-odoo-surface-muted text-center font-bold">
             <Th>ລ/ດ</Th>
             <Th>ລະຫັດ</Th>
             <Th>ລາຍການ</Th>
-            <Th>ຫົວໜ່ວຍ</Th>
-            <Th>ຈຳນວນ</Th>
+            <Th>ຈຳນວນ / ຫົວໜ່ວຍ</Th>
             <Th>ລາຄາ</Th>
             <Th>ສ່ວນຫຼຸດ</Th>
             <Th>ເປັນເງິນ</Th>
@@ -170,12 +166,14 @@ export default function ReceiptPrintView({ receipt }: { receipt: ReceiptDetail }
         </thead>
         <tbody>
           {r.items.map((it, idx) => (
-            <tr key={it.lineNumber} className="align-top">
+            <tr key={it.lineNumber} className="h-[7mm] align-top">
               <Td className="text-center">{idx + 1}</Td>
               <Td className="font-mono">{it.itemCode}</Td>
               <Td>{it.itemName ?? it.itemCode}</Td>
-              <Td className="text-center">{it.unitCode ?? ""}</Td>
-              <Td className="text-right font-mono">{money2.format(it.qty)}</Td>
+              <Td className="text-center">
+                <span className="font-mono">{money2.format(it.qty)}</span>
+                {it.unitCode ? ` ${it.unitCode}` : ""}
+              </Td>
               <Td className="text-right font-mono">
                 {it.priceKip > 0 ? money0.format(it.priceKip) : ""}
               </Td>
@@ -188,8 +186,7 @@ export default function ReceiptPrintView({ receipt }: { receipt: ReceiptDetail }
             </tr>
           ))}
           {Array.from({ length: fillerRows }).map((_, i) => (
-            <tr key={`f${i}`}>
-              <Td>&nbsp;</Td>
+            <tr key={`f${i}`} className="h-[7mm]">
               <Td>&nbsp;</Td>
               <Td>&nbsp;</Td>
               <Td>&nbsp;</Td>
@@ -202,28 +199,37 @@ export default function ReceiptPrintView({ receipt }: { receipt: ReceiptDetail }
         </tbody>
       </table>
 
-      {/* ---- Remark / terms + totals ---- */}
-      <div className="mt-2 grid grid-cols-[1fr_auto] gap-3 text-[11px]">
+      <div className="border-x border-b border-black px-2 py-0.5 text-[10px]">
+        <span className="font-bold">ໝາຍເຫດ : </span>
+        <span className="whitespace-pre-wrap">{r.remark || " "}</span>
+      </div>
+
+      {/* ---- Terms, bank accounts and totals ---- */}
+      <div className="mt-2 border border-black px-2 py-1 text-[10px]">
+        <ol className="list-decimal pl-4 leading-[1.35]">
+          {TERMS.map((t, i) => <li key={i}>{t}</li>)}
+        </ol>
+      </div>
+
+      <div className="mt-1 grid grid-cols-[1fr_63mm] gap-4 text-[10px]">
         <div>
-          {r.remark ? (
-            <div className="mb-1">
-              <span className="font-bold">ໝາຍເຫດ : </span>
-              <span className="whitespace-pre-wrap">{r.remark}</span>
+          <div className="mb-1">
+            <span>ໝາຍເຫດ: </span>
+            <span>{fmtDate(r.createdAt ?? r.docDate)} {r.remark || ""}</span>
+          </div>
+          <div className="font-bold">ທະນາຄານການຄ້າ :</div>
+          {BANK_ACCOUNTS.map((b) => (
+            <div key={b.cur} className="font-mono leading-[1.35]">
+              {b.no} <span className="ml-1">{b.cur}</span>
             </div>
-          ) : null}
-          <div className="font-bold">ຄຳຊີ້ແຈງ :</div>
-          <ol className="mt-0.5 list-decimal pl-4 leading-snug">
-            {TERMS.map((t, i) => (
-              <li key={i} className="mb-0.5">{t}</li>
-            ))}
-          </ol>
+          ))}
         </div>
-        <div className="w-[58mm] text-[11px]">
+        <div className="text-[11px]">
           <TotalRow label="ລວມເງິນ" value={`${money2.format(subtotal)}`} unit="ກີບ" />
           <TotalRow label="ສ່ວນຫຼຸດ" value={money2.format(discount)} />
           <TotalRow label="ອມພ : 10%" value={money2.format(vat)} />
           <TotalRow label="ຫັກເງິນລ່ວງໜ້າ" value={money2.format(advance)} />
-          <div className="mt-1 flex items-baseline justify-between border-t-2 border-black pt-1 font-black">
+          <div className="flex items-baseline justify-between font-black">
             <span>ລວມເງິນທັງໝົດ :</span>
             <span className="font-mono text-[13px]">{money2.format(grand)}</span>
             <span>ກີບ</span>
@@ -231,27 +237,17 @@ export default function ReceiptPrintView({ receipt }: { receipt: ReceiptDetail }
         </div>
       </div>
 
-      {/* ---- Bank accounts ---- */}
-      <div className="mt-2 border-t border-black pt-1 text-[11px]">
-        <div className="font-bold">ທະນາຄານການຄ້າ :</div>
-        {BANK_ACCOUNTS.map((b) => (
-          <div key={b.cur} className="font-mono">
-            {b.no} <span className="ml-1">{b.cur}</span>
-          </div>
-        ))}
-      </div>
-
       {/* ---- Signatures ---- */}
-      <div className="mt-4 grid grid-cols-6 gap-2 text-center text-[10px]">
+      <div className="mt-2 grid grid-cols-6 gap-4 text-center text-[10px]">
         {SIGNATURES.map((s, i) => (
           <div key={s}>
-            <div className="h-8 border-b border-dotted border-black">
+            <div className="h-8">
               {/* issuer name printed above the last signature line */}
               {i === SIGNATURES.length - 1 ? (
-                <span className="text-[10px]">{issuerName}</span>
+                <span className="font-bold text-[10px]">{issuerName}</span>
               ) : null}
             </div>
-            <div className="pt-1">{s}</div>
+            <div className="border-b border-dotted border-black pb-1">{s}</div>
           </div>
         ))}
       </div>
@@ -260,7 +256,7 @@ export default function ReceiptPrintView({ receipt }: { receipt: ReceiptDetail }
 }
 
 function Th({ children }: { children: React.ReactNode }) {
-  return <th className="border border-black px-1 py-1">{children}</th>;
+  return <th className="border border-black px-1 py-0.5">{children}</th>;
 }
 
 function Td({
@@ -270,7 +266,7 @@ function Td({
   children: React.ReactNode;
   className?: string;
 }) {
-  return <td className={`border border-black px-1 py-0.5 ${className}`}>{children}</td>;
+  return <td className={`border-x border-black px-1 py-0.5 ${className}`}>{children}</td>;
 }
 
 function Field({
@@ -285,12 +281,12 @@ function Field({
   extraValue?: string;
 }) {
   return (
-    <div className="flex items-baseline gap-1 py-0.5">
-      <span className="text-odoo-text-muted">{label} :</span>
+    <div className="flex min-h-[4.3mm] items-baseline gap-1">
+      <span>{label} :</span>
       <span className="flex-1 font-semibold">{value || " "}</span>
       {extraLabel ? (
         <>
-          <span className="text-odoo-text-muted">{extraLabel} :</span>
+          <span>{extraLabel} :</span>
           <span className="font-semibold">{extraValue || " "}</span>
         </>
       ) : null}

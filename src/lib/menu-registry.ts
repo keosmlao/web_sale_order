@@ -46,6 +46,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   { key: "/reports/items", label: "ສິນຄ້າຂາຍດີ", section: "Reports" },
   { key: "/reports/stock-refill", label: "ຂໍເຕີມສະຕ້ອກ", section: "Reports" },
 
+  { key: "/delivery-tracking", label: "ຕິດຕາມຂົນສົ່ງ", section: "Operations" },
   { key: "/inventory", label: "ສິນຄ້າຄົງເຫຼືອ", section: "Operations" },
   { key: "/cashier", label: "ຮັບເງິນ", section: "Operations" },
   { key: "/cashier/history", label: "ປະຫວັດການຂາຍ", section: "Operations" },
@@ -58,6 +59,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   { key: "/settings/sales-warehouses", label: "ສາງຂາຍ", section: "Management · ການຕັ້ງຄ່າ" },
   { key: "/settings/stock-minimum", label: "Minimum Stock", section: "Management · ການຕັ້ງຄ່າ" },
   { key: "/settings/barcodes", label: "Barcode ສິນຄ້າ", section: "Management · ການຕັ້ງຄ່າ" },
+  { key: "/settings/payment-accounts", label: "ບັນຊີຮັບເງິນ", section: "Management · ການຕັ້ງຄ່າ" },
   { key: "/promotions", label: "ໂປຣໂມຊັນ", section: "Management · ການຕັ້ງຄ່າ" },
   { key: "/loyalty", label: "ສະສົມແຕ້ມ", section: "Management · ການຕັ້ງຄ່າ" },
 ];

@@ -132,6 +132,18 @@ const sections: NavSection[] = [
     label: "Operations",
     items: [
       {
+        href: "/delivery-tracking",
+        label: "ຕິດຕາມຂົນສົ່ງ",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <rect x="1" y="3" width="15" height="13" rx="1" />
+            <path d="M16 8h4l3 3v5h-7z" />
+            <circle cx="5.5" cy="18.5" r="2" />
+            <circle cx="18.5" cy="18.5" r="2" />
+          </svg>
+        ),
+      },
+      {
         href: "/inventory",
         label: "ສິນຄ້າຄົງເຫຼືອ",
         icon: (
@@ -269,6 +281,16 @@ const sections: NavSection[] = [
                 <path d="M11 5v14" />
                 <path d="M15 5v14" />
                 <path d="M19 5v14" />
+              </svg>
+            ),
+          },
+          {
+            href: "/settings/payment-accounts",
+            label: "ບັນຊີຮັບເງິນ",
+            icon: (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
+                <rect x="2" y="5" width="20" height="14" rx="2" />
+                <path d="M2 10h20" />
               </svg>
             ),
           },

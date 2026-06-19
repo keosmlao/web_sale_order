@@ -7,6 +7,7 @@ import {
   type EngineLine,
   type EnginePromotion,
 } from "@/lib/promotions-engine";
+import DeliveryTodayCard from "./DeliveryTodayCard";
 
 type Customer = {
   id: string;
@@ -2237,6 +2238,9 @@ function PosScreen({
                 </div>
               </div>
             </div>
+
+            {/* ສະຫຼຸບບິນຈັດສົ່ງ ຕາມຮອບ ຂອງວັນຮັບສິນຄ້າ — ດຶງຈາກ TMS */}
+            <DeliveryTodayCard date={receiveDate || undefined} />
 
             {/* ຂົນສົ່ງ · ໝາຍເຫດ — ຍ້າຍລົງລຸ່ມຍອດລວມ */}
             <div className="mt-3 overflow-hidden rounded-md border border-odoo-border">
