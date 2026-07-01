@@ -7,10 +7,10 @@ import PointMapEditor from "./PointMapEditor";
 
 type TabKey = "config" | "rewards" | "points";
 
-const TABS: { key: TabKey; label: string; hint: string }[] = [
-  { key: "config", label: "ສູດ & ເປົ້າ", hint: "ໂບນັດ, ເກນຜົນງານ, ຄ່າຄອມ, ເປົ້າ/ຄົນ" },
-  { key: "rewards", label: "ເງິນພິເສດ", hint: "ລາງວັນລວມພະແນກ (HISENSE / CE+SDA)" },
-  { key: "points", label: "ຄະແນນໂບນັດ", hint: "Point Map ຕໍ່ ໝວດ·ຍີ່ຫໍ້·ດີໄຊ·ຂະໜາດ" },
+const TABS: { key: TabKey; label: string; icon: string; hint: string }[] = [
+  { key: "config", label: "ສູດ & ເປົ້າ", icon: "⚙️", hint: "ໂບນັດ, ເກນຜົນງານ, ຄ່າຄອມ, ເປົ້າ/ຄົນ" },
+  { key: "rewards", label: "ເງິນພິເສດ", icon: "🎁", hint: "ລາງວັນລວມພະແນກ (HISENSE / CE+SDA)" },
+  { key: "points", label: "ຄະແນນໂບນັດ", icon: "⭐", hint: "Point Map ຕໍ່ ໝວດ·ຍີ່ຫໍ້·ດີໄຊ·ຂະໜາດ" },
 ];
 
 export default function IncentiveSettingsClient({ canManage }: { canManage: boolean }) {
@@ -36,12 +36,13 @@ export default function IncentiveSettingsClient({ canManage }: { canManage: bool
             key={t.key}
             type="button"
             onClick={() => setTab(t.key)}
-            className={`-mb-px border-b-2 px-4 py-2.5 text-sm font-bold transition-colors ${
+            className={`-mb-px flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-bold transition-colors ${
               tab === t.key
                 ? "border-odoo-primary text-odoo-primary"
                 : "border-transparent text-odoo-text-muted hover:text-odoo-text-strong"
             }`}
           >
+            <span aria-hidden>{t.icon}</span>
             {t.label}
           </button>
         ))}

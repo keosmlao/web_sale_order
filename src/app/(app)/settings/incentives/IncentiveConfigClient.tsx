@@ -177,16 +177,31 @@ export default function IncentiveConfigClient({ canManage, embedded = false }: {
       {data ? (
         <>
           <section className="odoo-card p-4">
-            <h2 className="mb-4 text-sm font-black text-odoo-text-strong">ສູດໂບນັດ</h2>
+            <h2 className="text-sm font-black text-odoo-text-strong">① ໂບນັດ</h2>
+            <p className="mb-4 text-xs text-odoo-text-muted">ໂບນັດ/ຊິ້ນ = ຄະແນນ × ໂບນັດພື້ນຖານ × ຕົວຄູນຜົນງານ × ສະຖານະສິນຄ້າ</p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="ໂບນັດພື້ນຖານ/ຊິ້ນ" value={data.config.baseAmount} onChange={(v) => configField("baseAmount", v)} disabled={!canManage} />
+              <Field label="ໂບນັດພື້ນຖານ/ຊິ້ນ (฿)" value={data.config.baseAmount} onChange={(v) => configField("baseAmount", v)} disabled={!canManage} />
               <Field label="ສະກຸນເງິນ" value={data.config.currencyCode} onChange={(v) => configField("currencyCode", v)} disabled={!canManage} text />
-              <Field label="ເກນຕ່ຳສຸດ (0.80 = 80%)" value={data.config.lowMaxPct} onChange={(v) => configField("lowMaxPct", v)} disabled={!canManage} step="0.01" />
-              <Field label="ເກນມາດຕະຖານ" value={data.config.standardMaxPct} onChange={(v) => configField("standardMaxPct", v)} disabled={!canManage} step="0.01" />
+            </div>
+          </section>
+
+          <section className="odoo-card mt-4 p-4">
+            <h2 className="text-sm font-black text-odoo-text-strong">ເກນຜົນງານ (ຕົວຄູນ)</h2>
+            <p className="mb-4 text-xs text-odoo-text-muted">ຍອດຂາຍ ÷ ເປົ້າ/ຄົນ → ຕົວຄູນ ໃສ່ ① ໂບນັດ</p>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="ເກນຕ່ຳສຸດ (0.50 = 50%)" value={data.config.lowMaxPct} onChange={(v) => configField("lowMaxPct", v)} disabled={!canManage} step="0.01" />
+              <Field label="ເກນມາດຕະຖານ (1.0 = 100%)" value={data.config.standardMaxPct} onChange={(v) => configField("standardMaxPct", v)} disabled={!canManage} step="0.01" />
               <Field label="ຕົວຄູນຜົນງານຕ່ຳ" value={data.config.lowMultiplier} onChange={(v) => configField("lowMultiplier", v)} disabled={!canManage} step="0.01" />
               <Field label="ຕົວຄູນມາດຕະຖານ" value={data.config.standardMultiplier} onChange={(v) => configField("standardMultiplier", v)} disabled={!canManage} step="0.01" />
               <Field label="ຕົວຄູນຜົນງານສູງ" value={data.config.highMultiplier} onChange={(v) => configField("highMultiplier", v)} disabled={!canManage} step="0.01" />
-              <Field label="ຄ່າຄອມພື້ນຖານ/ຄົນ" value={data.config.commissionBase} onChange={(v) => configField("commissionBase", v)} disabled={!canManage} step="100" />
+            </div>
+          </section>
+
+          <section className="odoo-card mt-4 p-4">
+            <h2 className="text-sm font-black text-odoo-text-strong">③ ຄ່າຄອມ</h2>
+            <p className="mb-4 text-xs text-odoo-text-muted">ຄ່າຄອມ = ຄ່າຄອມພື້ນຖານ × ເລດ (ຜົນງານ &lt;80%=0 · 80–100% ປັດລົງ 5% · ≥100% ປັດຂຶ້ນ 5%)</p>
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <Field label="ຄ່າຄອມພື້ນຖານ/ຄົນ (฿)" value={data.config.commissionBase} onChange={(v) => configField("commissionBase", v)} disabled={!canManage} step="100" />
             </div>
           </section>
 
