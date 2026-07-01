@@ -11,8 +11,6 @@ type Dashboard = {
   employeeCode: string;
   totalSales: number;
   totalQty: number;
-  totalProfit: number;
-  grossMarginPct: number;
   target: number;
   achievementPct: number;
   rank: number;
@@ -121,8 +119,7 @@ export default function MySalesClient() {
             <div className="h-4 w-full overflow-hidden rounded-full bg-odoo-surface-muted">
               <div className={`h-full rounded-full ${ach >= 1 ? "bg-emerald-500" : ach >= 0.8 ? "bg-odoo-primary" : "bg-amber-500"}`} style={{ width: `${Math.min(100, ach * 100)}%` }} />
             </div>
-            <div className="mt-2 flex justify-between text-xs text-odoo-text-muted">
-              <span>ກຳໄລ {(data.grossMarginPct * 100).toFixed(1)}%</span>
+            <div className="mt-2 flex justify-end text-xs text-odoo-text-muted">
               <span>{(ach * 100).toFixed(1)}%</span>
             </div>
           </div>

@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 
-type Totals = { sales: string | number | null; qty: string | number | null; profit: string | number | null; target: string | number | null };
+type Totals = { sales: string | number | null; qty: string | number | null; target: string | number | null };
 type DailyRow = { d: Date; sales: string | number; qty: string | number };
 type CategoryRow = { name: string | null; sales: string | number; qty: string | number };
 
@@ -45,11 +45,6 @@ export async function GET(request: NextRequest) {
                AND sd.doc_date >= make_date(${year}, ${month}, 1)
                AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
                AND sd.salename IN (SELECT sn FROM names)) AS qty,
-          (SELECT COALESCE(SUM(sd.profit), 0) FROM odg_sale_detail sd
-             WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
-               AND sd.doc_date >= make_date(${year}, ${month}, 1)
-               AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
-               AND sd.salename IN (SELECT sn FROM names)) AS profit,
           (SELECT COALESCE(SUM(target), 0) FROM odg_retail_target_employee
              WHERE emp_code = ${empCode} AND year = ${year.toString()}
                AND LPAD(month, 2, '0') = LPAD(${month.toString()}, 2, '0')) AS target
@@ -116,10 +111,9 @@ export async function GET(request: NextRequest) {
       `,
     ]);
 
-    const t = totalsRows[0] ?? { sales: 0, qty: 0, profit: 0, target: 0 };
+    const t = totalsRows[0] ?? { sales: 0, qty: 0, target: 0 };
     const sales = num(t.sales);
     const target = num(t.target);
-    const profit = num(t.profit);
     return NextResponse.json({
       year,
       month,
@@ -127,8 +121,6 @@ export async function GET(request: NextRequest) {
       employeeCode: empCode,
       totalSales: sales,
       totalQty: num(t.qty),
-      totalProfit: profit,
-      grossMarginPct: sales > 0 ? profit / sales : 0,
       target,
       achievementPct: target > 0 ? sales / target : 0,
       rank: Number(rankRows[0]?.rnk ?? 0),

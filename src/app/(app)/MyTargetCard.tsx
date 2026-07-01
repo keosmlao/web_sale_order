@@ -8,7 +8,6 @@ type Dashboard = {
   totalQty: number;
   target: number;
   achievementPct: number;
-  grossMarginPct: number;
   rank: number;
   teamSize: number;
   daily: Daily[];
@@ -88,7 +87,7 @@ export default function MyTargetCard() {
           <Metric label="ຍອດຂາຍ" value={fmt.format(data.totalSales)} />
           <Metric label="ເປົ້າ/ຄົນ" value={fmt.format(data.target)} />
           <Metric label="ຕ້ອງຂາຍ/ວັນ" value={onTrack ? "🎉 ບັນລຸ" : remainingDays === 0 ? "—" : fmt.format(Math.round(neededPerDay))} />
-          <Metric label="ກຳໄລ" value={`${(data.grossMarginPct * 100).toFixed(1)}%`} />
+          <Metric label="ຈຳນວນຂາຍ" value={fmt.format(data.totalQty)} />
         </div>
       </div>
 
