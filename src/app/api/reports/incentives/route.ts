@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
+import { roleFromEmployee } from "@/lib/roles";
 
 type IncentiveRow = {
   employee_code: string;
@@ -291,9 +292,19 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Role scope: managers/heads see the whole team; everyone else sees only their own
+    // row (department totals above are still computed from the full team, so a person's
+    // share of a split reward stays correct).
+    const role = roleFromEmployee(employee);
+    const isManager = role === "manager" || role === "head";
+    const visible = isManager
+      ? mapped
+      : mapped.filter((row) => row.employeeCode === employee.employeeCode);
+
     return NextResponse.json({
       year,
       month,
+      scope: isManager ? "all" : "self",
       currencyCode: config.currency_code,
       tiers: {
         lowMaxPct: lowMax,
@@ -303,12 +314,12 @@ export async function GET(request: NextRequest) {
         highMultiplier: number(config.high_multiplier),
       },
       commissionBase,
-      rows: mapped,
-      totalSales: mapped.reduce((sum, row) => sum + row.salesAmount, 0),
-      totalBonus: mapped.reduce((sum, row) => sum + row.netBonus, 0),
-      totalSpecial: mapped.reduce((sum, row) => sum + row.specialReward, 0),
-      totalCommission: mapped.reduce((sum, row) => sum + row.commission, 0),
-      totalPay: mapped.reduce((sum, row) => sum + row.totalPay, 0),
+      rows: visible,
+      totalSales: visible.reduce((sum, row) => sum + row.salesAmount, 0),
+      totalBonus: visible.reduce((sum, row) => sum + row.netBonus, 0),
+      totalSpecial: visible.reduce((sum, row) => sum + row.specialReward, 0),
+      totalCommission: visible.reduce((sum, row) => sum + row.commission, 0),
+      totalPay: visible.reduce((sum, row) => sum + row.totalPay, 0),
     });
   } catch (error) {
     console.error("GET /api/reports/incentives failed", error);
