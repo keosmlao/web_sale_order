@@ -10,6 +10,7 @@ type Config = {
   lowMultiplier: number;
   standardMultiplier: number;
   highMultiplier: number;
+  commissionBase: number;
   updatedAt: string;
 };
 
@@ -174,6 +175,7 @@ export default function IncentiveConfigClient({ canManage }: { canManage: boolea
               <Field label="ຕົວຄູນຜົນງານຕ່ຳ" value={data.config.lowMultiplier} onChange={(v) => configField("lowMultiplier", v)} disabled={!canManage} step="0.01" />
               <Field label="ຕົວຄູນມາດຕະຖານ" value={data.config.standardMultiplier} onChange={(v) => configField("standardMultiplier", v)} disabled={!canManage} step="0.01" />
               <Field label="ຕົວຄູນຜົນງານສູງ" value={data.config.highMultiplier} onChange={(v) => configField("highMultiplier", v)} disabled={!canManage} step="0.01" />
+              <Field label="ຄ່າຄອມພື້ນຖານ/ຄົນ" value={data.config.commissionBase} onChange={(v) => configField("commissionBase", v)} disabled={!canManage} step="100" />
             </div>
           </section>
 

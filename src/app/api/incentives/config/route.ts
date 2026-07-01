@@ -12,6 +12,7 @@ type ConfigRow = {
   low_multiplier: string | number;
   standard_multiplier: string | number;
   high_multiplier: string | number;
+  commission_base: string | number;
   updated_at: Date;
 };
 
@@ -35,6 +36,7 @@ function output(config: ConfigRow, targets: TargetRow[]) {
       lowMultiplier: Number(config.low_multiplier),
       standardMultiplier: Number(config.standard_multiplier),
       highMultiplier: Number(config.high_multiplier),
+      commissionBase: Number(config.commission_base),
       updatedAt: config.updated_at.toISOString(),
     },
     targets: targets.map((row) => ({
@@ -53,7 +55,7 @@ async function readConfig() {
   const [configs, targets] = await Promise.all([
     prisma.$queryRaw<ConfigRow[]>`
       SELECT base_amount, currency_code, low_max_pct, standard_max_pct,
-             low_multiplier, standard_multiplier, high_multiplier, updated_at
+             low_multiplier, standard_multiplier, high_multiplier, commission_base, updated_at
       FROM app_incentive_config WHERE id = 1
     `,
     prisma.$queryRaw<TargetRow[]>`
@@ -93,13 +95,14 @@ export async function PUT(request: NextRequest) {
   const lowMultiplier = Number(config.lowMultiplier);
   const standardMultiplier = Number(config.standardMultiplier);
   const highMultiplier = Number(config.highMultiplier);
+  const commissionBase = Number(config.commissionBase);
   const currency = typeof config.currencyCode === "string"
     ? config.currencyCode.trim().toUpperCase().slice(0, 10)
     : "THB";
 
-  if (![base, lowMax, standardMax, lowMultiplier, standardMultiplier, highMultiplier].every(Number.isFinite) ||
+  if (![base, lowMax, standardMax, lowMultiplier, standardMultiplier, highMultiplier, commissionBase].every(Number.isFinite) ||
       base < 0 || lowMax <= 0 || standardMax < lowMax ||
-      lowMultiplier < 0 || standardMultiplier < 0 || highMultiplier < 0 || !currency) {
+      lowMultiplier < 0 || standardMultiplier < 0 || highMultiplier < 0 || commissionBase < 0 || !currency) {
     return NextResponse.json({ error: "ຄ່າ Config ບໍ່ຖືກຕ້ອງ" }, { status: 400 });
   }
 
@@ -126,7 +129,7 @@ export async function PUT(request: NextRequest) {
         base_amount = ${base}, currency_code = ${currency},
         low_max_pct = ${lowMax}, standard_max_pct = ${standardMax},
         low_multiplier = ${lowMultiplier}, standard_multiplier = ${standardMultiplier},
-        high_multiplier = ${highMultiplier}, updated_at = now()
+        high_multiplier = ${highMultiplier}, commission_base = ${commissionBase}, updated_at = now()
       WHERE id = 1
     `;
     for (const row of targets) {
