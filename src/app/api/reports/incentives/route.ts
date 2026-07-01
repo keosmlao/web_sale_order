@@ -157,9 +157,12 @@ export async function GET(request: NextRequest) {
         by_emp AS (
           -- Aggregate each person's walk-in sales/bonus, resolving salename -> employee_code
           -- (alias first for SML spelling variants, then exact roster-name match).
+          -- Aggregate by salesperson only (not item category): every walk-in sale a person
+          -- makes counts toward their department, matching the workbook. Otherwise an AIR
+          -- seller's AC installation lines (empty item_category -> CE_SDA) would be split off
+          -- and dropped because they have no CE target.
           SELECT
             emp.employee_code,
-            sold.group_code,
             MAX(sold.salename) AS sale_name,
             SUM(sold.qty) AS sold_qty,
             SUM(sold.sales_amount) AS sales_amount,
@@ -178,13 +181,13 @@ export async function GET(request: NextRequest) {
             LIMIT 1
           ) emp ON true
           WHERE sold.salename IS NOT NULL AND sold.salename <> '' AND emp.employee_code IS NOT NULL
-          GROUP BY emp.employee_code, sold.group_code
+          GROUP BY emp.employee_code
         ),
         roster AS (
-          -- The authoritative front-store roster: everyone with a target for this month.
-          -- product_group AC -> AIR group, CE -> CE_SDA group. Everyone on the roster is shown,
-          -- with zero sales/bonus for anyone who has not sold yet this month.
-          SELECT DISTINCT ON (t.emp_code, t.group_code)
+          -- The authoritative front-store roster: everyone with a target for this month,
+          -- one row per person (product_group AC -> AIR group, CE -> CE_SDA group). Everyone
+          -- is shown, with zero sales/bonus for anyone who has not sold yet this month.
+          SELECT DISTINCT ON (t.emp_code)
             t.emp_code AS employee_code, t.group_code, t.target
           FROM (
             SELECT emp_code, target, roworder,
@@ -193,7 +196,7 @@ export async function GET(request: NextRequest) {
             WHERE year = ${year.toString()}
               AND LPAD(month, 2, '0') = LPAD(${month.toString()}, 2, '0')
           ) t
-          ORDER BY t.emp_code, t.group_code, t.roworder DESC
+          ORDER BY t.emp_code, t.roworder DESC
         )
         SELECT
           roster.employee_code,
@@ -206,8 +209,7 @@ export async function GET(request: NextRequest) {
           COALESCE(by_emp.normal_bonus, 0) AS normal_bonus,
           COALESCE(roster.target, 0) AS target_per_person
         FROM roster
-        LEFT JOIN by_emp
-          ON by_emp.employee_code = roster.employee_code AND by_emp.group_code = roster.group_code
+        LEFT JOIN by_emp ON by_emp.employee_code = roster.employee_code
         LEFT JOIN odg_employee emp ON emp.employee_code = roster.employee_code
         ORDER BY sales_amount DESC
       `,
