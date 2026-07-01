@@ -15,6 +15,8 @@ type Dashboard = {
   grossMarginPct: number;
   target: number;
   achievementPct: number;
+  rank: number;
+  teamSize: number;
   daily: Daily[];
   categories: Category[];
 };
@@ -64,14 +66,30 @@ export default function MySalesClient() {
   const maxDaily = Math.max(1, ...(data?.daily ?? []).map((d) => d.sales));
   const maxCat = Math.max(1, ...(data?.categories ?? []).map((c) => c.sales));
 
+  // Pace / projection for the selected month (only meaningful for the current month).
+  const [pYear, pMonth] = period.split("-").map(Number);
+  const daysInMonth = new Date(pYear, pMonth, 0).getDate();
+  const now = new Date();
+  const isCurrentMonth = now.getFullYear() === pYear && now.getMonth() + 1 === pMonth;
+  const daysElapsed = isCurrentMonth ? Math.min(now.getDate(), daysInMonth) : daysInMonth;
+  const remainingDays = Math.max(0, daysInMonth - daysElapsed);
+  const totalSales = data?.totalSales ?? 0;
+  const target = data?.target ?? 0;
+  const projected = daysElapsed > 0 ? (totalSales / daysElapsed) * daysInMonth : totalSales;
+  const neededPerDay = remainingDays > 0 ? Math.max(0, target - totalSales) / remainingDays : 0;
+  const onTrack = target > 0 && projected >= target;
+
   return (
     <div className="odoo-page">
       <div className="odoo-page-header">
         <div>
           <div className="text-[11px] font-bold uppercase tracking-widest text-odoo-text-muted">Dashboard</div>
           <h1 className="odoo-page-title">ຍອດຂາຍຂອງຂ້ອຍ</h1>
-          <p className="odoo-page-subtitle flex flex-wrap items-center gap-x-2">
+          <p className="odoo-page-subtitle flex flex-wrap items-center gap-x-2 gap-y-1">
             <span>{data?.displayName ?? "—"} · ໜ້າຮ້ານ (walk-in)</span>
+            {data && data.rank > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800">🏆 ອັນດັບ {data.rank}/{data.teamSize}</span>
+            ) : null}
             <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> LIVE
             </span>
@@ -108,6 +126,14 @@ export default function MySalesClient() {
               <span>{(ach * 100).toFixed(1)}%</span>
             </div>
           </div>
+
+          {isCurrentMonth ? (
+            <div className="odoo-card mt-4 grid gap-4 p-4 sm:grid-cols-3">
+              <PaceItem label="ຄາດຄະເນ ສິ້ນເດືອນ" value={fmt.format(Math.round(projected))} sub={target > 0 ? `${((projected / target) * 100).toFixed(0)}% ຂອງເປົ້າ` : "—"} tone={onTrack ? "good" : "warn"} />
+              <PaceItem label="ຜ່ານໄປ" value={`${daysElapsed}/${daysInMonth} ວັນ`} sub={`ຍັງເຫຼືອ ${remainingDays} ວັນ`} />
+              <PaceItem label="ຕ້ອງຂາຍອີກ/ວັນ" value={onTrack || remainingDays === 0 ? "—" : fmt.format(Math.round(neededPerDay))} sub={onTrack ? "ຢູ່ໃນເປົ້າ 👍" : "ເພື່ອບັນລຸເປົ້າ"} tone={onTrack ? "good" : "warn"} />
+            </div>
+          ) : null}
 
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             {/* Daily sales bars */}
@@ -151,6 +177,17 @@ export default function MySalesClient() {
           </p>
         </>
       ) : null}
+    </div>
+  );
+}
+
+function PaceItem({ label, value, sub, tone }: { label: string; value: string; sub: string; tone?: "good" | "warn" }) {
+  const color = tone === "good" ? "text-emerald-700" : tone === "warn" ? "text-amber-700" : "text-odoo-text-strong";
+  return (
+    <div className="text-center">
+      <div className="text-xs font-bold uppercase tracking-wide text-odoo-text-muted">{label}</div>
+      <div className={`mt-1 font-mono text-xl font-black ${color}`}>{value}</div>
+      <div className="text-[11px] text-odoo-text-muted">{sub}</div>
     </div>
   );
 }

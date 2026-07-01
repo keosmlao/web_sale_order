@@ -28,7 +28,7 @@ export async function GET(request: NextRequest) {
 
   try {
     // Every salename that belongs to this employee: their roster name plus any alias.
-    const [totalsRows, daily, categories, emp] = await Promise.all([
+    const [totalsRows, daily, categories, emp, rankRows] = await Promise.all([
       prisma.$queryRaw<Totals[]>`
         WITH names AS (
           SELECT fullname_lo AS sn FROM odg_employee WHERE employee_code = ${empCode} AND COALESCE(fullname_lo, '') <> ''
@@ -85,6 +85,35 @@ export async function GET(request: NextRequest) {
         SELECT COALESCE(NULLIF(fullname_lo, ''), NULLIF(nickname, ''), ${empCode}) AS display_name
         FROM odg_employee WHERE employee_code = ${empCode} LIMIT 1
       `,
+      // Rank among the roster (everyone with a target this month) by walk-in sales.
+      prisma.$queryRaw<Array<{ rnk: number; team: number }>>`
+        WITH sold AS (
+          SELECT emp.employee_code, SUM(sd.sum_amount) AS sales
+          FROM odg_sale_detail sd
+          LEFT JOIN LATERAL (
+            SELECT employee_code FROM (
+              SELECT a.employee_code, 0 AS pr FROM app_incentive_sale_alias a WHERE a.salename = sd.salename
+              UNION ALL SELECT e.employee_code, 1 FROM odg_employee e WHERE e.fullname_lo = sd.salename
+            ) q ORDER BY pr, employee_code LIMIT 1
+          ) emp ON true
+          WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+            AND sd.doc_date >= make_date(${year}, ${month}, 1)
+            AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+            AND emp.employee_code IS NOT NULL
+          GROUP BY emp.employee_code
+        ),
+        roster AS (
+          SELECT DISTINCT emp_code FROM odg_retail_target_employee
+          WHERE year = ${year.toString()} AND LPAD(month, 2, '0') = LPAD(${month.toString()}, 2, '0')
+        ),
+        ranked AS (
+          SELECT r.emp_code,
+                 RANK() OVER (ORDER BY COALESCE(s.sales, 0) DESC) AS rnk,
+                 COUNT(*) OVER () AS team
+          FROM roster r LEFT JOIN sold s ON s.employee_code = r.emp_code
+        )
+        SELECT rnk, team FROM ranked WHERE emp_code = ${empCode}
+      `,
     ]);
 
     const t = totalsRows[0] ?? { sales: 0, qty: 0, profit: 0, target: 0 };
@@ -102,6 +131,8 @@ export async function GET(request: NextRequest) {
       grossMarginPct: sales > 0 ? profit / sales : 0,
       target,
       achievementPct: target > 0 ? sales / target : 0,
+      rank: Number(rankRows[0]?.rnk ?? 0),
+      teamSize: Number(rankRows[0]?.team ?? 0),
       daily: daily.map((r) => ({ date: r.d.toISOString().slice(0, 10), sales: num(r.sales), qty: num(r.qty) })),
       categories: categories.map((r) => ({ name: r.name ?? "ອື່ນໆ", sales: num(r.sales), qty: num(r.qty) })),
     });
