@@ -248,6 +248,16 @@ export default async function HomePage() {
       FROM app_price_request
     `,
     prisma.$queryRaw<SaleDayRow[]>`
+      WITH names AS (
+        -- odg_sale_detail keys the salesperson by free-text salename, so scope
+        -- to THIS employee via their roster name plus any configured aliases
+        -- (the same salename → employee mapping the my-sales report uses).
+        SELECT fullname_lo AS sn FROM odg_employee
+          WHERE employee_code = ${me.employeeCode ?? ""} AND COALESCE(fullname_lo, '') <> ''
+        UNION
+        SELECT salename FROM app_incentive_sale_alias
+          WHERE employee_code = ${me.employeeCode ?? ""}
+      )
       SELECT
         COALESCE(SUM(sum_amount) FILTER (WHERE doc_date::date = CURRENT_DATE), 0) AS today_sales,
         COALESCE(SUM(sum_amount) FILTER (WHERE doc_date::date = CURRENT_DATE - 1), 0) AS yesterday_sales,
@@ -257,6 +267,7 @@ export default async function HomePage() {
       WHERE branch_code = '01'
         AND argroup_main = '101'
         AND doc_date >= CURRENT_DATE - 1
+        AND salename IN (SELECT sn FROM names)
     `,
   ]);
 
@@ -311,8 +322,8 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-      {/* Premium Hero Banner Greeting — hidden on mobile (bottom nav + profile cover it) */}
-      <div className="relative hidden overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-xl md:block md:p-8">
+      {/* Premium Hero Banner Greeting */}
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-xl md:p-8">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:24px_24px] opacity-20" />
         <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl" />
         <div className="absolute -right-20 -bottom-20 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
