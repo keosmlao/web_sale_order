@@ -280,9 +280,14 @@ ON CONFLICT (reward_code) DO UPDATE SET target_amount = EXCLUDED.target_amount,
   reward_amount = EXCLUDED.reward_amount, split_by_share = EXCLUDED.split_by_share;
 
 -- 7) Config corrections to match this workbook.
+-- commission_base = ③ ຄ່າຄອມ base per front-store salesperson (workbook "ຄ່າຄອມ ປະຈຳເດືອນ").
+-- Commission = base x pay-rate, where pay-rate = 0 below 80% achievement, the achievement
+-- rounded DOWN to 5% between 80-100%, and rounded UP to 5% at/above 100%.
+ALTER TABLE app_incentive_config ADD COLUMN IF NOT EXISTS commission_base numeric(18,4) NOT NULL DEFAULT 6000;
 UPDATE app_incentive_config
 SET base_amount = 10,        -- X: 10 THB per bonus point
-    low_max_pct = 0.50       -- performance tier boundary: 1-50% -> low
+    low_max_pct = 0.50,      -- performance tier boundary: 1-50% -> low
+    commission_base = 6000
 WHERE id = 1;
 
 -- 8) No-bonus item overrides from workbook Bonus_Maps (column W).

@@ -14,6 +14,8 @@ type IncentiveRow = {
   multiplier: number;
   netBonus: number;
   specialReward: number;
+  commissionRate: number;
+  commission: number;
   totalPay: number;
 };
 
@@ -30,10 +32,12 @@ type Report = {
   month: number;
   currencyCode: string;
   tiers?: Tiers;
+  commissionBase?: number;
   rows: IncentiveRow[];
   totalSales: number;
   totalBonus: number;
   totalSpecial?: number;
+  totalCommission?: number;
   totalPay?: number;
 };
 
@@ -99,7 +103,8 @@ export default function IncentivesClient() {
         </div>
         <div className="odoo-card flex w-full gap-8 px-4 py-3 sm:w-auto">
           <Summary label="ຍອດຂາຍ" value={`${numberFmt.format(report?.totalSales ?? 0)} ${currency}`} />
-          <Summary label="ໂບນັດຄາດຄະເນ" value={`${numberFmt.format(report?.totalBonus ?? 0)} ${currency}`} accent />
+          <Summary label="ໂບນັດ" value={`${numberFmt.format(report?.totalBonus ?? 0)} ${currency}`} />
+          <Summary label="ລວມລາຍຮັບ" value={`${numberFmt.format(report?.totalPay ?? 0)} ${currency}`} accent />
         </div>
       </div>
 
@@ -134,16 +139,17 @@ export default function IncentivesClient() {
                 <th className="px-3 py-3 text-right">ຜົນງານ</th>
                 <th className="px-3 py-3 text-right">ໂບນັດປົກກະຕິ</th>
                 <th className="px-3 py-3 text-right">ຕົວຄູນ</th>
-                <th className="px-4 py-3 text-right">{hasSpecial ? "① ໂບນັດ" : "ໂບນັດສຸດທິ"}</th>
+                <th className="px-3 py-3 text-right">① ໂບນັດ</th>
                 {hasSpecial ? <th className="px-3 py-3 text-right">② ເງິນພິເສດ</th> : null}
-                {hasSpecial ? <th className="px-4 py-3 text-right">ລວມຈ່າຍ</th> : null}
+                <th className="px-3 py-3 text-right">③ ຄ່າຄອມ</th>
+                <th className="px-4 py-3 text-right">ລວມລາຍຮັບ</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-odoo-border">
               {loading ? (
-                <tr><td colSpan={hasSpecial ? 12 : 10} className="px-4 py-12 text-center text-odoo-text-muted">ກຳລັງໂຫລດ…</td></tr>
+                <tr><td colSpan={hasSpecial ? 13 : 12} className="px-4 py-12 text-center text-odoo-text-muted">ກຳລັງໂຫລດ…</td></tr>
               ) : rows.length === 0 ? (
-                <tr><td colSpan={hasSpecial ? 12 : 10} className="px-4 py-12 text-center text-odoo-text-muted">ບໍ່ມີຍອດຂາຍໃນເດືອນນີ້</td></tr>
+                <tr><td colSpan={hasSpecial ? 13 : 12} className="px-4 py-12 text-center text-odoo-text-muted">ບໍ່ມີຍອດຂາຍໃນເດືອນນີ້</td></tr>
               ) : rows.map((row, index) => (
                 <tr key={`${row.employeeCode}-${row.groupCode}`}>
                   <td className="px-3 py-3 text-center font-mono text-odoo-text-muted">{index + 1}</td>
@@ -155,14 +161,15 @@ export default function IncentivesClient() {
                   <td className="px-3 py-3 text-right"><Achievement value={row.achievementPct} tiers={tiers} /></td>
                   <td className="px-3 py-3 text-right font-mono">{numberFmt.format(row.normalBonus)}</td>
                   <td className="px-3 py-3 text-right font-mono font-bold">×{row.multiplier.toFixed(1)}</td>
-                  <td className={`px-4 py-3 text-right font-mono font-black ${hasSpecial ? "text-odoo-text-strong" : "text-emerald-700"}`}>{numberFmt.format(row.netBonus)}{hasSpecial ? "" : ` ${currency}`}</td>
+                  <td className="px-3 py-3 text-right font-mono font-bold text-odoo-text-strong">{numberFmt.format(row.netBonus)}</td>
                   {hasSpecial ? <td className="px-3 py-3 text-right font-mono">{row.specialReward > 0 ? numberFmt.format(row.specialReward) : "—"}</td> : null}
-                  {hasSpecial ? <td className="px-4 py-3 text-right font-mono font-black text-emerald-700">{numberFmt.format(row.totalPay)} {currency}</td> : null}
+                  <td className="px-3 py-3 text-right font-mono">{row.commission > 0 ? numberFmt.format(row.commission) : "—"}</td>
+                  <td className="px-4 py-3 text-right font-mono font-black text-emerald-700">{numberFmt.format(row.totalPay)} {currency}</td>
                 </tr>
               ))}
             </tbody>
             {!loading && rows.length > 0 ? (
-              <tfoot><tr className="border-t-2 border-odoo-border bg-odoo-surface-muted font-bold"><td colSpan={4} className="px-4 py-3">ລວມ</td><td className="px-3 py-3 text-right font-mono">{numberFmt.format(report?.totalSales ?? 0)}</td><td colSpan={4} /><td className={`px-4 py-3 text-right font-mono ${hasSpecial ? "text-odoo-text-strong" : "text-emerald-700"}`}>{numberFmt.format(report?.totalBonus ?? 0)}{hasSpecial ? "" : ` ${currency}`}</td>{hasSpecial ? <td className="px-3 py-3 text-right font-mono">{numberFmt.format(report?.totalSpecial ?? 0)}</td> : null}{hasSpecial ? <td className="px-4 py-3 text-right font-mono text-emerald-700">{numberFmt.format(report?.totalPay ?? 0)} {currency}</td> : null}</tr></tfoot>
+              <tfoot><tr className="border-t-2 border-odoo-border bg-odoo-surface-muted font-bold"><td colSpan={4} className="px-4 py-3">ລວມ</td><td className="px-3 py-3 text-right font-mono">{numberFmt.format(report?.totalSales ?? 0)}</td><td colSpan={4} /><td className="px-3 py-3 text-right font-mono text-odoo-text-strong">{numberFmt.format(report?.totalBonus ?? 0)}</td>{hasSpecial ? <td className="px-3 py-3 text-right font-mono">{numberFmt.format(report?.totalSpecial ?? 0)}</td> : null}<td className="px-3 py-3 text-right font-mono">{numberFmt.format(report?.totalCommission ?? 0)}</td><td className="px-4 py-3 text-right font-mono text-emerald-700">{numberFmt.format(report?.totalPay ?? 0)} {currency}</td></tr></tfoot>
             ) : null}
           </table>
         </div>

@@ -30,7 +30,16 @@ type ConfigRow = {
   low_multiplier: string | number;
   standard_multiplier: string | number;
   high_multiplier: string | number;
+  commission_base: string | number;
 };
+
+// Commission pay-rate (workbook "ຄ່າຄອມ ປະຈຳເດືອນ"): 0 below 80% achievement, the
+// achievement rounded DOWN to 5% between 80-100%, and rounded UP to 5% at/above 100%.
+function commissionRateFor(achievementPct: number): number {
+  if (achievementPct < 0.8) return 0;
+  if (achievementPct < 1) return Math.floor(achievementPct * 20) / 20;
+  return Math.ceil(achievementPct * 20) / 20;
+}
 
 const number = (value: string | number | null | undefined) => Number(value ?? 0) || 0;
 
@@ -65,7 +74,7 @@ export async function GET(request: NextRequest) {
     const [configRows, rewardRows, rows] = await Promise.all([
       prisma.$queryRaw<ConfigRow[]>`
         SELECT currency_code, low_max_pct, standard_max_pct,
-               low_multiplier, standard_multiplier, high_multiplier
+               low_multiplier, standard_multiplier, high_multiplier, commission_base
         FROM app_incentive_config WHERE id = 1
       `,
       prisma.$queryRaw<RewardRow[]>`
@@ -222,9 +231,11 @@ export async function GET(request: NextRequest) {
       low_multiplier: 0.8,
       standard_multiplier: 1,
       high_multiplier: 1.1,
+      commission_base: 6000,
     };
     const lowMax = number(config.low_max_pct);
     const standardMax = number(config.standard_max_pct);
+    const commissionBase = number(config.commission_base);
 
     const mapped = rows.map((row) => {
       const salesAmount = number(row.sales_amount);
@@ -236,6 +247,9 @@ export async function GET(request: NextRequest) {
           ? number(config.standard_multiplier)
           : number(config.high_multiplier);
       const normalBonus = number(row.normal_bonus);
+      const netBonus = normalBonus * multiplier;
+      const commissionRate = commissionRateFor(achievementPct);
+      const commission = commissionBase * commissionRate;
       return {
         employeeCode: row.employee_code,
         displayName: row.display_name ?? row.employee_code,
@@ -247,9 +261,11 @@ export async function GET(request: NextRequest) {
         achievementPct,
         normalBonus,
         multiplier,
-        netBonus: normalBonus * multiplier,
+        netBonus,
         specialReward: 0,
-        totalPay: normalBonus * multiplier,
+        commissionRate,
+        commission,
+        totalPay: netBonus + commission,
       };
     });
 
@@ -286,10 +302,12 @@ export async function GET(request: NextRequest) {
         standardMultiplier: number(config.standard_multiplier),
         highMultiplier: number(config.high_multiplier),
       },
+      commissionBase,
       rows: mapped,
       totalSales: mapped.reduce((sum, row) => sum + row.salesAmount, 0),
       totalBonus: mapped.reduce((sum, row) => sum + row.netBonus, 0),
       totalSpecial: mapped.reduce((sum, row) => sum + row.specialReward, 0),
+      totalCommission: mapped.reduce((sum, row) => sum + row.commission, 0),
       totalPay: mapped.reduce((sum, row) => sum + row.totalPay, 0),
     });
   } catch (error) {
