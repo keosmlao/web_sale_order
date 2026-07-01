@@ -346,15 +346,6 @@ export default async function HomePage() {
             </p>
           </div>
           
-          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <Link
-              href="/orders/new"
-              className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 text-xs font-bold text-white shadow-lg shadow-indigo-600/30 transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-500 active:translate-y-0 active:scale-[0.98] sm:w-auto sm:justify-start"
-            >
-              <PlusIcon />
-              ສ້າງບິນໃໝ່
-            </Link>
-          </div>
         </div>
       </div>
 
