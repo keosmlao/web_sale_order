@@ -2,12 +2,16 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+type Daily = { date: string; sales: number; qty: number };
 type Dashboard = {
   totalSales: number;
+  totalQty: number;
   target: number;
   achievementPct: number;
+  grossMarginPct: number;
   rank: number;
   teamSize: number;
+  daily: Daily[];
 };
 
 const fmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
@@ -42,49 +46,75 @@ export default function MyTargetCard() {
   const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
   const daysElapsed = Math.min(now.getDate(), daysInMonth);
   const remainingDays = Math.max(0, daysInMonth - daysElapsed);
-  const remainingAmount = Math.max(0, data.target - data.totalSales);
-  const neededPerDay = remainingDays > 0 ? remainingAmount / remainingDays : 0;
+  const neededPerDay = remainingDays > 0 ? Math.max(0, data.target - data.totalSales) / remainingDays : 0;
   const onTrack = ach >= 1;
-  const barColor = onTrack ? "bg-emerald-400" : ach >= 0.8 ? "bg-white" : "bg-amber-300";
+
+  // Donut geometry.
+  const R = 52;
+  const C = 2 * Math.PI * R;
+  const pct = Math.min(1, ach);
+  const ringColor = onTrack ? "#34d399" : ach >= 0.8 ? "#ffffff" : "#fbbf24";
+  const maxDaily = Math.max(1, ...data.daily.map((d) => d.sales));
 
   return (
     <section className="odoo-card overflow-hidden bg-gradient-to-br from-odoo-primary to-indigo-800 p-5 text-white">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="text-xs font-bold uppercase tracking-widest text-white/70">ເປົ້າເດືອນນີ້</div>
-          <div className="mt-1 flex items-baseline gap-2">
-            <span className="font-mono text-4xl font-black">{(ach * 100).toFixed(0)}%</span>
-            <span className="text-sm text-white/80">ບັນລຸເປົ້າ</span>
+      <div className="flex items-center justify-between">
+        <div className="text-xs font-bold uppercase tracking-widest text-white/70">ເປົ້າເດືອນນີ້</div>
+        <div className="flex items-center gap-2">
+          {data.rank > 0 ? <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs font-bold">🏆 {data.rank}/{data.teamSize}</span> : null}
+          <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs font-bold">ຍັງເຫຼືອ {remainingDays} ວັນ</span>
+        </div>
+      </div>
+
+      <div className="mt-3 flex flex-col items-center gap-5 sm:flex-row sm:items-center">
+        {/* Donut / pie chart */}
+        <div className="relative shrink-0">
+          <svg viewBox="0 0 120 120" className="h-36 w-36 -rotate-90">
+            <circle cx="60" cy="60" r={R} fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="13" />
+            <circle
+              cx="60" cy="60" r={R} fill="none" stroke={ringColor} strokeWidth="13" strokeLinecap="round"
+              strokeDasharray={C} strokeDashoffset={C * (1 - pct)} className="transition-all duration-700"
+            />
+          </svg>
+          <div className="absolute inset-0 flex flex-col items-center justify-center">
+            <span className="font-mono text-3xl font-black">{(ach * 100).toFixed(0)}%</span>
+            <span className="text-[10px] uppercase tracking-wide text-white/70">ບັນລຸເປົ້າ</span>
           </div>
         </div>
-        <div className="flex flex-col items-end gap-1 text-right">
-          {data.rank > 0 ? <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs font-bold">🏆 ອັນດັບ {data.rank}/{data.teamSize}</span> : null}
-          <span className="text-xs text-white/70">ຍັງເຫຼືອ {remainingDays} ວັນ</span>
+
+        {/* Metrics */}
+        <div className="grid w-full grid-cols-2 gap-x-4 gap-y-3">
+          <Metric label="ຍອດຂາຍ" value={fmt.format(data.totalSales)} />
+          <Metric label="ເປົ້າ/ຄົນ" value={fmt.format(data.target)} />
+          <Metric label="ຕ້ອງຂາຍ/ວັນ" value={onTrack ? "🎉 ບັນລຸ" : remainingDays === 0 ? "—" : fmt.format(Math.round(neededPerDay))} />
+          <Metric label="ກຳໄລ" value={`${(data.grossMarginPct * 100).toFixed(1)}%`} />
         </div>
       </div>
 
-      <div className="mt-4 h-3 w-full overflow-hidden rounded-full bg-white/20">
-        <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.min(100, ach * 100)}%` }} />
-      </div>
+      {/* Daily mini-trend */}
+      {data.daily.length > 0 ? (
+        <div className="mt-4">
+          <div className="mb-1 text-[11px] uppercase tracking-wide text-white/60">ຍອດຂາຍລາຍວັນ</div>
+          <div className="flex h-12 items-end gap-0.5">
+            {data.daily.map((d) => (
+              <div key={d.date} className="flex-1 rounded-t bg-white/70" style={{ height: `${Math.max(4, (d.sales / maxDaily) * 100)}%` }} title={`${d.date}: ${fmt.format(d.sales)}`} />
+            ))}
+          </div>
+        </div>
+      ) : null}
 
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-        <div>
-          <div className="text-[11px] uppercase tracking-wide text-white/60">ຍອດຂາຍ</div>
-          <div className="font-mono text-sm font-black">{fmt.format(data.totalSales)}</div>
-        </div>
-        <div>
-          <div className="text-[11px] uppercase tracking-wide text-white/60">ເປົ້າ/ຄົນ</div>
-          <div className="font-mono text-sm font-black">{fmt.format(data.target)}</div>
-        </div>
-        <div>
-          <div className="text-[11px] uppercase tracking-wide text-white/60">ຕ້ອງຂາຍ/ວັນ</div>
-          <div className="font-mono text-sm font-black">{onTrack ? "🎉 ບັນລຸ" : remainingDays === 0 ? "—" : fmt.format(Math.round(neededPerDay))}</div>
-        </div>
-      </div>
-
-      <a href="/reports/my-sales" className="mt-4 block text-center text-xs font-bold text-white/90 hover:underline">
-        ເບິ່ງ Dashboard ຍອດຂາຍ &amp; ໂບນັດ →
+      <a href="/reports/incentives" className="mt-4 block text-center text-xs font-bold text-white/90 hover:underline">
+        ເບິ່ງໂບນັດ &amp; ຄ່າຄອມຂອງຂ້ອຍ →
       </a>
     </section>
+  );
+}
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div className="text-[11px] uppercase tracking-wide text-white/60">{label}</div>
+      <div className="font-mono text-lg font-black">{value}</div>
+    </div>
   );
 }
