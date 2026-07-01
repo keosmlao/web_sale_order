@@ -4,6 +4,7 @@ import { requireEmployee } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
 import { getHiddenMenuKeys } from "@/lib/menu-visibility";
 import Sidebar from "@/components/Sidebar";
+import BottomNav from "@/components/BottomNav";
 import OrderNotifier from "@/components/OrderNotifier";
 import { logoutAction } from "@/app/login/actions";
 
@@ -61,14 +62,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
   return (
     <div className="min-h-screen bg-background text-odoo-text md:flex">
-      <Sidebar
-        displayName={displayName}
-        employeeCode={employee.employeeCode ?? "—"}
-        subtitle={subtitle}
-        role={role}
-        hiddenMenuKeys={hiddenMenuKeys}
-      />
-      <main className="min-w-0 flex-1 md:h-screen md:overflow-y-auto">{children}</main>
+      {/* Desktop: sidebar. Mobile: hidden entirely (no drawer / no top bar) — the
+          bottom navigation + profile page replace it. */}
+      <div className="hidden md:contents">
+        <Sidebar
+          displayName={displayName}
+          employeeCode={employee.employeeCode ?? "—"}
+          subtitle={subtitle}
+          role={role}
+          hiddenMenuKeys={hiddenMenuKeys}
+        />
+      </div>
+      <main className="min-w-0 flex-1 pb-20 md:h-screen md:overflow-y-auto md:pb-0">{children}</main>
+      <BottomNav />
       <OrderNotifier selfEmployeeCode={employee.employeeCode ?? null} />
     </div>
   );
