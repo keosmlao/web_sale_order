@@ -160,6 +160,7 @@ export async function GET(request: NextRequest) {
           SELECT
             emp.employee_code,
             sold.group_code,
+            MAX(sold.salename) AS sale_name,
             SUM(sold.qty) AS sold_qty,
             SUM(sold.sales_amount) AS sales_amount,
             SUM(sold.sales_amount) FILTER (WHERE sold.brand = 'HISENSE') AS hisense_sales,
@@ -196,7 +197,8 @@ export async function GET(request: NextRequest) {
         )
         SELECT
           roster.employee_code,
-          COALESCE(NULLIF(emp.fullname_lo, ''), NULLIF(emp.nickname, ''), roster.employee_code) AS display_name,
+          COALESCE(NULLIF(emp.fullname_lo, ''), NULLIF(emp.nickname, ''),
+                   by_emp.sale_name, roster.employee_code) AS display_name,
           roster.group_code,
           COALESCE(by_emp.sold_qty, 0) AS sold_qty,
           COALESCE(by_emp.sales_amount, 0) AS sales_amount,

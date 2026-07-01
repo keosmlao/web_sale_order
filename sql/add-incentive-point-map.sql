@@ -332,5 +332,6 @@ CREATE TABLE IF NOT EXISTS app_incentive_sale_alias (
 );
 INSERT INTO app_incentive_sale_alias (salename, employee_code) VALUES
   ('ບຸນມີໄຊ ກຽດທອງຄຳ', '24037'),   -- roster: ບຸນມີໄຊ ເລືອງທອງຄຳ
-  ('ອຸດົມຊັບ ວິລະວັງ', '22027')     -- roster: ອຸດົມຊັບ ວິລະວົງ
+  ('ອຸດົມຊັບ ວິລະວັງ', '22027'),    -- roster: ອຸດົມຊັບ ວິລະວົງ
+  ('ພາສຸກ ຫຼວງລາດ', '26010')        -- target code 26010 has no odg_employee record
 ON CONFLICT (salename) DO UPDATE SET employee_code = EXCLUDED.employee_code;
