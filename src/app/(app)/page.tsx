@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireEmployee } from "@/lib/auth";
 import { roleFromEmployee, canApprovePriceRequests } from "@/lib/roles";
+import MyTargetCard from "./MyTargetCard";
 
 export const dynamic = "force-dynamic";
 
@@ -372,6 +373,8 @@ export default async function HomePage() {
           </div>
         </div>
       </div>
+
+      <MyTargetCard />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
