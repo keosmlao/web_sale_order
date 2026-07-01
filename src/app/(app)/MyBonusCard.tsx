@@ -3,11 +3,14 @@
 import { useCallback, useEffect, useState } from "react";
 
 type Row = {
+  bonusPoints: number;
   netBonus: number;
   specialReward: number;
   commission: number;
   totalPay: number;
 };
+
+const pointFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 type Report = { currencyCode: string; rows: Row[] };
 
 const fmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
@@ -42,11 +45,15 @@ export default function MyBonusCard() {
 
   return (
     <section className="odoo-card mt-3 overflow-hidden bg-gradient-to-br from-emerald-600 to-emerald-800 p-5 text-white">
-      <div className="flex items-end justify-between">
+      <div className="flex items-end justify-between gap-3">
         <div>
           <div className="text-xs font-bold uppercase tracking-widest text-emerald-100">ໂບນັດ &amp; ຄ່າຄອມ ເດືອນນີ້</div>
           <div className="mt-1 font-mono text-4xl font-black">{fmt.format(row.totalPay)}</div>
           <div className="text-sm text-emerald-100">{currency} · ລວມລາຍຮັບ</div>
+        </div>
+        <div className="rounded-xl bg-white/15 px-3 py-2 text-center ring-1 ring-inset ring-white/20">
+          <div className="text-[10px] uppercase tracking-wide text-emerald-100">ຄະແນນ</div>
+          <div className="font-mono text-2xl font-black leading-none">{pointFmt.format(row.bonusPoints)}</div>
         </div>
       </div>
 

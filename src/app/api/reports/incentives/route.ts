@@ -11,6 +11,7 @@ type IncentiveRow = {
   sold_qty: string | number | null;
   sales_amount: string | number | null;
   hisense_sales: string | number | null;
+  bonus_points: string | number | null;
   normal_bonus: string | number | null;
   target_per_person: string | number | null;
 };
@@ -151,6 +152,7 @@ export async function GET(request: NextRequest) {
             l.brand,
             l.qty,
             l.sales_amount,
+            COALESCE(pm.points, 0) * COALESCE(sm.multiplier, 1) * l.qty AS line_points,
             COALESCE(pm.points, 0)
               * cfg.base_amount
               * COALESCE(sm.multiplier, 1)
@@ -177,6 +179,7 @@ export async function GET(request: NextRequest) {
             SUM(sold.qty) AS sold_qty,
             SUM(sold.sales_amount) AS sales_amount,
             SUM(sold.sales_amount) FILTER (WHERE sold.brand = 'HISENSE') AS hisense_sales,
+            SUM(sold.line_points) AS bonus_points,
             SUM(sold.line_bonus) AS normal_bonus
           FROM sold
           LEFT JOIN LATERAL (
@@ -216,6 +219,7 @@ export async function GET(request: NextRequest) {
           COALESCE(by_emp.sold_qty, 0) AS sold_qty,
           COALESCE(by_emp.sales_amount, 0) AS sales_amount,
           COALESCE(by_emp.hisense_sales, 0) AS hisense_sales,
+          COALESCE(by_emp.bonus_points, 0) AS bonus_points,
           COALESCE(by_emp.normal_bonus, 0) AS normal_bonus,
           COALESCE(roster.target, 0) AS target_per_person
         FROM roster
@@ -258,6 +262,7 @@ export async function GET(request: NextRequest) {
         soldQty: number(row.sold_qty),
         salesAmount,
         hisenseSales: number(row.hisense_sales),
+        bonusPoints: number(row.bonus_points),
         targetPerPerson,
         achievementPct,
         normalBonus,
