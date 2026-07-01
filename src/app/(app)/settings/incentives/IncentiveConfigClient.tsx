@@ -27,7 +27,7 @@ type Target = {
 type Payload = { config: Config; targets: Target[] };
 type Employee = { employeeCode: string; fullnameLo?: string | null; fullnameEn?: string | null; nickname?: string | null };
 
-export default function IncentiveConfigClient({ canManage }: { canManage: boolean }) {
+export default function IncentiveConfigClient({ canManage, embedded = false }: { canManage: boolean; embedded?: boolean }) {
   const [data, setData] = useState<Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -144,20 +144,31 @@ export default function IncentiveConfigClient({ canManage }: { canManage: boolea
     );
   }, [data, targetYear]);
 
-  if (loading) return <div className="odoo-page text-sm text-odoo-text-muted">ກຳລັງໂຫລດ…</div>;
+  if (loading) return <div className={embedded ? "text-sm text-odoo-text-muted" : "odoo-page text-sm text-odoo-text-muted"}>ກຳລັງໂຫລດ…</div>;
+
+  const saveButton = (
+    <button type="button" onClick={() => void save()} disabled={!canManage || !data || saving} className="odoo-btn odoo-btn-primary">
+      {saving ? "ກຳລັງບັນທຶກ…" : "ບັນທຶກ Config"}
+    </button>
+  );
 
   return (
-    <div className="odoo-page">
-      <div className="odoo-page-header">
-        <div>
-          <div className="text-[11px] font-bold uppercase tracking-widest text-odoo-text-muted">Settings</div>
-          <h1 className="odoo-page-title">Config Incentive</h1>
-          <p className="odoo-page-subtitle">ກຳນົດໂບນັດຕໍ່ຊິ້ນ, ເກນຜົນງານ ແລະເປົ້າຂາຍລາຍເດືອນ.</p>
+    <div className={embedded ? "" : "odoo-page"}>
+      {embedded ? (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-xs text-odoo-text-muted">ກຳນົດໂບນັດຕໍ່ຊິ້ນ, ເກນຜົນງານ, ຄ່າຄອມ ແລະເປົ້າຂາຍລາຍເດືອນ.</p>
+          {saveButton}
         </div>
-        <button type="button" onClick={() => void save()} disabled={!canManage || !data || saving} className="odoo-btn odoo-btn-primary">
-          {saving ? "ກຳລັງບັນທຶກ…" : "ບັນທຶກ Config"}
-        </button>
-      </div>
+      ) : (
+        <div className="odoo-page-header">
+          <div>
+            <div className="text-[11px] font-bold uppercase tracking-widest text-odoo-text-muted">Settings</div>
+            <h1 className="odoo-page-title">Config Incentive</h1>
+            <p className="odoo-page-subtitle">ກຳນົດໂບນັດຕໍ່ຊິ້ນ, ເກນຜົນງານ ແລະເປົ້າຂາຍລາຍເດືອນ.</p>
+          </div>
+          {saveButton}
+        </div>
+      )}
 
       {!canManage ? <div className="mb-4 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800">ສະຖານະອ່ານຢ່າງດຽວ</div> : null}
       {error ? <div className="mb-4 rounded-md border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-semibold text-odoo-danger">{error}</div> : null}

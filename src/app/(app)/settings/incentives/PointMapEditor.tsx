@@ -98,7 +98,7 @@ export default function PointMapEditor({ canManage }: { canManage: boolean }) {
   };
 
   return (
-    <section className="odoo-card mt-6 p-4">
+    <section className="odoo-card p-4">
       <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-sm font-black uppercase tracking-wide text-odoo-text-strong">ຄະແນນໂບນັດ (Point Map)</h2>
