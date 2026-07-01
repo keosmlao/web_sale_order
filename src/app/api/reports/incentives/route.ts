@@ -83,13 +83,13 @@ export async function GET(request: NextRequest) {
             s.brand,
             ps.status_code AS status_code,
             -- Design dimension (workbook Bonus_Maps). SDA=subtype, Air=inverter/on-off,
-            -- Washer=dryer override else load type, REF=door type, AV=n/a.
+            -- REF=door type and Washer=load type both from ic_design (Top/Front/Twin Tub);
+            -- the workbook classifies wash-dry combos by their load type, NOT as "Dryer",
+            -- so we must not tag them from the name. AV=n/a.
             CASE s.pcat
               WHEN 'SDA' THEN s.sda_subtype
               WHEN 'Air' THEN CASE WHEN s.item_name ~* 'invert' THEN 'Inverter' ELSE 'On-Off' END
               WHEN 'AV'  THEN ''
-              WHEN 'Washer' THEN CASE WHEN s.item_name ~* 'dryer|ອົບ'
-                                      THEN 'Dryer' ELSE COALESCE(dtok.design_token, '') END
               ELSE COALESCE(dtok.design_token, '')
             END AS design_token,
             -- Size dimension. REF=cuft, Washer=kg, TV(008)=inch from size_name;
