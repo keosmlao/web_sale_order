@@ -54,6 +54,9 @@ export default function MyTargetCard() {
   const pct = Math.min(1, ach);
   const ringColor = onTrack ? "#34d399" : ach >= 0.8 ? "#ffffff" : "#fbbf24";
   const maxDaily = Math.max(1, ...data.daily.map((d) => d.sales));
+  // One slot per day of the month so it reads as a trend even early in the month.
+  const salesByDay = new Map(data.daily.map((d) => [Number(d.date.slice(8, 10)), d.sales]));
+  const monthDays = Array.from({ length: daysInMonth }, (_, i) => ({ day: i + 1, sales: salesByDay.get(i + 1) ?? 0 }));
 
   return (
     <>
@@ -91,17 +94,23 @@ export default function MyTargetCard() {
         </div>
       </div>
 
-      {/* Daily mini-trend */}
-      {data.daily.length > 0 ? (
-        <div className="mt-4">
-          <div className="mb-1 text-[11px] uppercase tracking-wide text-white/60">ຍອດຂາຍລາຍວັນ</div>
-          <div className="flex h-12 items-end gap-0.5">
-            {data.daily.map((d) => (
-              <div key={d.date} className="flex-1 rounded-t bg-white/70" style={{ height: `${Math.max(4, (d.sales / maxDaily) * 100)}%` }} title={`${d.date}: ${fmt.format(d.sales)}`} />
-            ))}
-          </div>
+      {/* Daily trend — one bar per day of the month */}
+      <div className="mt-4">
+        <div className="mb-1 flex items-center justify-between text-[11px] uppercase tracking-wide text-white/60">
+          <span>ຍອດຂາຍລາຍວັນ</span>
+          <span>ເດືອນນີ້</span>
         </div>
-      ) : null}
+        <div className="flex h-14 items-end gap-px rounded-lg bg-white/5 p-1.5">
+          {monthDays.map((d) => (
+            <div
+              key={d.day}
+              className={`flex-1 rounded-sm ${d.day === daysElapsed ? "bg-amber-300" : "bg-white/75"}`}
+              style={{ height: d.sales > 0 ? `${Math.max(8, (d.sales / maxDaily) * 100)}%` : "2px" }}
+              title={`ວັນທີ ${d.day}: ${fmt.format(d.sales)}`}
+            />
+          ))}
+        </div>
+      </div>
 
     </section>
 
