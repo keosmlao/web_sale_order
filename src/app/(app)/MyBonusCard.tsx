@@ -12,6 +12,7 @@ type Row = {
 
 const pointFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 type Report = { currencyCode: string; rows: Row[] };
+type Item = { itemName: string; brand: string; category: string; qty: number; points: number };
 
 const fmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const REFRESH_MS = 45000;
@@ -19,6 +20,20 @@ const REFRESH_MS = 45000;
 export default function MyBonusCard() {
   const [row, setRow] = useState<Row | null>(null);
   const [currency, setCurrency] = useState("THB");
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<Item[] | null>(null);
+
+  const toggleItems = useCallback(async () => {
+    setOpen((v) => !v);
+    if (items === null) {
+      try {
+        const res = await fetch("/api/reports/my-bonus-items", { cache: "no-store" });
+        setItems(res.ok ? ((await res.json()) as { items: Item[] }).items : []);
+      } catch {
+        setItems([]);
+      }
+    }
+  }, [items]);
 
   const load = useCallback(async () => {
     try {
@@ -62,6 +77,32 @@ export default function MyBonusCard() {
         {hasSpecial ? <Item label="② ເງິນພິເສດ" value={fmt.format(row.specialReward)} /> : null}
         <Item label="③ ຄ່າຄອມ" value={row.commission > 0 ? fmt.format(row.commission) : "—"} />
       </div>
+
+      <button type="button" onClick={() => void toggleItems()} className="mt-4 flex w-full items-center justify-center gap-1 rounded-xl bg-white/10 py-2 text-xs font-bold ring-1 ring-inset ring-white/15 transition hover:bg-white/15">
+        {open ? "ເຊື່ອງລາຍການ" : "ເບິ່ງລາຍການທີ່ໄດ້ຄະແນນ"} <span className={`transition-transform ${open ? "rotate-180" : ""}`}>▾</span>
+      </button>
+
+      {open ? (
+        <div className="mt-3 overflow-hidden rounded-xl bg-white/10 ring-1 ring-inset ring-white/15">
+          {items === null ? (
+            <div className="py-6 text-center text-xs text-white/70">ກຳລັງໂຫລດ…</div>
+          ) : items.length === 0 ? (
+            <div className="py-6 text-center text-xs text-white/70">ຍັງບໍ່ມີລາຍການທີ່ໄດ້ຄະແນນ</div>
+          ) : (
+            <ul className="divide-y divide-white/10">
+              {items.map((it, i) => (
+                <li key={`${it.itemName}-${i}`} className="flex items-center gap-2 px-3 py-2">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-[13px] font-bold">{it.itemName}</span>
+                    <span className="text-[11px] text-white/60">{it.brand}{it.category ? ` · ${it.category}` : ""} · x{fmt.format(it.qty)}</span>
+                  </span>
+                  <span className="shrink-0 rounded-lg bg-white/15 px-2 py-1 font-mono text-sm font-black">{pointFmt.format(it.points)}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ) : null}
     </section>
   );
 }
