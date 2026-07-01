@@ -57,6 +57,7 @@ export default function MyTargetCard() {
   const maxDaily = Math.max(1, ...data.daily.map((d) => d.sales));
 
   return (
+    <>
     <section className="odoo-card overflow-hidden bg-gradient-to-br from-odoo-primary to-indigo-800 p-5 text-white">
       <div className="flex items-center justify-between">
         <div className="text-xs font-bold uppercase tracking-widest text-white/70">ເປົ້າເດືອນນີ້</div>
@@ -103,10 +104,13 @@ export default function MyTargetCard() {
         </div>
       ) : null}
 
-      <a href="/reports/incentives" className="mt-4 block text-center text-xs font-bold text-white/90 hover:underline">
-        ເບິ່ງໂບນັດ &amp; ຄ່າຄອມຂອງຂ້ອຍ →
-      </a>
     </section>
+
+      <a href="/reports/incentives" className="odoo-card mt-3 flex items-center justify-between p-4 font-black text-odoo-text-strong transition hover:bg-odoo-surface-muted">
+        <span>💰 ເບິ່ງໂບນັດ &amp; ຄ່າຄອມຂອງຂ້ອຍ</span>
+        <span className="text-lg text-odoo-text-muted">›</span>
+      </a>
+    </>
   );
 }
 
