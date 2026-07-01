@@ -27,6 +27,15 @@ type DayMetrics = {
   cancelled_amount: string | number | null;
 };
 
+// Realised front-store sales for today vs yesterday, from odg_sale_detail
+// (the denormalised sale sheet — same source as the incentives/my-sales reports).
+type SaleDayRow = {
+  today_sales: string | number | null;
+  yesterday_sales: string | number | null;
+  today_qty: string | number | null;
+  yesterday_qty: string | number | null;
+};
+
 type TopSalesperson = {
   user_owner: string | null;
   fullname_lo: string | null;
@@ -58,13 +67,6 @@ type PriceCounts = {
 
 // Today's money actually received at the register — settled CAKAP receipts
 // (not SOK sales orders). Cash / transfer split comes from app_payment_line.
-type ReceivedToday = {
-  receipts: bigint;
-  received_kip: string | number | null;
-  cash_kip: string | number | null;
-  transfer_kip: string | number | null;
-};
-
 const moneyFmt = new Intl.NumberFormat("en-US", {
   minimumFractionDigits: 0,
   maximumFractionDigits: 0,
@@ -118,7 +120,7 @@ export default async function HomePage() {
     recentRows,
     dailyRows,
     priceCountRows,
-    receivedRows,
+    saleDayRows,
   ] = await Promise.all([
     prisma.$queryRaw<DayMetrics[]>`
       SELECT
@@ -245,53 +247,28 @@ export default async function HomePage() {
         )::bigint AS approved_today
       FROM app_price_request
     `,
-    prisma.$queryRaw<ReceivedToday[]>`
+    prisma.$queryRaw<SaleDayRow[]>`
       SELECT
-        (
-          SELECT COUNT(*)::bigint FROM ic_trans t
-          WHERE t.doc_format_code = 'CAKAP'
-            AND t.doc_date = CURRENT_DATE
-            AND COALESCE(t.is_cancel, 0) = 0
-            AND ${deptInT}
-        ) AS receipts,
-        (
-          SELECT COALESCE(SUM(t.total_amount_2), 0) FROM ic_trans t
-          WHERE t.doc_format_code = 'CAKAP'
-            AND t.doc_date = CURRENT_DATE
-            AND COALESCE(t.is_cancel, 0) = 0
-            AND ${deptInT}
-        ) AS received_kip,
-        (
-          SELECT COALESCE(SUM(p.amount), 0)
-          FROM app_payment_line p
-          JOIN ic_trans t ON t.doc_no = p.doc_no AND t.doc_format_code = 'CAKAP'
-          WHERE t.doc_date = CURRENT_DATE
-            AND COALESCE(t.is_cancel, 0) = 0
-            AND p.pay_method = 'cash' AND p.currency_code = '02'
-        ) AS cash_kip,
-        (
-          SELECT COALESCE(SUM(p.amount), 0)
-          FROM app_payment_line p
-          JOIN ic_trans t ON t.doc_no = p.doc_no AND t.doc_format_code = 'CAKAP'
-          WHERE t.doc_date = CURRENT_DATE
-            AND COALESCE(t.is_cancel, 0) = 0
-            AND p.pay_method = 'transfer' AND p.currency_code = '02'
-        ) AS transfer_kip
+        COALESCE(SUM(sum_amount) FILTER (WHERE doc_date::date = CURRENT_DATE), 0) AS today_sales,
+        COALESCE(SUM(sum_amount) FILTER (WHERE doc_date::date = CURRENT_DATE - 1), 0) AS yesterday_sales,
+        COALESCE(SUM(qty) FILTER (WHERE doc_date::date = CURRENT_DATE), 0) AS today_qty,
+        COALESCE(SUM(qty) FILTER (WHERE doc_date::date = CURRENT_DATE - 1), 0) AS yesterday_qty
+      FROM odg_sale_detail
+      WHERE branch_code = '01'
+        AND argroup_main = '101'
+        AND doc_date >= CURRENT_DATE - 1
     `,
   ]);
-
-  const received = receivedRows[0];
-  const receivedKip = Number(received?.received_kip ?? 0);
-  const receivedReceipts = Number(received?.receipts ?? 0);
-  const receivedCash = Number(received?.cash_kip ?? 0);
-  const receivedTransfer = Number(received?.transfer_kip ?? 0);
 
   const today = normalizeMetrics(todayRows[0]);
   const yesterday = normalizeMetrics(yesterdayRows[0]);
   const month = normalizeMetrics(monthRows[0]);
 
-  const todayTotal = today.pendingAmount + today.completedAmount;
-  const yesterdayTotal = yesterday.pendingAmount + yesterday.completedAmount;
+  // Today vs yesterday realised sales come from odg_sale_detail (actual sale
+  // sheet), not SOK sale-orders — those can include unrealised/pending carts.
+  const saleDay = saleDayRows[0];
+  const todayTotal = Number(saleDay?.today_sales ?? 0);
+  const yesterdayTotal = Number(saleDay?.yesterday_sales ?? 0);
   const monthTotal = month.pendingAmount + month.completedAmount;
   const todayOrders = today.pendingCount + today.completedCount;
   const yesterdayOrders = yesterday.pendingCount + yesterday.completedCount;
@@ -334,8 +311,8 @@ export default async function HomePage() {
 
   return (
     <div className="space-y-6 px-4 py-6 sm:px-6 lg:px-8">
-      {/* Premium Hero Banner Greeting */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-xl md:p-8">
+      {/* Premium Hero Banner Greeting — hidden on mobile (bottom nav + profile cover it) */}
+      <div className="relative hidden overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-xl md:block md:p-8">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:24px_24px] opacity-20" />
         <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl" />
         <div className="absolute -right-20 -bottom-20 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
@@ -359,11 +336,6 @@ export default async function HomePage() {
           </div>
           
           <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
-            <UserBadge
-              name={displayName}
-              employeeCode={me.employeeCode ?? "—"}
-              role={role}
-            />
             <Link
               href="/orders/new"
               className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-5 text-xs font-bold text-white shadow-lg shadow-indigo-600/30 transition-all duration-200 hover:-translate-y-0.5 hover:bg-indigo-500 active:translate-y-0 active:scale-[0.98] sm:w-auto sm:justify-start"
@@ -379,14 +351,6 @@ export default async function HomePage() {
       <MyBonusCard />
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
-          title="ຮັບເງິນມື້ນີ້"
-          value={moneyFmt.format(receivedKip)}
-          unit="ກີບ"
-          sub={`${numFmt.format(receivedReceipts)} ໃບບິນ · ສົດ ${compactMoneyFmt.format(receivedCash)} · ໂອນ ${compactMoneyFmt.format(receivedTransfer)}`}
-          icon={<CashIcon />}
-          accent="primary"
-        />
         <MetricCard
           title="ຍອດຂາຍມື້ນີ້"
           value={moneyFmt.format(todayTotal)}
@@ -476,41 +440,46 @@ export default async function HomePage() {
               </div>
             </Panel>
 
-            <PriceRequestPanel
-              canSeePriceRequests={canSeePriceRequests}
-              pendingPriceRequests={pendingPriceRequests}
-              approvedPricesToday={approvedPricesToday}
-            />
+            {/* Salespeople don't approve special prices — hide the card for them. */}
+            {role !== "salesperson" ? (
+              <PriceRequestPanel
+                canSeePriceRequests={canSeePriceRequests}
+                pendingPriceRequests={pendingPriceRequests}
+                approvedPricesToday={approvedPricesToday}
+              />
+            ) : null}
           </div>
 
-          <Panel title="ທາງລັດ" eyebrow="Quick actions">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <LauncherButton
-                href="/orders/new"
-                label="POS / ສ້າງບິນ"
-                icon={<PosIcon />}
-                accent="primary"
-              />
-              <LauncherButton
-                href="/cashier"
-                label="ຮັບເງິນ"
-                icon={<CashIcon />}
-                accent="warning"
-              />
-              <LauncherButton
-                href="/reports/daily-sales"
-                label="ລາຍງານ"
-                icon={<ReportIcon />}
-                accent="info"
-              />
-              <LauncherButton
-                href="/employees"
-                label="ຈັດການທີມ"
-                icon={<UsersIcon />}
-                accent="success"
-              />
-            </div>
-          </Panel>
+          <div className="hidden sm:block">
+            <Panel title="ທາງລັດ" eyebrow="Quick actions">
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <LauncherButton
+                  href="/orders/new"
+                  label="POS / ສ້າງບິນ"
+                  icon={<PosIcon />}
+                  accent="primary"
+                />
+                <LauncherButton
+                  href="/cashier"
+                  label="ຮັບເງິນ"
+                  icon={<CashIcon />}
+                  accent="warning"
+                />
+                <LauncherButton
+                  href="/reports/daily-sales"
+                  label="ລາຍງານ"
+                  icon={<ReportIcon />}
+                  accent="info"
+                />
+                <LauncherButton
+                  href="/employees"
+                  label="ຈັດການທີມ"
+                  icon={<UsersIcon />}
+                  accent="success"
+                />
+              </div>
+            </Panel>
+          </div>
         </div>
 
         <aside className="space-y-5">
@@ -702,32 +671,6 @@ const ACCENTS: Record<
     soft: "bg-odoo-info-bg text-odoo-info-text",
   },
 };
-
-function UserBadge({
-  name,
-  employeeCode,
-  role,
-}: {
-  name: string;
-  employeeCode: string;
-  role: string;
-}) {
-  return (
-    <div className="flex h-10 w-full items-center gap-2.5 rounded-xl border border-white/10 bg-white/5 backdrop-blur-md px-3.5 shadow-sm text-white sm:w-auto sm:inline-flex">
-      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-500/30 text-xs font-bold text-indigo-200">
-        {name.trim().charAt(0).toUpperCase()}
-      </span>
-      <span className="min-w-0 text-left">
-        <span className="block max-w-[10rem] truncate text-xs font-bold text-white leading-tight sm:max-w-32">
-          {name}
-        </span>
-        <span className="block text-[9px] uppercase text-slate-300 tracking-wider">
-          {employeeCode} · {role}
-        </span>
-      </span>
-    </div>
-  );
-}
 
 function Panel({
   title,
