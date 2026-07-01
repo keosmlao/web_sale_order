@@ -59,7 +59,6 @@ export default function MyTargetCard() {
   const monthDays = Array.from({ length: daysInMonth }, (_, i) => ({ day: i + 1, sales: salesByDay.get(i + 1) ?? 0 }));
 
   return (
-    <>
     <section className="odoo-card overflow-hidden bg-gradient-to-br from-odoo-primary to-indigo-800 p-5 text-white">
       <div className="flex items-center justify-between">
         <div className="text-xs font-bold uppercase tracking-widest text-white/70">ເປົ້າເດືອນນີ້</div>
@@ -113,12 +112,6 @@ export default function MyTargetCard() {
       </div>
 
     </section>
-
-      <a href="/reports/incentives" className="odoo-card mt-3 flex items-center justify-between p-4 font-black text-odoo-text-strong transition hover:bg-odoo-surface-muted">
-        <span>💰 ເບິ່ງໂບນັດ &amp; ຄ່າຄອມຂອງຂ້ອຍ</span>
-        <span className="text-lg text-odoo-text-muted">›</span>
-      </a>
-    </>
   );
 }
 
