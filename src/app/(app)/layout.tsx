@@ -26,7 +26,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // until the browser bails out, which renders the page blank.
   const isOnPosPath =
     pathname === "/orders/new" || pathname.startsWith("/orders/new/");
-  if (posOnly && pathname && !isOnPosPath) {
+  // POS-locked staff may also open their own profile + bonus/sales views.
+  const posAllowed =
+    isOnPosPath ||
+    pathname === "/profile" || pathname.startsWith("/profile/") ||
+    pathname.startsWith("/reports/my-") ||
+    pathname === "/reports/incentives";
+  if (posOnly && pathname && !posAllowed) {
     redirect("/orders/new");
   }
   const displayName = employee.fullnameLo || employee.fullnameEn || employee.employeeCode || "—";
@@ -55,7 +61,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <span className="hidden sm:inline">{displayName}</span>
           </button>
         </form>
-        <main className="min-h-screen">{children}</main>
+        <main className="min-h-screen pb-20 md:pb-0">{children}</main>
+        {/* POS-locked staff still get to their profile / bonus via a slim bottom bar. */}
+        <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-odoo-border bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_10px_rgba(0,0,0,0.06)] md:hidden">
+          <a href="/orders/new" className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-bold ${isOnPosPath ? "text-odoo-primary" : "text-odoo-text-muted"}`}>
+            <span className="text-lg">🛒</span> ຂາຍ
+          </a>
+          <a href="/profile" className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-bold ${pathname.startsWith("/profile") ? "text-odoo-primary" : "text-odoo-text-muted"}`}>
+            <span className="text-lg">👤</span> ໂປຣໄຟລ໌
+          </a>
+        </nav>
       </div>
     );
   }

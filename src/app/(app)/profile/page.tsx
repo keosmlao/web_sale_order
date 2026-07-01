@@ -4,6 +4,8 @@ import { roleFromEmployee } from "@/lib/roles";
 import { getHiddenMenuKeys } from "@/lib/menu-visibility";
 import { MENU_REGISTRY, ROLE_LABELS } from "@/lib/menu-registry";
 import { logoutAction } from "@/app/login/actions";
+import MyTargetCard from "../MyTargetCard";
+import MyBonusCard from "../MyBonusCard";
 
 export const dynamic = "force-dynamic";
 
@@ -36,11 +38,13 @@ export default async function ProfilePage() {
         </div>
       </div>
 
+      {/* My target + bonus (shown for salespeople with a target) */}
+      <div className="mt-4">
+        <MyTargetCard />
+      </div>
+      <MyBonusCard />
+
       {/* Quick links */}
-      <Link href="/reports/incentives" className="odoo-card mt-4 flex items-center justify-between p-4 transition hover:bg-odoo-surface-muted">
-        <span className="font-bold text-odoo-text-strong">💰 ໂບນັດ &amp; ຄ່າຄອມຂອງຂ້ອຍ</span>
-        <span className="text-odoo-text-muted">›</span>
-      </Link>
       <Link href="/reports/my-sales" className="odoo-card mt-3 flex items-center justify-between p-4 transition hover:bg-odoo-surface-muted">
         <span className="font-bold text-odoo-text-strong">📊 Dashboard ຍອດຂາຍ</span>
         <span className="text-odoo-text-muted">›</span>
