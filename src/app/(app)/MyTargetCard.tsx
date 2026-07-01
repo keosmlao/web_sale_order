@@ -83,7 +83,7 @@ export default function MyTargetCard() {
         </div>
 
         {/* Metrics */}
-        <div className="grid w-full grid-cols-2 gap-x-4 gap-y-3">
+        <div className="grid w-full grid-cols-2 gap-2.5">
           <Metric label="ຍອດຂາຍ" value={fmt.format(data.totalSales)} />
           <Metric label="ເປົ້າ/ຄົນ" value={fmt.format(data.target)} />
           <Metric label="ຕ້ອງຂາຍ/ວັນ" value={onTrack ? "🎉 ບັນລຸ" : remainingDays === 0 ? "—" : fmt.format(Math.round(neededPerDay))} />
@@ -115,9 +115,9 @@ export default function MyTargetCard() {
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div>
-      <div className="text-[11px] uppercase tracking-wide text-white/60">{label}</div>
-      <div className="font-mono text-lg font-black">{value}</div>
+    <div className="rounded-xl bg-white/10 px-3 py-2.5 ring-1 ring-inset ring-white/15">
+      <div className="text-[11px] uppercase tracking-wide text-white/70">{label}</div>
+      <div className="mt-0.5 font-mono text-lg font-black leading-tight">{value}</div>
     </div>
   );
 }
