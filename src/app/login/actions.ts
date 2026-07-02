@@ -86,5 +86,7 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
 
 export async function logoutAction() {
   await clearSessionCookie();
-  redirect("/login");
+  // line=off keeps the LINE in-app browser from auto-signing straight back
+  // in after an intentional logout (see LoginPage).
+  redirect("/login?line=off");
 }

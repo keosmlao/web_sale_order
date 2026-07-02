@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentEmployee } from "@/lib/auth";
@@ -22,14 +23,25 @@ async function signedInPath(employeeCode: string | null): Promise<string> {
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ line?: string }>;
+  searchParams?: Promise<{ line?: string; error?: string }>;
 }) {
   const employee = await getCurrentEmployee();
   if (employee) redirect(await signedInPath(employee.employeeCode));
 
+  const params = await searchParams;
+  // Opened inside LINE's in-app browser (from the shop's LINE OA): jump
+  // straight into LINE OAuth — LINE authorizes silently there, so a staff
+  // member whose line_id is on file lands in the app with zero taps.
+  // Skipped when we just came BACK from LINE (line/error params set) so a
+  // failed match can't loop, and after logout (line=off).
+  if (lineLoginConfigured() && !params?.line && !params?.error) {
+    const ua = (await headers()).get("user-agent") ?? "";
+    if (/\bLine\//i.test(ua)) redirect("/api/auth/line/start");
+  }
+
   const year = new Date().getFullYear();
   // Arriving from an unlinked LINE sign-in: one normal login links it.
-  const lineLinkNotice = (await searchParams)?.line === "link";
+  const lineLinkNotice = params?.line === "link";
 
   return (
     <div className="login-shell">
