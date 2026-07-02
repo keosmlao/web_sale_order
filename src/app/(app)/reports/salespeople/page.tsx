@@ -11,9 +11,11 @@ export const dynamic ="force-dynamic";
 const KHUA_LUANG_BRANCH_CODE = "01";
 
 // Within the branch the salesperson must also belong to the front-store sales
-// team — their HR department on odg_employee = 205 (unit 2051, the 8-person
-// front-store team). This excludes other branch-01 teams such as ພູວັນ (dept 207).
-const FRONT_STORE_SALES_DEPT = "205";
+// team. The team (and its monthly targets in odg_retail_target_employee)
+// spans HR departments 204 ຂາຍສົ່ງແອ, 205 ຂາຍສົ່ງອາໄຫຼ່ and 207 ຂາຍຍ່ອຍ —
+// keep this in sync with FRONT_STORE_SALE_DEPTS on the home page and the
+// target pivot (SELLER_DEPTS).
+const FRONT_STORE_SALES_DEPTS = ["204", "205", "207"];
 
 type SearchParams = {
  from?: string | string[];
@@ -77,7 +79,7 @@ export default async function SalespeopleReportPage({
  JOIN odg_employee emp ON emp.employee_code = NULLIF(NULLIF(t.sale_code, ''), '00000')
  WHERE t.trans_flag = 44
  AND t.branch_code = ${KHUA_LUANG_BRANCH_CODE}
- AND emp.department_code = ${FRONT_STORE_SALES_DEPT}
+ AND emp.department_code = ANY(${FRONT_STORE_SALES_DEPTS})
  AND t.doc_date >= ${from}::date
  AND t.doc_date < (${to}::date + INTERVAL '1 day')
  GROUP BY t.sale_code, emp.fullname_lo, emp.nickname, emp.position_code, to_char(t.doc_date, 'YYYY-MM')
@@ -125,7 +127,7 @@ export default async function SalespeopleReportPage({
        JOIN odg_employee emp ON emp.employee_code = NULLIF(NULLIF(t.sale_code, ''), '00000')
        WHERE t.trans_flag = 44
          AND t.branch_code = ${KHUA_LUANG_BRANCH_CODE}
-         AND emp.department_code = ${FRONT_STORE_SALES_DEPT}
+         AND emp.department_code = ANY(${FRONT_STORE_SALES_DEPTS})
          AND t.doc_date >= date_trunc('year', CURRENT_DATE)
        GROUP BY t.sale_code
      `,
@@ -168,7 +170,7 @@ export default async function SalespeopleReportPage({
  }>>`
    SELECT employee_code, fullname_lo, nickname, position_code
    FROM odg_employee
-   WHERE department_code = ${FRONT_STORE_SALES_DEPT}
+   WHERE department_code = ANY(${FRONT_STORE_SALES_DEPTS})
  `;
  const rosterByCode = new Map(
    rosterRows
