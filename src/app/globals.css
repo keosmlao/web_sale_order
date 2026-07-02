@@ -7271,17 +7271,17 @@ a {
     text-overflow: ellipsis;
   }
 
-  /* Step 1 — ສິນຄ້າ: search + results + add bar + cart lines. */
-  .pos-shell2.pos-mstep-1 .pos-order-header,
+  /* Step 1 — ລູກຄ້າ: customer card only (skippable for walk-in). */
+  .pos-shell2.pos-mstep-1 .pos-search-bar,
+  .pos-shell2.pos-mstep-1 .pos-quick-results,
+  .pos-shell2.pos-mstep-1 .pos-add-bar,
+  .pos-shell2.pos-mstep-1 .pos-order-lines,
   .pos-shell2.pos-mstep-1 .pos-checkout-col {
     display: none;
   }
 
-  /* Step 2 — ລູກຄ້າ: customer card only. */
-  .pos-shell2.pos-mstep-2 .pos-search-bar,
-  .pos-shell2.pos-mstep-2 .pos-quick-results,
-  .pos-shell2.pos-mstep-2 .pos-add-bar,
-  .pos-shell2.pos-mstep-2 .pos-order-lines,
+  /* Step 2 — ສິນຄ້າ: search + results + add bar + cart lines. */
+  .pos-shell2.pos-mstep-2 .pos-order-header,
   .pos-shell2.pos-mstep-2 .pos-checkout-col {
     display: none;
   }

@@ -441,10 +441,13 @@ function PosScreen({
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [mStep]);
   // After the bill is sent (cart cleared) drop back to step 1 for the next sale.
-  // Step 2 stays reachable with an empty cart so customer-first flow still works.
   useEffect(() => {
     if (items.length === 0 && mStep === 3) setMStep(1);
   }, [items.length, mStep]);
+  // Picking a customer completes step 1 — move straight on to products.
+  useEffect(() => {
+    if (customer && mStep === 1) setMStep(2);
+  }, [customer, mStep]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1945,16 +1948,14 @@ function PosScreen({
               onClick={() => setMStep(1)}
               className={
                 "pos-step-card " +
-                (mStep === 1 ? "pos-step-active" : items.length > 0 ? "pos-step-done" : "")
+                (mStep === 1 ? "pos-step-active" : customer ? "pos-step-done" : "")
               }
             >
               <span className="pos-step-badge">1</span>
               <div className="min-w-0">
-                <div className="pos-step-title">ສິນຄ້າ</div>
+                <div className="pos-step-title">ລູກຄ້າ</div>
                 <div className="pos-step-text">
-                  {items.length > 0
-                    ? `${items.length} ລາຍການ · ${moneyFmt.format(totalQty)} ${totalQtyUnit}`
-                    : "ຄົ້ນຫາ / ສະແກນ ເພີ່ມສິນຄ້າ"}
+                  {customer ? customer.name : "ຂ້າມໄດ້ (walk-in)"}
                 </div>
               </div>
             </button>
@@ -1963,14 +1964,16 @@ function PosScreen({
               onClick={() => setMStep(2)}
               className={
                 "pos-step-card " +
-                (mStep === 2 ? "pos-step-active" : customer ? "pos-step-done" : "")
+                (mStep === 2 ? "pos-step-active" : items.length > 0 ? "pos-step-done" : "")
               }
             >
               <span className="pos-step-badge">2</span>
               <div className="min-w-0">
-                <div className="pos-step-title">ລູກຄ້າ</div>
+                <div className="pos-step-title">ສິນຄ້າ</div>
                 <div className="pos-step-text">
-                  {customer ? customer.name : "ຂ້າມໄດ້ (walk-in)"}
+                  {items.length > 0
+                    ? `${items.length} ລາຍການ · ${moneyFmt.format(totalQty)} ${totalQtyUnit}`
+                    : "ຄົ້ນຫາ / ສະແກນ ເພີ່ມສິນຄ້າ"}
                 </div>
               </div>
             </button>
@@ -2830,16 +2833,16 @@ function PosScreen({
           <button
             type="button"
             onClick={() => setMStep(2)}
-            disabled={items.length === 0}
             className="pos-mobile-paybar-btn"
           >
-            <span>ຕໍ່ໄປ: ລູກຄ້າ</span>
+            <span>{customer ? "ຕໍ່ໄປ: ສິນຄ້າ" : "ຂ້າມ: ສິນຄ້າ"}</span>
             <span aria-hidden>→</span>
           </button>
         ) : mStep === 2 ? (
           <button
             type="button"
             onClick={() => setMStep(3)}
+            disabled={items.length === 0}
             className="pos-mobile-paybar-btn"
           >
             <span>ຕໍ່ໄປ: ສະຫຼຸບ</span>
