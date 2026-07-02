@@ -7378,3 +7378,31 @@ a {
     flex-shrink: 0;
   }
 }
+
+/* ============================================================
+   Mobile overflow containment — nothing on the phone POS may
+   push past the right edge of the screen (cart X buttons were
+   landing off-screen when a row's content forced the card wider
+   than the viewport).
+   ============================================================ */
+@media (max-width: 640px) {
+  .pos-shell2 {
+    max-width: 100vw;
+    overflow-x: clip;
+  }
+  .pos-shell2 .pos-order-left,
+  .pos-shell2 .pos-order-lines {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+  /* Every grid track in a cart card may shrink below its content width;
+     the cells already have min-width: 0. */
+  .pos-shell2 .pos-cart-row {
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr) minmax(0, auto);
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  .pos-shell2 .pos-cart-stepper {
+    flex-wrap: wrap;
+  }
+}
