@@ -49,7 +49,12 @@ export default function RootLayout({
       lang="lo"
       className={`${notoSansLao.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
+      {/* suppressHydrationWarning: browser extensions and the LINE in-app
+          browser inject attributes into <body> after SSR (e.g.
+          cz-shortcut-listen), which trips React's hydration-mismatch error.
+          Suppression is attribute-level and one node deep — real content
+          mismatches below still surface. */}
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
         <PwaRegistrar />
         {children}
       </body>

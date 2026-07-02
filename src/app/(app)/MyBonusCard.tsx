@@ -2,6 +2,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 
+type CommissionLine = {
+  groupCode: string;
+  base: number;
+  achievementPct: number;
+  rate: number;
+  amount: number;
+};
+
 type Row = {
   bonusPoints: number;
   netBonus: number;
@@ -12,6 +20,13 @@ type Row = {
   multiplier: number;
   achievementPct: number;
   targetPerPerson: number;
+  commissionLines?: CommissionLine[] | null;
+};
+
+const GROUP_LABEL: Record<string, string> = {
+  CE_SDA: "CE+SDA",
+  AIR: "AIR",
+  ALL: "ລວມທັງໝົດ",
 };
 
 type Tiers = {
@@ -115,6 +130,9 @@ export default function MyBonusCard() {
   }).format(new Date());
   const todayPoints = daily.find((entry) => entry.day === todayIso)?.points ?? 0;
   const bonusTotal = row.netBonus + row.specialReward;
+  // Manager / unit head: commission-only (per-group team lines) — every
+  // bonus-points section is hidden for them.
+  const isRoleComm = !!(row.commissionLines && row.commissionLines.length > 0);
   // Show the Lao word for baht instead of the ISO code.
   const currencyLabel = currency === "THB" ? "ບາດ" : currency;
 
@@ -125,7 +143,7 @@ export default function MyBonusCard() {
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-300">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/></svg>
           </span>
-          <div><div className="text-sm font-black text-slate-900">ໂບນັດ ແລະ ຄ່າຄອມ</div><div className="text-[10px] font-semibold text-slate-500">ລາຍຮັບເພີ່ມເດືອນນີ້</div></div>
+          <div><div className="text-sm font-black text-slate-900">{isRoleComm ? "ຄ່າຄອມ" : "ໂບນັດ ແລະ ຄ່າຄອມ"}</div><div className="text-[10px] font-semibold text-slate-500">ລາຍຮັບເພີ່ມເດືອນນີ້</div></div>
         </div>
       </div>
 
@@ -159,15 +177,18 @@ export default function MyBonusCard() {
                 <span className="text-xs font-black text-emerald-200/90">{currencyLabel}</span>
               </div>
               <div className="mt-1 text-[10px] font-bold text-emerald-100/80">
-                ໂບນັດ {fmt.format(bonusTotal)} + ຄ່າຄອມ {fmt.format(row.commission)}
+                {isRoleComm
+                  ? `ຄ່າຄອມຕາມຜົນງານທີມ`
+                  : `ໂບນັດ ${fmt.format(bonusTotal)} + ຄ່າຄອມ ${fmt.format(row.commission)}`}
               </div>
               <div className="mt-1 font-mono text-[8px] font-bold tracking-[0.25em] text-emerald-300/60">
-                Nº {todayIso.slice(0, 7).replace("-", "/")}
+                Nº {todayIso.slice(5, 7)}/{todayIso.slice(0, 4)}
               </div>
             </div>
           </div>
         </div>
 
+        {isRoleComm ? null : (
         <div className="mt-3 grid grid-cols-2 divide-x divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70">
           <div className="flex items-center justify-center gap-2 px-2 py-2">
             <span className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -180,11 +201,13 @@ export default function MyBonusCard() {
             <span className="font-mono text-base font-black text-indigo-700">+{pointFmt.format(todayPoints)}</span>
           </div>
         </div>
+        )}
 
         {/* Bonus and commission as two clearly separate cards, then the
             combined total — so it's obvious what comes from points earned
             (ໂບນັດ) versus from hitting the sales target (ຄ່າຄອມ). */}
-        <div className="mt-3 grid grid-cols-2 gap-2">
+        <div className={`mt-3 grid gap-2 ${isRoleComm ? "grid-cols-1" : "grid-cols-2"}`}>
+          {isRoleComm ? null : (
           <div className="rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 px-2.5 py-2 text-white shadow-sm">
             <div className="flex items-center justify-between gap-1">
               <span className="text-[9px] font-black text-emerald-100">ໂບນັດ</span>
@@ -202,11 +225,12 @@ export default function MyBonusCard() {
               </div>
             ) : null}
           </div>
+          )}
           <div className="rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-700 px-2.5 py-2 text-white shadow-sm">
             <div className="flex items-center justify-between gap-1">
               <span className="text-[9px] font-black text-indigo-100">ຄ່າຄອມ</span>
               <span className="text-[8px] font-semibold text-indigo-100/90">
-                ບັນລຸ {pctFmt.format(row.achievementPct * 100)}%
+                {isRoleComm ? "ຕາມຜົນງານທີມ" : `ບັນລຸ ${pctFmt.format(row.achievementPct * 100)}%`}
               </span>
             </div>
             <div className="mt-1 flex items-baseline gap-1">
@@ -217,22 +241,50 @@ export default function MyBonusCard() {
         </div>
         {/* How the commission is worked out — the caller's OWN numbers first
             (base × rate = amount), then the 3 tier rules with concrete
-            examples so "rounded up/down to 5%" is obvious. */}
+            examples so "rounded up/down to 5%" is obvious. Managers / unit
+            heads get a per-product-group breakdown driven by the TEAM's
+            achievement instead of the single personal formula. */}
         <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
           <div className="text-[11px] font-black text-slate-700">ວິທີຄິດຄ່າຄອມ</div>
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 rounded-lg bg-white px-2 py-2.5 text-center font-mono text-[13px] font-black ring-1 ring-inset ring-indigo-100">
-            <span className="text-slate-400">ຖານ</span>
-            <span className="text-slate-800">{fmt.format(commissionBase)}</span>
-            <span className="text-slate-400">×</span>
-            <span className="text-indigo-600">{pctFmt.format(row.commissionRate * 100)}%</span>
-            <span className="text-slate-400">=</span>
-            <span className="text-emerald-700">{fmt.format(row.commission)}</span>
-            <span className="text-[9px] font-bold text-slate-400">{currencyLabel}</span>
-          </div>
-          <div className="mt-1.5 text-center text-[10px] font-bold text-slate-500">
-            ເລກ {pctFmt.format(row.commissionRate * 100)}% ມາຈາກ ຍอดขาย{" "}
-            <b className="text-indigo-700">{pctFmt.format(row.achievementPct * 100)}%</b> ຂອງເປົ້າ
-          </div>
+          {row.commissionLines && row.commissionLines.length > 0 ? (
+            <div className="mt-2 space-y-1">
+              {row.commissionLines.map((l) => (
+                <div key={l.groupCode} className="flex items-center justify-between rounded-lg bg-white px-2.5 py-1.5 font-mono text-[11px] font-bold ring-1 ring-inset ring-indigo-100">
+                  <span className="text-slate-500">
+                    {GROUP_LABEL[l.groupCode] ?? l.groupCode}
+                    <span className="ml-1 text-[9px] text-slate-400">ທີມບັນລຸ {pctFmt.format(l.achievementPct * 100)}%</span>
+                  </span>
+                  <span>
+                    <span className="text-slate-800">{fmt.format(l.base)}</span>
+                    <span className="text-slate-400"> × </span>
+                    <span className="text-indigo-600">{pctFmt.format(l.rate * 100)}%</span>
+                    <span className="text-slate-400"> = </span>
+                    <span className="text-emerald-700">{fmt.format(l.amount)}</span>
+                  </span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between rounded-lg bg-slate-900 px-2.5 py-1.5 font-mono text-[11px] font-black text-white">
+                <span>ລວມຄ່າຄອມ</span>
+                <span>{fmt.format(row.commission)} {currencyLabel}</span>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 rounded-lg bg-white px-2 py-2.5 text-center font-mono text-[13px] font-black ring-1 ring-inset ring-indigo-100">
+                <span className="text-slate-400">ຖານ</span>
+                <span className="text-slate-800">{fmt.format(commissionBase)}</span>
+                <span className="text-slate-400">×</span>
+                <span className="text-indigo-600">{pctFmt.format(row.commissionRate * 100)}%</span>
+                <span className="text-slate-400">=</span>
+                <span className="text-emerald-700">{fmt.format(row.commission)}</span>
+                <span className="text-[9px] font-bold text-slate-400">{currencyLabel}</span>
+              </div>
+              <div className="mt-1.5 text-center text-[10px] font-bold text-slate-500">
+                ເລກ {pctFmt.format(row.commissionRate * 100)}% ມາຈາກ ຍอดขาย{" "}
+                <b className="text-indigo-700">{pctFmt.format(row.achievementPct * 100)}%</b> ຂອງເປົ້າ
+              </div>
+            </>
+          )}
           <div className="mt-2.5 divide-y divide-indigo-100 overflow-hidden rounded-lg border border-indigo-100 bg-white/70 text-[10px]">
             <CommissionCondition range="ຕ່ຳກວ່າ 80%" description="ບໍ່ໄດ້ຄ່າຄອມ" tone="muted" />
             <CommissionCondition range="80–99%" description="ປັດ​ລົງ​ຫາ 5% ໃກ້ຄຽງ (ເຊັ່ນ 87% ໄດ້ເລກ 85%)" tone="indigo" />
@@ -321,7 +373,7 @@ export default function MyBonusCard() {
           );
         })() : null}
 
-        {daily.length > 0 ? (() => {
+        {daily.length > 0 && !isRoleComm ? (() => {
           const now = new Date();
           const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
           const todayDom = now.getDate();
@@ -348,11 +400,13 @@ export default function MyBonusCard() {
           );
         })() : null}
 
+        {isRoleComm ? null : (
         <button type="button" onClick={() => void toggleItems()} className="mt-4 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-700 transition active:scale-[.98] hover:bg-emerald-100">
           {open ? "ເຊື່ອງລາຍການ" : "ເບິ່ງລາຍການຄະແນນ"} <span className={`transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
         </button>
+        )}
 
-        {open ? (
+        {open && !isRoleComm ? (
         <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
           <div className="grid grid-cols-2 gap-1 border-b border-slate-100 bg-slate-50 p-1">
             <button

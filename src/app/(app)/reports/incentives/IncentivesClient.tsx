@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 type IncentiveRow = {
   employeeCode: string;
   displayName: string;
+  position?: string | null;
   groupCode: string;
   soldQty: number;
   salesAmount: number;
@@ -177,7 +178,17 @@ export default function IncentivesClient() {
                 <tr key={`${row.employeeCode}-${row.groupCode}`}>
                   <td className="px-3 py-3 text-center font-mono text-odoo-text-muted">{index + 1}</td>
                   <td className="px-4 py-3"><div className="font-bold text-odoo-text-strong">{row.displayName}</div><div className="font-mono text-[10px] text-odoo-text-muted">{row.employeeCode}</div></td>
-                  <td className="px-3 py-3"><span className="rounded-full bg-odoo-primary-100 px-2 py-1 text-[11px] font-bold text-odoo-primary">{row.groupCode === "AIR" ? "AIR" : "CE + SDA"}</span></td>
+                  <td className="px-3 py-3">{(() => {
+                    const chip =
+                      row.position === "11"
+                        ? { label: "ຜູ້ຈັດການ", cls: "bg-violet-100 text-violet-700" }
+                        : row.position === "12"
+                          ? { label: "ຫົວໜ້າ", cls: "bg-amber-100 text-amber-700" }
+                          : row.groupCode === "AIR"
+                            ? { label: "AIR", cls: "bg-sky-100 text-sky-700" }
+                            : { label: "CE + SDA", cls: "bg-emerald-100 text-emerald-700" };
+                    return <span className={`rounded-full px-2 py-1 text-[11px] font-bold ${chip.cls}`}>{chip.label}</span>;
+                  })()}</td>
                   <td className="px-3 py-3 text-right font-mono">{numberFmt.format(row.soldQty)}</td>
                   <td className="px-3 py-3 text-right font-mono">{numberFmt.format(row.salesAmount)}</td>
                   <td className="px-3 py-3 text-right font-mono">{numberFmt.format(row.targetPerPerson)}</td>

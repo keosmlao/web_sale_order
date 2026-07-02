@@ -2,13 +2,16 @@
 
 import { useState } from "react";
 import IncentiveConfigClient from "./IncentiveConfigClient";
+import RoleCommissionEditor from "./RoleCommissionEditor";
+import TargetPivotEditor from "./TargetPivotEditor";
 import RewardsEditor from "./RewardsEditor";
 import PointMapEditor from "./PointMapEditor";
 
-type TabKey = "config" | "rewards" | "points";
+type TabKey = "config" | "targets" | "rewards" | "points";
 
 const TABS: { key: TabKey; label: string; icon: string; hint: string }[] = [
   { key: "config", label: "ສູດ & ເປົ້າ", icon: "⚙️", hint: "ໂບນັດ, ເກນຜົນງານ, ຄ່າຄອມ, ເປົ້າ/ຄົນ" },
+  { key: "targets", label: "ເປົ້າຂາຍ", icon: "🎯", hint: "ຕັ້ງເປົ້າລາຍເດືອນ CE/AC ໃຫ້ພະນັກງານຂາຍທຸກຄົນ" },
   { key: "rewards", label: "ເງິນພິເສດ", icon: "🎁", hint: "ລາງວັນລວມພະແນກ (HISENSE / CE+SDA)" },
   { key: "points", label: "ຄະແນນໂບນັດ", icon: "⭐", hint: "Point Map ຕໍ່ ໝວດ·ຍີ່ຫໍ້·ດີໄຊ·ຂະໜາດ" },
 ];
@@ -51,6 +54,10 @@ export default function IncentiveSettingsClient({ canManage }: { canManage: bool
       {/* Keep each panel mounted so switching tabs doesn't refetch/lose edits. */}
       <div className={tab === "config" ? "" : "hidden"}>
         <IncentiveConfigClient canManage={canManage} embedded />
+        <RoleCommissionEditor canManage={canManage} />
+      </div>
+      <div className={tab === "targets" ? "" : "hidden"}>
+        <TargetPivotEditor canManage={canManage} />
       </div>
       <div className={tab === "rewards" ? "" : "hidden"}>
         <RewardsEditor canManage={canManage} />

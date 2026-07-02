@@ -22,6 +22,16 @@ function achievementClass(pct: number): string {
  return "text-odoo-danger";
 }
 
+// Thin progress bar under the % values — same colour tiers.
+function PctBar({ pct }: { pct: number }) {
+ const fill = pct >= 100 ? "bg-emerald-500" : pct >= 80 ? "bg-amber-400" : "bg-rose-400";
+ return (
+  <div className="mt-1 h-1.5 w-full min-w-16 overflow-hidden rounded-full bg-slate-100">
+   <div className={`h-full rounded-full ${fill}`} style={{ width: `${Math.min(100, Math.max(2, pct))}%` }} />
+  </div>
+ );
+}
+
 type Filters = { from: string; to: string };
 
 const moneyFmt = new Intl.NumberFormat("en-US", {
@@ -213,11 +223,14 @@ export default function SalespeopleClient({
  </td>
  <td className="px-4 py-3 text-center">
  {r.target > 0 ? (
+ <>
  <span className={`inline-block rounded-full px-2 py-0.5 font-mono text-[11px] font-bold ${
  ach >= 100 ? "bg-emerald-50 text-emerald-600" : ach >= 80 ? "bg-amber-50 text-amber-600" : "bg-rose-50 text-rose-600"
  }`}>
  {ach.toFixed(1)}%
  </span>
+ <PctBar pct={ach} />
+ </>
  ) : (
  <span className="text-odoo-text-muted">—</span>
  )}
@@ -238,7 +251,10 @@ export default function SalespeopleClient({
  </td>
  <td className="px-4 py-3 text-right font-mono text-xs font-bold">
  {r.ytdTarget > 0 ? (
+ <>
  <span className={achievementClass(ytdPct)}>{ytdPct.toFixed(0)}%</span>
+ <PctBar pct={ytdPct} />
+ </>
  ) : (
  <span className="text-odoo-text-muted">—</span>
  )}

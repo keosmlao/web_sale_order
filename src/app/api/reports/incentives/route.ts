@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     : current.month;
 
   try {
-    const [configRows, rewardRows, rows] = await Promise.all([
+    const [configRows, rewardRows, roleCommRows, roleEmpRows, rows] = await Promise.all([
       prisma.$queryRaw<ConfigRow[]>`
         SELECT currency_code, low_max_pct, standard_max_pct,
                low_multiplier, standard_multiplier, high_multiplier, commission_base
@@ -83,6 +83,20 @@ export async function GET(request: NextRequest) {
         SELECT reward_code, group_code, brand_code, target_amount, reward_amount, split_by_share
         FROM app_incentive_special_reward WHERE is_active
       `,
+      // Manager / unit-head commission lines (workbook: per product group,
+      // paid on the TEAM's achievement of that group). Best-effort — table
+      // ships in sql/add-incentive-role-commission.sql.
+      prisma.$queryRaw<Array<{ position_code: string; group_code: string; base_amount: string | number | null }>>`
+        SELECT position_code, group_code, base_amount
+        FROM app_incentive_role_commission
+      `.catch(() => []),
+      prisma.$queryRaw<Array<{ employee_code: string; fullname_lo: string | null; nickname: string | null; position_code: string }>>`
+        SELECT employee_code, fullname_lo, nickname, position_code
+        FROM odg_employee
+        WHERE position_code IN ('11', '12')
+          AND department_code IN ('204', '205', '207')
+          AND COALESCE(employment_status, 'ACTIVE') = 'ACTIVE'
+      `.catch(() => []),
       prisma.$queryRaw<IncentiveRow[]>`
         WITH lines AS (
           SELECT
@@ -241,6 +255,12 @@ export async function GET(request: NextRequest) {
     const lowMax = number(config.low_max_pct);
     const standardMax = number(config.standard_max_pct);
     const commissionBase = number(config.commission_base);
+    // Workbook matrix: base per (position, product group). Sellers (pos 13)
+    // use the base of THEIR group on personal achievement; the single
+    // app_incentive_config.commission_base stays as fallback.
+    const roleBase = new Map(
+      roleCommRows.map((l) => [`${l.position_code}|${l.group_code}`, number(l.base_amount)]),
+    );
 
     const mapped = rows.map((row) => {
       const salesAmount = number(row.sales_amount);
@@ -254,10 +274,13 @@ export async function GET(request: NextRequest) {
       const normalBonus = number(row.normal_bonus);
       const netBonus = normalBonus * multiplier;
       const commissionRate = commissionRateFor(achievementPct);
-      const commission = commissionBase * commissionRate;
+      const sellerBase = roleBase.get(`13|${row.group_code}`) ?? commissionBase;
+      const commission = sellerBase * commissionRate;
       return {
         employeeCode: row.employee_code,
         displayName: row.display_name ?? row.employee_code,
+        // odg_employee.position_code: sellers are 13; bosses appended below.
+        position: "13" as string | null,
         groupCode: row.group_code,
         soldQty: number(row.sold_qty),
         salesAmount,
@@ -271,7 +294,12 @@ export async function GET(request: NextRequest) {
         specialReward: 0,
         commissionRate,
         commission,
+        commissionBase: sellerBase,
         totalPay: netBonus + commission,
+        // Per-group breakdown, only set on manager/head rows below.
+        commissionLines: undefined as
+          | Array<{ groupCode: string; base: number; achievementPct: number; rate: number; amount: number }>
+          | undefined,
       };
     });
 
@@ -297,6 +325,69 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Manager (pos 11) / unit head (pos 12) commission: per product group,
+    // base_amount × the SAME rate rule applied to the TEAM's achievement of
+    // that group (AIR, CE_SDA, or ALL = whole roster). They carry no personal
+    // target/bonus — their whole pay here is this commission.
+    const groupAch = (code: "AIR" | "CE_SDA" | "ALL") => {
+      const inGroup = code === "ALL" ? mapped : mapped.filter((r) => r.groupCode === code);
+      const sales = inGroup.reduce((s, r) => s + r.salesAmount, 0);
+      const target = inGroup.reduce((s, r) => s + r.targetPerPerson, 0);
+      return target > 0 ? sales / target : 0;
+    };
+    if (roleCommRows.length > 0 && roleEmpRows.length > 0) {
+      const achByGroup = {
+        AIR: groupAch("AIR"),
+        CE_SDA: groupAch("CE_SDA"),
+        ALL: groupAch("ALL"),
+      };
+      for (const boss of roleEmpRows) {
+        // A boss who somehow also has a roster row keeps that row untouched.
+        if (mapped.some((r) => r.employeeCode === boss.employee_code)) continue;
+        const lines = roleCommRows
+          .filter((l) => l.position_code === boss.position_code)
+          .map((l) => {
+            const g = (l.group_code === "AIR" || l.group_code === "CE_SDA" ? l.group_code : "ALL") as
+              | "AIR"
+              | "CE_SDA"
+              | "ALL";
+            const ach = achByGroup[g];
+            const rate = commissionRateFor(ach);
+            return {
+              groupCode: l.group_code,
+              base: number(l.base_amount),
+              achievementPct: ach,
+              rate,
+              amount: number(l.base_amount) * rate,
+            };
+          });
+        if (lines.length === 0) continue;
+        const commission = lines.reduce((s, l) => s + l.amount, 0);
+        mapped.push({
+          employeeCode: boss.employee_code,
+          displayName:
+            boss.fullname_lo?.trim() || boss.nickname?.trim() || boss.employee_code,
+          position: boss.position_code,
+          groupCode: "",
+          soldQty: 0,
+          salesAmount: 0,
+          hisenseSales: 0,
+          bonusPoints: 0,
+          targetPerPerson: 0,
+          achievementPct: achByGroup.ALL,
+          normalBonus: 0,
+          multiplier: 1,
+          netBonus: 0,
+          specialReward: 0,
+          commissionRate: commissionRateFor(achByGroup.ALL),
+          commission,
+          commissionBase: 0,
+          totalPay: commission,
+          commissionLines: lines,
+        });
+      }
+    }
+
     // Role scope: managers/heads see the whole team; everyone else sees only their own
     // row (department totals above are still computed from the full team, so a person's
     // share of a split reward stays correct).
@@ -318,6 +409,7 @@ export async function GET(request: NextRequest) {
           employeeCode: employee.employeeCode ?? "",
           displayName:
             employee.fullnameLo ?? employee.nickname ?? employee.employeeCode ?? "—",
+          position: null,
           groupCode: "",
           soldQty: 0,
           salesAmount: 0,
@@ -331,7 +423,9 @@ export async function GET(request: NextRequest) {
           specialReward: 0,
           commissionRate: 0,
           commission: 0,
+          commissionBase: number(config.commission_base),
           totalPay: 0,
+          commissionLines: undefined,
         },
       ];
     }

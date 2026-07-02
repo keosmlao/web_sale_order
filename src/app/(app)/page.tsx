@@ -303,7 +303,7 @@ export default async function HomePage() {
       LIMIT 8
     `,
     prisma.$queryRaw<DailyBar[]>`
-      ${meNamesCte}
+      ${insightNamesCte}
       SELECT
         doc_date::date AS day,
         COALESCE(SUM(sum_amount), 0) AS total,
@@ -313,7 +313,7 @@ export default async function HomePage() {
         AND argroup_main = '101'
         -- sargable (no ::date cast) so the front-store index range-scans doc_date
         AND doc_date >= CURRENT_DATE - 6
-        ${meFilter}
+        ${insightFilter}
       GROUP BY 1
       ORDER BY 1
     `,
@@ -326,7 +326,7 @@ export default async function HomePage() {
       FROM app_price_request
     `,
     prisma.$queryRaw<SaleDayRow[]>`
-      ${meNamesCte}
+      ${insightNamesCte}
       SELECT
         COALESCE(SUM(sum_amount) FILTER (WHERE doc_date::date = CURRENT_DATE), 0) AS today_sales,
         COALESCE(SUM(sum_amount) FILTER (WHERE doc_date::date = CURRENT_DATE - 1), 0) AS yesterday_sales,
@@ -338,7 +338,7 @@ export default async function HomePage() {
       WHERE branch_code = '01'
         AND argroup_main = '101'
         AND doc_date >= CURRENT_DATE - 1
-        ${meFilter}
+        ${insightFilter}
     `,
     role === "manager" || role === "head"
       ? prisma.$queryRaw<HomeTargetRow[]>`
@@ -393,7 +393,7 @@ export default async function HomePage() {
                 AND LPAD(month, 2, '0') = to_char(CURRENT_DATE, 'MM')), 0) AS target
         `,
     prisma.$queryRaw<SaleMonthRow[]>`
-      ${meNamesCte}
+      ${insightNamesCte}
       SELECT
         COALESCE(SUM(sum_amount), 0) AS month_sales,
         COUNT(DISTINCT doc_no)::bigint AS month_bills
@@ -402,7 +402,7 @@ export default async function HomePage() {
         AND argroup_main = '101'
         AND doc_date >= date_trunc('month', CURRENT_DATE)
         AND doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
-        ${meFilter}
+        ${insightFilter}
     `,
     role === "manager" || role === "head"
       ? prisma.$queryRaw<HomeTargetDailyRow[]>`
@@ -715,9 +715,13 @@ export default async function HomePage() {
       </section>
 
       {/* Bonus card first — its "ລວມທີ່ຕ້ອງຮັບ" headline must be visible the
-          moment the home page opens. */}
-      <MyBonusCard />
-      <MyTargetCard initialData={initialTargetData} />
+          moment the home page opens. Phones stack; desktop puts bonus and
+          target side by side so the page stops reading like a stretched
+          phone layout. */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+        <MyBonusCard />
+        <MyTargetCard initialData={initialTargetData} />
+      </div>
 
       {/* Running promotions — what to push today. Hidden when none active. */}
       <ActivePromosCard />
@@ -757,9 +761,9 @@ export default async function HomePage() {
         <SectionHeading title="ພາບລວມທີມ / ຄຸມງານ" subtitle="ຍອດທີມ · ແຈ້ງເຕືອນ · ອະນຸມັດ" />
       ) : null}
       {isManagerOrHead ? (
-        <section className="space-y-3" aria-label="ພາບລວມການປະຕິບັດງານ">
+        <section className="grid grid-cols-1 gap-3 lg:grid-cols-2" aria-label="ພາບລວມການປະຕິບັດງານ">
           {/* Team KPI: team sales vs target this month. */}
-          <div className="grid grid-cols-3 divide-x divide-indigo-100 rounded-xl border border-indigo-100 bg-indigo-50/50 py-3">
+          <div className="grid grid-cols-3 divide-x divide-indigo-100 rounded-xl border border-indigo-100 bg-indigo-50/50 py-3 lg:col-span-2">
             <div className="px-3 text-center">
               <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">ຍອດທີມ/ເດືອນ</div>
               <div className="mt-1 font-mono text-sm font-black text-indigo-700 sm:text-base">{moneyFmt.format(homeTargetSales)}</div>
@@ -859,7 +863,7 @@ export default async function HomePage() {
               <span className="text-lg text-amber-700">›</span>
             </Link>
           ) : null}
-          <LowStockBanner />
+          <div className="lg:col-span-2"><LowStockBanner /></div>
           {refillPendingCount > 0 ? (
             <Link
               href="/reports/stock-refill"
@@ -885,7 +889,7 @@ export default async function HomePage() {
               <span className="text-lg text-sky-700">›</span>
             </Link>
           ) : null}
-          <DeliveryTodayCard />
+          <div className="lg:col-span-2"><DeliveryTodayCard /></div>
         </section>
       ) : null}
 
@@ -951,6 +955,12 @@ export default async function HomePage() {
                               <span className={`inline-block rounded-full px-2 py-0.5 font-mono text-[10px] font-black ${achPill(ach)}`}>
                                 {ach.toFixed(1)}%
                               </span>
+                              <div className="mx-auto mt-1 h-1 w-16 overflow-hidden rounded-full bg-slate-100">
+                                <div
+                                  className={`h-full rounded-full ${ach >= 100 ? "bg-emerald-500" : ach >= 80 ? "bg-amber-400" : "bg-rose-400"}`}
+                                  style={{ width: `${Math.min(100, Math.max(2, ach))}%` }}
+                                />
+                              </div>
                             </td>
                             <td className="px-2 py-2 text-center font-mono text-slate-500">{daysLeft}</td>
                             <td className={`px-2 py-2 text-right font-mono font-bold ${reqPerDay <= 0 ? "text-emerald-600" : "text-indigo-600"}`}>
@@ -958,7 +968,15 @@ export default async function HomePage() {
                             </td>
                             <td className="px-2 py-2 text-right font-mono text-slate-400">{moneyFmt.format(ytdTarget)}</td>
                             <td className="px-2 py-2 text-right font-mono text-slate-400">{moneyFmt.format(ytdTotal)}</td>
-                            <td className="px-2 py-2 text-right font-mono font-black text-slate-700">{ytdPct.toFixed(0)}%</td>
+                            <td className="px-2 py-2 text-right font-mono font-black text-slate-700">
+                              {ytdPct.toFixed(0)}%
+                              <div className="ml-auto mt-1 h-1 w-14 overflow-hidden rounded-full bg-slate-100">
+                                <div
+                                  className={`h-full rounded-full ${ytdPct >= 100 ? "bg-emerald-500" : ytdPct >= 80 ? "bg-amber-400" : "bg-rose-400"}`}
+                                  style={{ width: `${Math.min(100, Math.max(2, ytdPct))}%` }}
+                                />
+                              </div>
+                            </td>
                           </tr>
                         );
                       })}
