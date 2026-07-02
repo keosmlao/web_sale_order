@@ -3,7 +3,6 @@ import { requireEmployee } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
 import { getHiddenMenuKeys } from "@/lib/menu-visibility";
 import { MENU_REGISTRY, ROLE_LABELS } from "@/lib/menu-registry";
-import { logoutAction } from "@/app/login/actions";
 
 export const dynamic = "force-dynamic";
 
@@ -57,12 +56,6 @@ export default async function ProfilePage() {
         </div>
       ))}
 
-      {/* Logout */}
-      <form action={logoutAction} className="mt-6">
-        <button type="submit" className="w-full rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm font-black text-odoo-danger transition hover:bg-rose-100">
-          ອອກຈາກລະບົບ
-        </button>
-      </form>
     </div>
   );
 }

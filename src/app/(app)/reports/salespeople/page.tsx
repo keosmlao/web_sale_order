@@ -112,6 +112,70 @@ export default async function SalespeopleReportPage({
    if (code) targetByCode.set(code, Number(r.target ?? 0));
  }
 
+ // YTD figures (Jan 1 → today), independent of the range filter: realised
+ // receipts and the target sum over the elapsed months of this year.
+ type YtdRow = { emp_code: string | null; amount: string | number | null };
+ let ytdActualRows: YtdRow[] = [];
+ let ytdTargetRows: YtdRow[] = [];
+ try {
+   [ytdActualRows, ytdTargetRows] = await Promise.all([
+     prisma.$queryRaw<YtdRow[]>`
+       SELECT t.sale_code AS emp_code, COALESCE(SUM(t.total_amount), 0) AS amount
+       FROM ic_trans t
+       JOIN odg_employee emp ON emp.employee_code = NULLIF(NULLIF(t.sale_code, ''), '00000')
+       WHERE t.trans_flag = 44
+         AND t.branch_code = ${KHUA_LUANG_BRANCH_CODE}
+         AND emp.department_code = ${FRONT_STORE_SALES_DEPT}
+         AND t.doc_date >= date_trunc('year', CURRENT_DATE)
+       GROUP BY t.sale_code
+     `,
+     prisma.$queryRaw<YtdRow[]>`
+       WITH latest AS (
+         SELECT DISTINCT ON (emp_code, product_group, year, month)
+           emp_code, target
+         FROM odg_retail_target_employee
+         WHERE LPAD(year::text, 4, '0') = to_char(CURRENT_DATE, 'YYYY')
+           AND LPAD(month::text, 2, '0') <= to_char(CURRENT_DATE, 'MM')
+         ORDER BY emp_code, product_group, year, month, roworder DESC
+       )
+       SELECT emp_code, COALESCE(SUM(target), 0) AS amount
+       FROM latest
+       GROUP BY emp_code
+     `,
+   ]);
+ } catch {
+   ytdActualRows = [];
+   ytdTargetRows = [];
+ }
+ const ytdActualByCode = new Map<string, number>();
+ for (const r of ytdActualRows) {
+   const code = r.emp_code?.trim();
+   if (code) ytdActualByCode.set(code, Number(r.amount ?? 0));
+ }
+ const ytdTargetByCode = new Map<string, number>();
+ for (const r of ytdTargetRows) {
+   const code = r.emp_code?.trim();
+   if (code) ytdTargetByCode.set(code, Number(r.amount ?? 0));
+ }
+
+ // Front-store roster names — used to show target-holders that have no
+ // receipts in the selected range as 0-sales rows.
+ const rosterRows = await prisma.$queryRaw<Array<{
+   employee_code: string | null;
+   fullname_lo: string | null;
+   nickname: string | null;
+   position_code: string | null;
+ }>>`
+   SELECT employee_code, fullname_lo, nickname, position_code
+   FROM odg_employee
+   WHERE department_code = ${FRONT_STORE_SALES_DEPT}
+ `;
+ const rosterByCode = new Map(
+   rosterRows
+     .filter((r) => r.employee_code)
+     .map((r) => [r.employee_code!.trim(), r]),
+ );
+
  // Fold the (employee × month) rows into one aggregate per employee carrying a
  // month→baht map plus the running bill count.
  type ReceiptAgg = {
@@ -145,16 +209,31 @@ export default async function SalespeopleReportPage({
  agg.count += Number(r.receipt_count);
  agg.total += baht;
  }
- const months = Array.from(monthsSet).sort();
+ // Target-holders with no receipts in range still get a 0 row (only if they
+ // are on the front-store roster).
+ for (const [code] of targetByCode) {
+   if (byCode.has(code)) continue;
+   const emp = rosterByCode.get(code);
+   if (!emp) continue;
+   byCode.set(code, {
+     code,
+     displayName: emp.fullname_lo?.trim() || emp.nickname?.trim() || code,
+     positionCode: emp.position_code,
+     byMonth: new Map(),
+     count: 0,
+     total: 0,
+   });
+ }
 
  const monthly: MonthlyReceiptRow[] = Array.from(byCode.values())
  .map((agg) => ({
  code: agg.code,
  displayName: agg.displayName,
  positionCode: agg.positionCode,
- byMonth: Object.fromEntries(agg.byMonth),
  total: agg.total,
  target: targetByCode.get(agg.code) ?? 0,
+ ytdActual: ytdActualByCode.get(agg.code) ?? 0,
+ ytdTarget: ytdTargetByCode.get(agg.code) ?? 0,
  }))
  .sort((a, b) => b.total - a.total);
 
@@ -162,12 +241,21 @@ export default async function SalespeopleReportPage({
  const grandTarget = monthly.reduce((s, r) => s + r.target, 0);
  const grandBills = Array.from(byCode.values()).reduce((s, a) => s + a.count, 0);
 
+ // Days left in the CURRENT month — Req/Day only makes sense while the
+ // selected range reaches into it.
+ const now = new Date();
+ const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+   .toISOString()
+   .slice(0, 10);
+ const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+ const daysLeft = to >= firstOfMonth ? Math.max(1, daysInMonth - now.getDate() + 1) : null;
+
  return (
  <SalespeopleClient
  grandReceipts={grandReceipts}
  grandTarget={grandTarget}
  grandBills={grandBills}
- months={months}
+ daysLeft={daysLeft}
  monthly={monthly}
  filters={{ from, to }}
  />

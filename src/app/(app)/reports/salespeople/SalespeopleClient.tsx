@@ -8,9 +8,10 @@ export type MonthlyReceiptRow = {
  code: string;
  displayName: string;
  positionCode: string | null;
- byMonth: Record<string, number>;
  total: number;
  target: number;
+ ytdActual: number;
+ ytdTarget: number;
 };
 
 // Achievement colour tiers (mirror the commission tiers: <80% red, 80-99% amber,
@@ -28,12 +29,6 @@ const moneyFmt = new Intl.NumberFormat("en-US", {
  maximumFractionDigits: 0,
 });
 
-// 'YYYY-MM' → 'MM/YYYY' for the monthly pivot column headers.
-function fmtMonth(ym: string): string {
- const [y, m] = ym.split("-");
- return m && y ? `${m}/${y}` : ym;
-}
-
 const POSITION_LABEL: Record<string, string> = {
 "11":"ຜູ່ຈັດການ",
 "12":"ຫົວໜ້າພະນັກງານຂາຍ",
@@ -44,14 +39,14 @@ export default function SalespeopleClient({
  grandReceipts,
  grandTarget,
  grandBills,
- months,
+ daysLeft,
  monthly,
  filters,
 }: {
  grandReceipts: number;
  grandTarget: number;
  grandBills: number;
- months: string[];
+ daysLeft: number | null;
  monthly: MonthlyReceiptRow[];
  filters: Filters;
 }) {
@@ -80,12 +75,6 @@ export default function SalespeopleClient({
  if (i === 2) return"bg-odoo-surface-muted text-odoo-text-strong";
  return"bg-odoo-surface-muted text-odoo-text-muted";
  };
-
- // Column totals for the monthly receipt pivot (baht).
- const monthTotals: Record<string, number> = {};
- for (const ym of months) {
- monthTotals[ym] = monthly.reduce((s, r) => s + (r.byMonth[ym] ?? 0), 0);
- }
 
  return (
  <div className="odoo-page">
@@ -170,38 +159,37 @@ export default function SalespeopleClient({
  </span>
  </div>
  <div className="overflow-x-auto">
- <table className="odoo-table min-w-[720px]">
+ <table className="odoo-table min-w-[880px]">
  <thead>
  <tr>
  <th className="px-3 py-3 text-center">#</th>
  <th className="px-4 py-3">ພະນັກງານ</th>
- {months.map((ym) => (
- <th key={ym} className="px-4 py-3 text-right whitespace-nowrap">
- {fmtMonth(ym)}
- </th>
- ))}
- <th className="px-4 py-3 text-right">ລວມ</th>
- <th className="px-4 py-3 text-right whitespace-nowrap">ເປົ້າໝາຍ</th>
- <th className="px-4 py-3 text-right whitespace-nowrap">ບັນລຸ</th>
+ <th className="px-4 py-3 text-right whitespace-nowrap">ເປົ້າ</th>
+ <th className="px-4 py-3 text-right whitespace-nowrap">ຍອດຂາຍ</th>
+ <th className="px-4 py-3 text-center">Ach%</th>
+ <th className="px-4 py-3 text-center">Days</th>
+ <th className="px-4 py-3 text-right whitespace-nowrap">Req/Day</th>
+ <th className="px-4 py-3 text-right whitespace-nowrap text-odoo-text-muted">YTD Target</th>
+ <th className="px-4 py-3 text-right whitespace-nowrap text-odoo-text-muted">YTD Actual</th>
+ <th className="px-4 py-3 text-right whitespace-nowrap">YTD%</th>
  </tr>
  </thead>
  <tbody className="divide-y divide-odoo-border">
- {monthly.length === 0 || months.length === 0 ? (
+ {monthly.length === 0 ? (
  <tr>
- <td
- colSpan={months.length + 5}
- className="px-4 py-12 text-center text-sm text-odoo-text-muted"
- >
+ <td colSpan={10} className="px-4 py-12 text-center text-sm text-odoo-text-muted">
  ບໍ່ມີໃບຮັບເງິນໃນຊ່ວງວັນທີນີ້
  </td>
  </tr>
  ) : (
- monthly.map((r, i) => (
+ monthly.map((r, i) => {
+ const ach = r.target > 0 ? (r.total / r.target) * 100 : 0;
+ const reqPerDay = daysLeft ? (r.target - r.total) / daysLeft : null;
+ const ytdPct = r.ytdTarget > 0 ? (r.ytdActual / r.ytdTarget) * 100 : 0;
+ return (
  <tr key={r.code} className="text-odoo-text-strong">
  <td className="px-3 py-3 text-center">
- <span
- className={`inline-flex h-7 w-7 items-center justify-center rounded font-mono text-xs font-bold ${medal(i)}`}
- >
+ <span className={`inline-flex h-7 w-7 items-center justify-center rounded font-mono text-xs font-bold ${medal(i)}`}>
  {i + 1}
  </span>
  </td>
@@ -217,54 +205,89 @@ export default function SalespeopleClient({
  ) : null}
  </div>
  </td>
- {months.map((ym) => (
- <td key={ym} className="px-4 py-3 text-right font-mono text-xs">
- {r.byMonth[ym] ? moneyFmt.format(r.byMonth[ym]) :"—"}
+ <td className="px-4 py-3 text-right font-mono text-xs">
+ {r.target > 0 ? moneyFmt.format(r.target) : "—"}
  </td>
- ))}
  <td className="px-4 py-3 text-right font-mono font-bold text-odoo-primary">
  {moneyFmt.format(r.total)}
  </td>
- <td className="px-4 py-3 text-right font-mono text-xs text-odoo-text-strong">
- {r.target > 0 ? moneyFmt.format(r.target) : "—"}
+ <td className="px-4 py-3 text-center">
+ {r.target > 0 ? (
+ <span className={`inline-block rounded-full px-2 py-0.5 font-mono text-[11px] font-bold ${
+ ach >= 100 ? "bg-emerald-50 text-emerald-600" : ach >= 80 ? "bg-amber-50 text-amber-600" : "bg-rose-50 text-rose-600"
+ }`}>
+ {ach.toFixed(1)}%
+ </span>
+ ) : (
+ <span className="text-odoo-text-muted">—</span>
+ )}
+ </td>
+ <td className="px-4 py-3 text-center font-mono text-xs text-odoo-text-muted">
+ {daysLeft ?? "—"}
+ </td>
+ <td className={`px-4 py-3 text-right font-mono text-xs font-bold ${
+ reqPerDay === null ? "text-odoo-text-muted" : reqPerDay <= 0 ? "text-emerald-600" : "text-odoo-primary"
+ }`}>
+ {reqPerDay === null || r.target <= 0 ? "—" : moneyFmt.format(Math.round(reqPerDay))}
+ </td>
+ <td className="px-4 py-3 text-right font-mono text-xs text-odoo-text-muted">
+ {r.ytdTarget > 0 ? moneyFmt.format(r.ytdTarget) : "—"}
+ </td>
+ <td className="px-4 py-3 text-right font-mono text-xs text-odoo-text-muted">
+ {moneyFmt.format(r.ytdActual)}
  </td>
  <td className="px-4 py-3 text-right font-mono text-xs font-bold">
- {r.target > 0 ? (
- <span className={achievementClass((r.total / r.target) * 100)}>
- {((r.total / r.target) * 100).toFixed(0)}%
- </span>
+ {r.ytdTarget > 0 ? (
+ <span className={achievementClass(ytdPct)}>{ytdPct.toFixed(0)}%</span>
  ) : (
  <span className="text-odoo-text-muted">—</span>
  )}
  </td>
  </tr>
- ))
+ );
+ })
  )}
  </tbody>
- {monthly.length > 0 && months.length > 0 ? (
+ {monthly.length > 0 ? (
  <tfoot className="border-t border-odoo-border bg-odoo-surface-muted text-xs font-bold">
  <tr>
  <td className="px-3 py-3"></td>
  <td className="px-4 py-3 text-odoo-text-strong">ລວມທັງໝົດ</td>
- {months.map((ym) => (
- <td key={ym} className="px-4 py-3 text-right font-mono">
- {moneyFmt.format(monthTotals[ym] ?? 0)}
- </td>
- ))}
- <td className="px-4 py-3 text-right font-mono text-base text-odoo-primary">
- {moneyFmt.format(grandReceipts)}
- </td>
  <td className="px-4 py-3 text-right font-mono">
  {grandTarget > 0 ? moneyFmt.format(grandTarget) : "—"}
  </td>
- <td className="px-4 py-3 text-right font-mono">
+ <td className="px-4 py-3 text-right font-mono text-base text-odoo-primary">
+ {moneyFmt.format(grandReceipts)}
+ </td>
+ <td className="px-4 py-3 text-center font-mono">
  {grandTarget > 0 ? (
  <span className={achievementClass((grandReceipts / grandTarget) * 100)}>
- {((grandReceipts / grandTarget) * 100).toFixed(0)}%
+ {((grandReceipts / grandTarget) * 100).toFixed(1)}%
  </span>
  ) : (
  <span className="text-odoo-text-muted">—</span>
  )}
+ </td>
+ <td className="px-4 py-3 text-center font-mono text-odoo-text-muted">{daysLeft ?? "—"}</td>
+ <td className="px-4 py-3 text-right font-mono">
+ {daysLeft && grandTarget > 0 ? moneyFmt.format(Math.round((grandTarget - grandReceipts) / daysLeft)) : "—"}
+ </td>
+ <td className="px-4 py-3 text-right font-mono text-odoo-text-muted">
+ {moneyFmt.format(monthly.reduce((s, r) => s + r.ytdTarget, 0))}
+ </td>
+ <td className="px-4 py-3 text-right font-mono text-odoo-text-muted">
+ {moneyFmt.format(monthly.reduce((s, r) => s + r.ytdActual, 0))}
+ </td>
+ <td className="px-4 py-3 text-right font-mono">
+ {(() => {
+ const tt = monthly.reduce((s, r) => s + r.ytdTarget, 0);
+ const ta = monthly.reduce((s, r) => s + r.ytdActual, 0);
+ return tt > 0 ? (
+ <span className={achievementClass((ta / tt) * 100)}>{((ta / tt) * 100).toFixed(0)}%</span>
+ ) : (
+ <span className="text-odoo-text-muted">—</span>
+ );
+ })()}
  </td>
  </tr>
  </tfoot>

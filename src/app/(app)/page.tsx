@@ -22,11 +22,11 @@ export const dynamic = "force-dynamic";
 const KHUA_LUANG_DEPTS = ["2012", "2022", "2032", "2042", "2062"] as const;
 
 // odg_employee department_code(s) that make up the Khua Luang front-store sales
-// team. Used to scope the "actual sales per employee" leaderboard for managers /
-// heads so it lists only front-store departmental staff (not every person who
-// happened to ring up a front-store sale). 207 = ພະແນກຂາຍຍ່ອຍ ສາຂາຂົວຫຼວງ.
-// Add more codes here (e.g. "204", "205") if the front-store team spans them.
-const FRONT_STORE_SALE_DEPTS = ["207"] as const;
+// team. Used to scope the per-employee performance table for managers / heads.
+// The front-store sellers (and their monthly targets in
+// odg_retail_target_employee) span 204 ຂາຍສົ່ງແອ, 205 ຂາຍສົ່ງອາໄຫຼ່ and
+// 207 ຂາຍຍ່ອຍຂົວຫຼວງ.
+const FRONT_STORE_SALE_DEPTS = ["204", "205", "207"] as const;
 
 type DayMetrics = {
   pending_count: bigint;
@@ -59,6 +59,9 @@ type TopSalesperson = {
   nickname: string | null;
   orders: bigint;
   total: string | number | null;
+  ytd_total: string | number | null;
+  month_target: string | number | null;
+  ytd_target: string | number | null;
 };
 
 type RecentOrder = {
@@ -223,31 +226,49 @@ export default async function HomePage() {
         AND ${deptIn}
     `,
     prisma.$queryRaw<TopSalesperson[]>`
-      -- Actual sales per employee this month (odg_sale_detail), salename resolved
-      -- to the employee via alias first, then roster fullname_lo.
+      -- Performance table per employee: this-month sales + target and YTD
+      -- figures. Employee-based (not sale-based) so people with a target but
+      -- no sales yet still show a 0 row. Sales resolved employee → salenames
+      -- (roster fullname_lo + SML aliases).
       SELECT
         emp.employee_code AS user_owner,
         emp.fullname_lo,
         emp.nickname,
-        COUNT(DISTINCT sd.doc_no)::bigint AS orders,
-        COALESCE(SUM(sd.sum_amount), 0) AS total
-      FROM odg_sale_detail sd
+        COALESCE(s.orders, 0)::bigint AS orders,
+        COALESCE(s.month_total, 0) AS total,
+        COALESCE(s.ytd_total, 0) AS ytd_total,
+        COALESCE(tg.month_target, 0) AS month_target,
+        COALESCE(tg.ytd_target, 0) AS ytd_target
+      FROM odg_employee emp
       LEFT JOIN LATERAL (
-        SELECT employee_code FROM (
-          SELECT a.employee_code, 0 AS pr FROM app_incentive_sale_alias a WHERE a.salename = sd.salename
-          UNION ALL SELECT e.employee_code, 1 FROM odg_employee e WHERE e.fullname_lo = sd.salename
-        ) q ORDER BY pr, employee_code LIMIT 1
-      ) resolved ON true
-      LEFT JOIN odg_employee emp ON emp.employee_code = resolved.employee_code
-      WHERE sd.branch_code = '01'
-        AND sd.argroup_main = '101'
-        AND sd.doc_date >= date_trunc('month', CURRENT_DATE)
-        AND sd.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
-        AND resolved.employee_code IS NOT NULL
+        SELECT
+          COALESCE(SUM(sd.sum_amount) FILTER (WHERE sd.doc_date >= date_trunc('month', CURRENT_DATE)), 0) AS month_total,
+          COALESCE(SUM(sd.sum_amount), 0) AS ytd_total,
+          COUNT(DISTINCT sd.doc_no) FILTER (WHERE sd.doc_date >= date_trunc('month', CURRENT_DATE)) AS orders
+        FROM odg_sale_detail sd
+        WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+          AND sd.doc_date >= date_trunc('year', CURRENT_DATE)
+          AND sd.salename IN (
+            SELECT emp.fullname_lo WHERE COALESCE(emp.fullname_lo, '') <> ''
+            UNION
+            SELECT a.salename FROM app_incentive_sale_alias a
+              WHERE a.employee_code = emp.employee_code
+          )
+      ) s ON true
+      LEFT JOIN LATERAL (
+        SELECT
+          COALESCE(SUM(t.target) FILTER (WHERE LPAD(t.month, 2, '0') = to_char(CURRENT_DATE, 'MM')), 0) AS month_target,
+          COALESCE(SUM(t.target) FILTER (WHERE LPAD(t.month, 2, '0') <= to_char(CURRENT_DATE, 'MM')), 0) AS ytd_target
+        FROM odg_retail_target_employee t
+        WHERE t.emp_code = emp.employee_code
+          AND t.year = to_char(CURRENT_DATE, 'YYYY')
+      ) tg ON true
+      WHERE 1 = 1
         ${leaderboardDeptFilter}
-      GROUP BY emp.employee_code, emp.fullname_lo, emp.nickname
+        -- Only people with a target this month appear on the home table.
+        AND COALESCE(tg.month_target, 0) > 0
       ORDER BY total DESC
-      LIMIT 10
+      LIMIT 12
     `,
     prisma.$queryRaw<RecentOrder[]>`
       SELECT
@@ -869,6 +890,86 @@ export default async function HomePage() {
       ) : null}
 
       {/* Personal insights — my category mix, best sellers, recent bills. */}
+      {/* Per-employee performance table — placed above the category insights. */}
+      <section>
+          <Panel
+            title="ຍອດຂາຍຈິງຕາມພະນັກງານ"
+            eyebrow="ເດືອນນີ້"
+            action={
+              <Link
+                href="/reports/salespeople"
+                className="text-xs font-semibold text-odoo-primary hover:underline"
+              >
+                ທັງໝົດ
+              </Link>
+            }
+          >
+            {topRows.length === 0 ? (
+              <EmptyHint>ຍັງບໍ່ມີຍອດຂາຍເດືອນນີ້</EmptyHint>
+            ) : (() => {
+              const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+              const daysLeft = Math.max(1, daysInMonth - now.getDate() + 1);
+              const achPill = (pct: number) =>
+                pct >= 100
+                  ? "bg-emerald-50 text-emerald-600"
+                  : pct >= 80
+                    ? "bg-amber-50 text-amber-600"
+                    : "bg-rose-50 text-rose-600";
+              return (
+                <div className="-mx-2 overflow-x-auto">
+                  <table className="w-full min-w-[560px] text-xs">
+                    <thead>
+                      <tr className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                        <th className="px-2 py-1.5 text-left">ພະນັກງານ</th>
+                        <th className="px-2 py-1.5 text-right">ເປົ້າ</th>
+                        <th className="px-2 py-1.5 text-right">ຍອດຂາຍ</th>
+                        <th className="px-2 py-1.5 text-center">Ach%</th>
+                        <th className="px-2 py-1.5 text-center">Days</th>
+                        <th className="px-2 py-1.5 text-right">Req/Day</th>
+                        <th className="px-2 py-1.5 text-right text-slate-300">YTD Target</th>
+                        <th className="px-2 py-1.5 text-right text-slate-300">YTD Actual</th>
+                        <th className="px-2 py-1.5 text-right">YTD%</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {topRows.map((r, i) => {
+                        const total = Number(r.total ?? 0);
+                        const target = Number(r.month_target ?? 0);
+                        const ytdTotal = Number(r.ytd_total ?? 0);
+                        const ytdTarget = Number(r.ytd_target ?? 0);
+                        const ach = target > 0 ? (total / target) * 100 : 0;
+                        const reqPerDay = (target - total) / daysLeft;
+                        const ytdPct = ytdTarget > 0 ? (ytdTotal / ytdTarget) * 100 : 0;
+                        const name =
+                          r.fullname_lo?.trim() || r.nickname?.trim() || r.user_owner || "ບໍ່ລະບຸ";
+                        return (
+                          <tr key={(r.user_owner ?? "") + i} className="hover:bg-slate-50">
+                            <td className="max-w-36 truncate px-2 py-2 font-bold text-slate-800">{name}</td>
+                            <td className="px-2 py-2 text-right font-mono text-slate-500">{moneyFmt.format(target)}</td>
+                            <td className="px-2 py-2 text-right font-mono font-black text-slate-800">{moneyFmt.format(total)}</td>
+                            <td className="px-2 py-2 text-center">
+                              <span className={`inline-block rounded-full px-2 py-0.5 font-mono text-[10px] font-black ${achPill(ach)}`}>
+                                {ach.toFixed(1)}%
+                              </span>
+                            </td>
+                            <td className="px-2 py-2 text-center font-mono text-slate-500">{daysLeft}</td>
+                            <td className={`px-2 py-2 text-right font-mono font-bold ${reqPerDay <= 0 ? "text-emerald-600" : "text-indigo-600"}`}>
+                              {moneyFmt.format(Math.round(reqPerDay))}
+                            </td>
+                            <td className="px-2 py-2 text-right font-mono text-slate-400">{moneyFmt.format(ytdTarget)}</td>
+                            <td className="px-2 py-2 text-right font-mono text-slate-400">{moneyFmt.format(ytdTotal)}</td>
+                            <td className="px-2 py-2 text-right font-mono font-black text-slate-700">{ytdPct.toFixed(0)}%</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })()}
+          </Panel>
+      </section>
+
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Panel title="ຍອດຂາຍຕາມໝວດ" eyebrow={insightIsTeam ? "ທີມ · ເດືອນນີ້" : "ຂອງຂ້ອຍ · ເດືອນນີ້"}>
           {categoryRows.length === 0 ? (
@@ -1034,63 +1135,6 @@ export default async function HomePage() {
         </div>
 
         <aside className="space-y-4 sm:space-y-5">
-          <Panel
-            title="ຍອດຂາຍຈິງຕາມພະນັກງານ"
-            eyebrow="ເດືອນນີ້"
-            action={
-              <Link
-                href="/reports/salespeople"
-                className="text-xs font-semibold text-odoo-primary hover:underline"
-              >
-                ທັງໝົດ
-              </Link>
-            }
-          >
-            {topRows.length === 0 ? (
-              <EmptyHint>ຍັງບໍ່ມີຍອດຂາຍເດືອນນີ້</EmptyHint>
-            ) : (
-              <ul className="space-y-3">
-                {topRows.map((r, i) => {
-                  const total = Number(r.total ?? 0);
-                  const pct = topTotal > 0 ? (total / topTotal) * 100 : 0;
-                  const name =
-                    r.fullname_lo?.trim() ||
-                    r.nickname?.trim() ||
-                    r.user_owner ||
-                    "ບໍ່ລະບຸ";
-
-                  return (
-                    <li
-                      key={(r.user_owner ?? "") + i}
-                      className="group flex flex-col gap-2.5 rounded-xl border border-slate-100 bg-slate-50/50 p-3 hover:border-indigo-100 hover:bg-white transition-all duration-300"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className={rankBadgeClass(i)}>{i + 1}</span>
-                        <div className="min-w-0 flex-1">
-                          <div className="truncate text-xs font-bold text-slate-800">
-                            {name}
-                          </div>
-                          <div className="text-[10px] text-slate-400 font-semibold">
-                            {numFmt.format(Number(r.orders))} ບິນ
-                          </div>
-                        </div>
-                        <div className="text-right text-xs font-black text-indigo-600">
-                          {compactMoneyFmt.format(total)}
-                        </div>
-                      </div>
-                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100 border border-slate-200/50">
-                        <div
-                          className={rankBarClass(i)}
-                          style={{ width: `${Math.max(pct, 4).toFixed(1)}%` }}
-                        />
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </Panel>
-
           <Panel title="ກິດຈະກຳຫຼ້າສຸດ" eyebrow="Recent orders">
             {recentRows.length === 0 ? (
               <EmptyHint>ຍັງບໍ່ມີ Order</EmptyHint>
