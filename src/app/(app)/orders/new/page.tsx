@@ -447,10 +447,6 @@ function PosScreen({
   useEffect(() => {
     if (items.length === 0 && mStep === 3) setMStep(1);
   }, [items.length, mStep]);
-  // Picking a customer completes step 1 — move straight on to products.
-  useEffect(() => {
-    if (customer && mStep === 1) setMStep(2);
-  }, [customer, mStep]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2960,7 +2956,11 @@ function PosScreen({
           matches={customerMatches}
           loading={loadingCustomers}
           required={false}
-          onPick={startOrderForCustomer}
+          onPick={(c) => {
+            startOrderForCustomer(c);
+            // Customer chosen — move the mobile wizard on to products.
+            setMStep(2);
+          }}
           onAddNew={() => setNewMemberOpen(true)}
           onClose={() => setCustomerOpen(false)}
         />
@@ -2971,6 +2971,8 @@ function PosScreen({
             setCustomers((prev) => [c, ...prev.filter((p) => p.id !== c.id)]);
             startOrderForCustomer(c);
             setNewMemberOpen(false);
+            // Freshly registered member becomes the bill's customer — on to products.
+            setMStep(2);
           }}
           onClose={() => setNewMemberOpen(false)}
         />
