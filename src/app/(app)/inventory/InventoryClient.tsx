@@ -48,6 +48,19 @@ export default function InventoryClient() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [locCache, setLocCache] = useState<Record<string, StockLocation[] | "loading" | "error">>({});
   const inputRef = useRef<HTMLInputElement>(null);
+  // Desktop (≥640px) lists the whole catalog straight away, like the old
+  // page; phones stay search-first so nothing heavy loads on open.
+  const [isDesktop, setIsDesktop] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 640px)");
+    const apply = () => {
+      setIsDesktop(mq.matches);
+      setPage(1);
+    };
+    apply();
+    mq.addEventListener("change", apply);
+    return () => mq.removeEventListener("change", apply);
+  }, []);
 
   // Search-first: nothing is fetched until the cashier types. Debounce the
   // box; queries shorter than MIN_QUERY clear the results entirely.
@@ -61,7 +74,7 @@ export default function InventoryClient() {
   }, [input]);
 
   useEffect(() => {
-    if (!query) {
+    if (!query && !isDesktop) {
       setItems([]);
       setTotal(0);
       setError(null);
@@ -95,7 +108,7 @@ export default function InventoryClient() {
     return () => {
       cancelled = true;
     };
-  }, [query, page]);
+  }, [query, page, isDesktop]);
 
   async function toggleRow(code: string) {
     if (expanded === code) {
@@ -132,7 +145,9 @@ export default function InventoryClient() {
         </div>
         <div>
           <h1 className="text-xl font-black tracking-tight text-odoo-text-strong">ສິນຄ້າຄົງເຫຼືອ</h1>
-          <p className="text-xs text-odoo-text-muted">ພິມຄົ້ນຫາກ່ອນ — ຜົນອອກສະເພາະທີ່ຄົ້ນ, ໄວກວ່າ</p>
+          <p className="text-xs text-odoo-text-muted">
+            {isDesktop ? "ຄົ້ນຫາ ຫຼື ເລື່ອນເບິ່ງລາຍການສິນຄ້າ" : "ພິມຄົ້ນຫາກ່ອນ — ຜົນອອກສະເພາະທີ່ຄົ້ນ, ໄວກວ່າ"}
+          </p>
         </div>
       </div>
 
@@ -172,7 +187,7 @@ export default function InventoryClient() {
       {error ? <div className="odoo-alert-danger mt-4 px-3 py-2 text-sm">{error}</div> : null}
 
       {/* Idle state — nothing was fetched */}
-      {!query && !loading ? (
+      {!query && !loading && !isDesktop ? (
         <div className="mt-10 text-center text-odoo-text-muted">
           <div className="text-6xl opacity-20">🔍</div>
           <div className="mt-3 text-sm font-bold text-odoo-text-strong">ພິມຢ່າງໜ້ອຍ {MIN_QUERY} ຕົວອັກສອນ ເພື່ອຄົ້ນຫາສິນຄ້າ</div>
@@ -181,7 +196,7 @@ export default function InventoryClient() {
       ) : null}
 
       {/* Result count */}
-      {query && !loading ? (
+      {(query || isDesktop) && !loading ? (
         <div className="mt-4 text-xs font-semibold text-odoo-text-muted">
           ພົບ {moneyFmt.format(total)} ລາຍການ {total > items.length ? `· ສະແດງ ${items.length}` : ""}
         </div>

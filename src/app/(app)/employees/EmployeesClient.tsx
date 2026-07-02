@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { startTransition, useActionState, useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import {
   createEmployeeAction,
@@ -532,13 +532,20 @@ function DeleteButton({
     );
   }
 
+  // NOT a <form>: this button lives inside the modal's save <form>, and
+  // nested forms are invalid HTML (React throws). Dispatch the server action
+  // directly instead.
   return (
-    <form action={formAction} className="inline-flex items-center gap-1">
-      <input type="hidden" name="employeeCode" value={employeeCode} />
+    <div className="inline-flex items-center gap-1">
       <span className="text-xs text-odoo-danger">ຢືນຢັນລຶບ?</span>
       <button
-        type="submit"
+        type="button"
         disabled={pending}
+        onClick={() => {
+          const fd = new FormData();
+          fd.set("employeeCode", employeeCode);
+          startTransition(() => formAction(fd));
+        }}
         className="odoo-btn odoo-btn-danger-fill"
       >
         {pending ? "…" : "ລຶບ"}
@@ -553,7 +560,7 @@ function DeleteButton({
       {state && !state.ok && (
         <span className="text-xs text-odoo-danger">{state.error}</span>
       )}
-    </form>
+    </div>
   );
 }
 
