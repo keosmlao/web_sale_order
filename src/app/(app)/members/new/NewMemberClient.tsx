@@ -18,6 +18,108 @@ type Customer = {
 type LocationOption = { code: string; name: string };
 type AmperOption = LocationOption & { province: string | null };
 
+// Bottom-sheet option picker: tap the field, search, tap a row. Far easier
+// than a native <select> when the list runs to hundreds of villages.
+function OptionPicker({
+  label,
+  value,
+  options,
+  placeholder,
+  disabled = false,
+  loading = false,
+  onPick,
+}: {
+  label: string;
+  value: string;
+  options: LocationOption[];
+  placeholder: string;
+  disabled?: boolean;
+  loading?: boolean;
+  onPick: (code: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const selected = options.find((o) => o.code === value);
+  const filtered = q.trim()
+    ? options.filter((o) => o.name.toLowerCase().includes(q.trim().toLowerCase()))
+    : options;
+
+  return (
+    <div className="grid gap-1">
+      <span className="text-[11px] font-semibold text-odoo-text-muted">
+        {label}
+        {loading ? <span className="ml-1 text-[10px] font-normal">(ກຳລັງໂຫລດ…)</span> : null}
+      </span>
+      <button
+        type="button"
+        disabled={disabled || loading}
+        onClick={() => {
+          setQ("");
+          setOpen(true);
+        }}
+        className={
+          "flex min-h-11 w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2.5 text-left text-sm transition disabled:opacity-50 " +
+          (selected ? "border-odoo-border font-bold text-odoo-text-strong" : "border-odoo-border text-odoo-text-muted")
+        }
+      >
+        <span className="truncate">{selected ? selected.name : placeholder}</span>
+        <span className="shrink-0 text-odoo-text-muted">▾</span>
+      </button>
+
+      {open ? (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/45 sm:items-center sm:p-4">
+          <button type="button" aria-label="ປິດ" className="absolute inset-0 cursor-default" onClick={() => setOpen(false)} />
+          <div className="relative flex max-h-[85dvh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+            <div className="flex items-center justify-between gap-3 border-b border-odoo-border px-4 py-3">
+              <div className="text-sm font-black text-odoo-text-strong">{label}</div>
+              <button type="button" onClick={() => setOpen(false)} className="odoo-btn odoo-btn-secondary">
+                ປິດ
+              </button>
+            </div>
+            <div className="border-b border-odoo-border p-3">
+              <input
+                type="search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder={`ຄົ້ນຫາ${label}…`}
+                autoFocus
+                className="odoo-input w-full"
+              />
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-2">
+              {filtered.length === 0 ? (
+                <div className="py-10 text-center text-sm text-odoo-text-muted">ບໍ່ພົບ “{q}”</div>
+              ) : (
+                <div className="grid gap-1.5">
+                  {filtered.map((o) => (
+                    <button
+                      key={o.code}
+                      type="button"
+                      onClick={() => {
+                        onPick(o.code);
+                        setOpen(false);
+                      }}
+                      className={
+                        "flex min-h-11 items-center justify-between gap-2 rounded-xl border px-3 py-2 text-left text-sm font-semibold transition " +
+                        (o.code === value
+                          ? "border-odoo-primary bg-odoo-primary/10 text-odoo-primary"
+                          : "border-odoo-border bg-white text-odoo-text-strong hover:bg-odoo-surface-muted")
+                      }
+                    >
+                      <span className="truncate">{o.name}</span>
+                      {o.code === value ? <span className="shrink-0">✓</span> : null}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export default function NewMemberClient() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -287,67 +389,39 @@ export default function NewMemberClient() {
             ) : null}
           </span>
           <div className="grid gap-3 sm:grid-cols-3">
-            <label className="grid gap-1">
-              <span className="text-[11px] font-semibold text-odoo-text-muted">ແຂວງ</span>
-              <select
-                value={provinceCode}
-                onChange={(e) => {
-                  setProvinceCode(e.target.value);
-                  setAmperCode("");
-                  setTambonCode("");
-                  setTambons([]);
-                }}
-                disabled={loadingLocations}
-                className="odoo-input"
-              >
-                <option value="">— ເລືອກແຂວງ —</option>
-                {provinces.map((p) => (
-                  <option key={p.code} value={p.code}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-1">
-              <span className="text-[11px] font-semibold text-odoo-text-muted">ເມືອງ</span>
-              <select
-                value={amperCode}
-                onChange={(e) => {
-                  const next = e.target.value;
-                  setAmperCode(next);
-                  setTambonCode("");
-                  if (!next) setTambons([]);
-                }}
-                disabled={!provinceCode || loadingLocations}
-                className="odoo-input"
-              >
-                <option value="">— ເລືອກເມືອງ —</option>
-                {filteredAmpers.map((a) => (
-                  <option key={a.code} value={a.code}>
-                    {a.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="grid gap-1">
-              <span className="text-[11px] font-semibold text-odoo-text-muted">
-                ບ້ານ
-                {loadingTambons ? <span className="ml-1 text-[10px] font-normal">(ກຳລັງໂຫລດ…)</span> : null}
-              </span>
-              <select
-                value={tambonCode}
-                onChange={(e) => setTambonCode(e.target.value)}
-                disabled={!amperCode || loadingTambons}
-                className="odoo-input"
-              >
-                <option value="">— ເລືອກບ້ານ —</option>
-                {tambons.map((t) => (
-                  <option key={t.code} value={t.code}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <OptionPicker
+              label="ແຂວງ"
+              value={provinceCode}
+              options={provinces}
+              placeholder="— ເລືອກແຂວງ —"
+              disabled={loadingLocations}
+              onPick={(code) => {
+                setProvinceCode(code);
+                setAmperCode("");
+                setTambonCode("");
+                setTambons([]);
+              }}
+            />
+            <OptionPicker
+              label="ເມືອງ"
+              value={amperCode}
+              options={filteredAmpers}
+              placeholder="— ເລືອກເມືອງ —"
+              disabled={!provinceCode || loadingLocations}
+              onPick={(code) => {
+                setAmperCode(code);
+                setTambonCode("");
+              }}
+            />
+            <OptionPicker
+              label="ບ້ານ"
+              value={tambonCode}
+              options={tambons}
+              placeholder="— ເລືອກບ້ານ —"
+              disabled={!amperCode}
+              loading={loadingTambons}
+              onPick={setTambonCode}
+            />
           </div>
         </div>
 
