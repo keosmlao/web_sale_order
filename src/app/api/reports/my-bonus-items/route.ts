@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
           -- Service / discount pseudo-items are not sellable products; keep
           -- them out of the got/no-points breakdown entirely.
           AND sd.item_name NOT LIKE 'ບໍລິການ%'
+          AND sd.item_name NOT LIKE 'ຄ່າບໍລິການ%'
           AND sd.item_name NOT LIKE 'ສ່ວນຫລຸດ%'
           AND sd.item_name NOT LIKE 'ສ່ວນຫຼຸດ%'
       ),
