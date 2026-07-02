@@ -428,6 +428,9 @@ function PosScreen({
   // Default to open so the delivery / note / end-of-bill discount fields are
   // visible without an extra tap. The cashier can still collapse the panel.
   const [extrasOpen, setExtrasOpen] = useState(true);
+  // ≤640px: the delivery block (round summary + transport/date/note) moves out
+  // of the checkout into its own full-screen sheet (pos-delivery-* CSS).
+  const [deliverySheetOpen, setDeliverySheetOpen] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -1901,6 +1904,62 @@ function PosScreen({
       ? "ຊຸດ"
       : "ຊິ້ນ";
 
+  // Transport / receive-date / note fields, rendered in two hosts that never
+  // show together: inline in the checkout (>640px) and in the mobile
+  // delivery sheet (≤640px). Both bind the same state.
+  const deliveryFormFields = (
+    <div className="pos-extras-grid">
+      <div>
+        <label className="odoo-label">ຂົນສົ່ງ</label>
+        <select
+          value={transportCode}
+          onChange={(e) => setTransportCode(e.target.value)}
+          className="odoo-input"
+        >
+          <option value="">ເລືອກຂົນສົ່ງ</option>
+          {transportTypes.map((t) => (
+            <option key={t.code} value={t.code}>
+              {t.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      {isSelfPickup ? null : (
+        <div>
+          <label className="odoo-label">ຊື່ຜູ້ຮັບ / ຈັດສົ່ງ</label>
+          <input
+            type="text"
+            value={deliveryName}
+            onChange={(e) => setDeliveryName(e.target.value)}
+            className="odoo-input"
+            placeholder="ບໍ່ບັງຄັບ"
+          />
+        </div>
+      )}
+      <div>
+        <label className="odoo-label">ວັນຮັບສິນຄ້າ</label>
+        <input
+          type="date"
+          value={receiveDate}
+          onChange={(e) => setReceiveDate(e.target.value)}
+          className="odoo-input"
+        />
+      </div>
+      <div className="col-span-full">
+        <label className="odoo-label">ໝາຍເຫດ</label>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={2}
+          className="odoo-textarea"
+          placeholder="ບໍ່ບັງຄັບ"
+        />
+      </div>
+    </div>
+  );
+  const selectedTransportName =
+    transportTypes.find((t) => t.code === transportCode)?.name ?? "ຍັງບໍ່ເລືອກ";
+
   return (
     <div className={`pos-shell2 pos-mstep-${mStep}`}>
       <header className="pos-mobile-appbar">
@@ -2662,91 +2721,68 @@ function PosScreen({
               </div>
             </div>
 
-            {/* ສະຫຼຸບບິນຈັດສົ່ງ ຕາມຮອບ ຂອງວັນຮັບສິນຄ້າ — ດຶງຈາກ TMS */}
-            <DeliveryTodayCard date={receiveDate || undefined} />
+            {/* ≤640px: compact trigger that opens the delivery sheet. */}
+            <button
+              type="button"
+              onClick={() => setDeliverySheetOpen(true)}
+              className="pos-delivery-trigger mt-3 flex w-full items-center justify-between gap-2 rounded-xl border border-odoo-border bg-odoo-surface-muted px-3 py-2.5 text-left"
+            >
+              <span className="flex min-w-0 items-center gap-2 text-[12px] font-bold text-odoo-text-strong">
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                  <rect x="1" y="3" width="15" height="13" rx="1" />
+                  <path d="M16 8h4l3 3v5h-7z" />
+                  <circle cx="5.5" cy="18.5" r="2" />
+                  <circle cx="18.5" cy="18.5" r="2" />
+                </svg>
+                <span>ຂົນສົ່ງ · ໝາຍເຫດ</span>
+              </span>
+              <span className="flex min-w-0 items-center gap-1 text-[11px] font-semibold text-odoo-text-muted">
+                <span className="max-w-32 truncate">{selectedTransportName}</span>
+                <span aria-hidden>›</span>
+              </span>
+            </button>
 
-            {/* ຂົນສົ່ງ · ໝາຍເຫດ — ຍ້າຍລົງລຸ່ມຍອດລວມ */}
-            <div className="mt-3 overflow-hidden rounded-md border border-odoo-border">
-              <button
-                type="button"
-                onClick={() => setExtrasOpen((v) => !v)}
-                className="flex w-full items-center justify-between gap-2 bg-odoo-surface-muted px-3 py-2.5 text-left text-[12px] font-bold text-odoo-text-strong transition hover:brightness-95"
-              >
-                <span className="flex items-center gap-2">
-                  <svg
-                    viewBox="0 0 24 24"
-                    width="15"
-                    height="15"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <rect x="1" y="3" width="15" height="13" rx="1" />
-                    <path d="M16 8h4l3 3v5h-7z" />
-                    <circle cx="5.5" cy="18.5" r="2" />
-                    <circle cx="18.5" cy="18.5" r="2" />
-                  </svg>
-                  <span>ຂົນສົ່ງ · ໝາຍເຫດ</span>
-                </span>
-                <span className="text-odoo-text-muted">
-                  {extrasOpen ? "▲" : "▼"}
-                </span>
-              </button>
-              {extrasOpen ? (
-                <div className="border-t border-odoo-border bg-odoo-surface-muted px-3 py-3">
-                  <div className="pos-extras-grid">
-                    <div>
-                      <label className="odoo-label">ຂົນສົ່ງ</label>
-                      <select
-                        value={transportCode}
-                        onChange={(e) => setTransportCode(e.target.value)}
-                        className="odoo-input"
-                      >
-                        <option value="">ເລືອກຂົນສົ່ງ</option>
-                        {transportTypes.map((t) => (
-                          <option key={t.code} value={t.code}>
-                            {t.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                    {isSelfPickup ? null : (
-                      <div>
-                        <label className="odoo-label">ຊື່ຜູ້ຮັບ / ຈັດສົ່ງ</label>
-                        <input
-                          type="text"
-                          value={deliveryName}
-                          onChange={(e) => setDeliveryName(e.target.value)}
-                          className="odoo-input"
-                          placeholder="ບໍ່ບັງຄັບ"
-                        />
-                      </div>
-                    )}
-                    <div>
-                      <label className="odoo-label">ວັນຮັບສິນຄ້າ</label>
-                      <input
-                        type="date"
-                        value={receiveDate}
-                        onChange={(e) => setReceiveDate(e.target.value)}
-                        className="odoo-input"
-                      />
-                    </div>
-                    <div className="col-span-full">
-                      <label className="odoo-label">ໝາຍເຫດ</label>
-                      <textarea
-                        value={note}
-                        onChange={(e) => setNote(e.target.value)}
-                        rows={2}
-                        className="odoo-textarea"
-                        placeholder="ບໍ່ບັງຄັບ"
-                      />
-                    </div>
+            {/* >640px: delivery round summary + fields inline, as before. */}
+            <div className="pos-delivery-inline">
+              {/* ສະຫຼຸບບິນຈັດສົ່ງ ຕາມຮອບ ຂອງວັນຮັບສິນຄ້າ — ດຶງຈາກ TMS */}
+              <DeliveryTodayCard date={receiveDate || undefined} />
+
+              {/* ຂົນສົ່ງ · ໝາຍເຫດ — ຍ້າຍລົງລຸ່ມຍອດລວມ */}
+              <div className="mt-3 overflow-hidden rounded-md border border-odoo-border">
+                <button
+                  type="button"
+                  onClick={() => setExtrasOpen((v) => !v)}
+                  className="flex w-full items-center justify-between gap-2 bg-odoo-surface-muted px-3 py-2.5 text-left text-[12px] font-bold text-odoo-text-strong transition hover:brightness-95"
+                >
+                  <span className="flex items-center gap-2">
+                    <svg
+                      viewBox="0 0 24 24"
+                      width="15"
+                      height="15"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden
+                    >
+                      <rect x="1" y="3" width="15" height="13" rx="1" />
+                      <path d="M16 8h4l3 3v5h-7z" />
+                      <circle cx="5.5" cy="18.5" r="2" />
+                      <circle cx="18.5" cy="18.5" r="2" />
+                    </svg>
+                    <span>ຂົນສົ່ງ · ໝາຍເຫດ</span>
+                  </span>
+                  <span className="text-odoo-text-muted">
+                    {extrasOpen ? "▲" : "▼"}
+                  </span>
+                </button>
+                {extrasOpen ? (
+                  <div className="border-t border-odoo-border bg-odoo-surface-muted px-3 py-3">
+                    {deliveryFormFields}
                   </div>
-                </div>
-              ) : null}
+                ) : null}
+              </div>
             </div>
 
             {submitError ? (
@@ -2861,6 +2897,45 @@ function PosScreen({
         )}
       </div>
 
+      {/* Mobile delivery sheet — the delivery block on its own screen. */}
+      {deliverySheetOpen ? (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/40 sm:items-center sm:px-4">
+          <button
+            type="button"
+            aria-label="ປິດ"
+            className="absolute inset-0 cursor-default"
+            onClick={() => setDeliverySheetOpen(false)}
+          />
+          <div className="relative flex max-h-[92dvh] w-full max-w-md flex-col overflow-hidden rounded-t-2xl bg-white shadow-2xl sm:rounded-2xl">
+            <header className="flex items-center justify-between gap-3 border-b border-odoo-border px-4 py-3">
+              <div className="text-base font-black text-odoo-text-strong">
+                ຂົນສົ່ງ · ໝາຍເຫດ
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeliverySheetOpen(false)}
+                className="odoo-btn odoo-btn-secondary"
+              >
+                ປິດ
+              </button>
+            </header>
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+              <DeliveryTodayCard date={receiveDate || undefined} />
+              <div className="mt-3">{deliveryFormFields}</div>
+            </div>
+            <div className="border-t border-odoo-border p-3">
+              <button
+                type="button"
+                onClick={() => setDeliverySheetOpen(false)}
+                className="pos-mobile-paybar-btn w-full"
+              >
+                ບັນທຶກ · ກັບໄປສະຫຼຸບບິນ
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* Customer picker overlay */}
       {productPickerOpen ? (
         <ProductPickerModal
@@ -2874,6 +2949,7 @@ function PosScreen({
           error={productPickerError}
           onPickProduct={pickProductForModal}
           onPickLocation={addPickedProduct}
+          onClearProduct={() => setProductPickerProduct(null)}
           onClose={closeProductPicker}
         />
       ) : null}
@@ -3320,6 +3396,7 @@ function ProductPickerModal({
   error,
   onPickProduct,
   onPickLocation,
+  onClearProduct,
   onClose,
 }: {
   query: string;
@@ -3332,6 +3409,7 @@ function ProductPickerModal({
   error: string | null;
   onPickProduct: (p: Product) => void;
   onPickLocation: (opt: WhLocOption) => void;
+  onClearProduct: () => void;
   onClose: () => void;
 }) {
   return (
@@ -3344,12 +3422,42 @@ function ProductPickerModal({
       />
       <div className="product-picker-modal relative flex h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-2xl border border-odoo-border bg-white shadow-2xl sm:h-[82dvh] sm:rounded-2xl">
         <header className="flex items-center justify-between gap-3 border-b border-odoo-border bg-white px-4 py-3">
-          <div className="min-w-0">
-            <div className="text-base font-black text-odoo-text-strong">
-              ເພີ່ມສິນຄ້າ
-            </div>
-            <div className="mt-0.5 text-[11px] font-semibold text-odoo-text-muted">
-              1. ເລືອກສິນຄ້າ · 2. ເລືອກສາງ/location · 3. ເຂົ້າ cart
+          <div className="flex min-w-0 items-center gap-2">
+            {/* Mobile phase 2: back to the product list */}
+            {selectedProduct ? (
+              <button
+                type="button"
+                onClick={onClearProduct}
+                aria-label="ກັບໄປເລືອກສິນຄ້າ"
+                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-odoo-border text-lg font-black text-odoo-text-strong md:hidden"
+              >
+                ←
+              </button>
+            ) : null}
+            <div className="min-w-0">
+              <div className="text-base font-black text-odoo-text-strong">
+                {selectedProduct ? (
+                  <>
+                    <span className="md:hidden">ເລືອກສາງ</span>
+                    <span className="hidden md:inline">ເພີ່ມສິນຄ້າ</span>
+                  </>
+                ) : (
+                  "ເພີ່ມສິນຄ້າ"
+                )}
+              </div>
+              <div className="mt-0.5 truncate text-[11px] font-semibold text-odoo-text-muted">
+                {selectedProduct ? (
+                  <>
+                    <span className="md:hidden">{selectedProduct.name}</span>
+                    <span className="hidden md:inline">1. ເລືອກສິນຄ້າ · 2. ເລືອກສາງ/location · 3. ເຂົ້າ cart</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="md:hidden">ຂັ້ນ 1/2 · ກົດສິນຄ້າເພື່ອເລືອກສາງ</span>
+                    <span className="hidden md:inline">1. ເລືອກສິນຄ້າ · 2. ເລືອກສາງ/location · 3. ເຂົ້າ cart</span>
+                  </>
+                )}
+              </div>
             </div>
           </div>
           <button type="button" onClick={onClose} className="odoo-btn odoo-btn-secondary">
@@ -3358,7 +3466,14 @@ function ProductPickerModal({
         </header>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 md:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
-          <section className="flex min-h-0 flex-col border-b border-odoo-border md:border-b-0 md:border-r">
+          <section
+            className={
+              "min-h-0 flex-col border-b border-odoo-border md:border-b-0 md:border-r " +
+              // Mobile shows one phase at a time: the product list hides once a
+              // product is picked (the location phase takes the full sheet).
+              (selectedProduct ? "hidden md:flex" : "flex")
+            }
+          >
             <div className="border-b border-odoo-border p-3">
               <div className="pos-search-wrap">
                 <span className="pos-search-icon" aria-hidden>
@@ -3452,7 +3567,12 @@ function ProductPickerModal({
             </div>
           </section>
 
-          <section className="flex min-h-0 flex-col bg-white">
+          <section
+            className={
+              "min-h-0 flex-col bg-white " +
+              (selectedProduct ? "flex" : "hidden md:flex")
+            }
+          >
             <div className="border-b border-odoo-border px-4 py-3">
               <div className="text-sm font-black text-odoo-text-strong">
                 ເລືອກສາງ / location
@@ -3873,8 +3993,26 @@ function CustomerPicker({
               ກຳລັງໂຫລດລູກຄ້າ...
             </li>
           ) : matches.length === 0 ? (
-            <li className="px-4 py-6 text-center text-sm text-odoo-text-muted">
-              {query.trim() ? "ບໍ່ພົບລູກຄ້າ" : "ພິມຄົ້ນຫາເພື່ອເບິ່ງລາຍການອື່ນ"}
+            <li className="px-4 py-8 text-center">
+              {query.trim() ? (
+                <>
+                  <div className="text-sm font-semibold text-odoo-text-muted">
+                    ບໍ່ພົບລູກຄ້າ &ldquo;{query.trim()}&rdquo;
+                  </div>
+                  <button
+                    type="button"
+                    onClick={onAddNew}
+                    className="mt-3 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-odoo-primary px-6 text-sm font-black text-white shadow-md transition hover:brightness-110 active:scale-[0.98]"
+                  >
+                    + ລົງທະບຽນສະມາຊິກໃໝ່
+                  </button>
+                  <div className="mt-2 text-[11px] text-odoo-text-muted">
+                    ຫຼື ປິດແລ້ວຂາຍແບບ walk-in ໄດ້ເລີຍ
+                  </div>
+                </>
+              ) : (
+                <span className="text-sm text-odoo-text-muted">ພິມຄົ້ນຫາເພື່ອເບິ່ງລາຍການອື່ນ</span>
+              )}
             </li>
           ) : (
             matches.map((c) => (
