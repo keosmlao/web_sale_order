@@ -19,11 +19,17 @@ async function signedInPath(employeeCode: string | null): Promise<string> {
   return explicitRole === "pc" || explicitRole === "salesperson" ? "/orders/new" : "/";
 }
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ line?: string }>;
+}) {
   const employee = await getCurrentEmployee();
   if (employee) redirect(await signedInPath(employee.employeeCode));
 
   const year = new Date().getFullYear();
+  // Arriving from an unlinked LINE sign-in: one normal login links it.
+  const lineLinkNotice = (await searchParams)?.line === "link";
 
   return (
     <div className="login-shell">
@@ -99,6 +105,15 @@ export default async function LoginPage() {
             <h2>ເຂົ້າສູ່ລະບົບ</h2>
             <p>ກະລຸນາໃສ່ລະຫັດພະນັກງານ ແລະ ລະຫັດຜ່ານຂອງທ່ານ</p>
           </div>
+
+          {lineLinkNotice ? (
+            <div className="mb-3 flex items-center gap-2 rounded-lg border border-[#06C755]/30 bg-[#06C755]/10 px-3 py-2.5 text-xs font-bold text-emerald-800">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="#06C755" aria-hidden className="shrink-0">
+                <path d="M12 2C6.48 2 2 5.64 2 10.13c0 4.03 3.58 7.4 8.41 8.04.33.07.77.22.89.5.1.26.07.66.03.92l-.14.86c-.04.26-.2 1.02.89.56 1.1-.46 5.93-3.49 8.09-5.98C21.75 13.31 22 11.78 22 10.13 22 5.64 17.52 2 12 2Z" />
+              </svg>
+              ເຂົ້າລະບົບຄັ້ງນີ້ຄັ້ງດຽວ — ລະບົບຈະຜູກບັນຊີ LINE ໃຫ້ອັດຕະໂນມັດ, ຄັ້ງຕໍ່ໄປກົດ LINE ເຂົ້າໄດ້ເລີຍ
+            </div>
+          ) : null}
 
           <LoginForm />
 

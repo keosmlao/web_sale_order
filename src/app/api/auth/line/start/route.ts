@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { lineChannelId, lineLoginConfigured, randomState } from "@/lib/line";
+import { lineCallbackUrl, lineChannelId, lineLoginConfigured, randomState } from "@/lib/line";
 
 // Kick off LINE Login: remember a CSRF state in a short-lived cookie and
 // send the user to LINE's authorize page. Callback lands on
@@ -11,7 +11,7 @@ export async function GET(request: NextRequest) {
   }
 
   const state = randomState();
-  const redirectUri = new URL("/api/auth/line/callback", request.nextUrl.origin).toString();
+  const redirectUri = lineCallbackUrl(request.nextUrl.origin);
 
   const authorize = new URL("https://access.line.me/oauth2/v2.1/authorize");
   authorize.searchParams.set("response_type", "code");

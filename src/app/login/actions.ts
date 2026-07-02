@@ -1,5 +1,6 @@
 "use server";
 
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import {
@@ -9,6 +10,7 @@ import {
   setSessionCookie,
   verifyPassword,
 } from "@/lib/auth";
+import { verifyPayload } from "@/lib/line";
 
 export type LoginState = { error?: string };
 
@@ -51,6 +53,31 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
       where: { employeeCode: code },
       data: { password: await hashPassword(password) },
     });
+  }
+
+  // If this login was reached from an unlinked LINE sign-in (pending cookie
+  // set by /api/auth/line/callback), link that LINE account now — silently.
+  // Next time the LINE button signs them straight in.
+  const jar = await cookies();
+  const pendingLine = verifyPayload<{ lineUserId: string; displayName: string }>(
+    jar.get("line_link_pending")?.value,
+  );
+  if (pendingLine?.lineUserId) {
+    // odg_employee.line_id is the primary LINE↔employee mapping (already
+    // populated for most staff via the LINE OA); app_employee_line keeps the
+    // display name + link history.
+    await prisma.$executeRaw`
+      UPDATE odg_employee SET line_id = ${pendingLine.lineUserId}
+      WHERE employee_code = ${employee.employeeCode}
+    `.catch(() => undefined);
+    await prisma.$executeRaw`
+      INSERT INTO app_employee_line (line_user_id, employee_code, display_name)
+      VALUES (${pendingLine.lineUserId}, ${employee.employeeCode}, ${pendingLine.displayName})
+      ON CONFLICT (line_user_id)
+      DO UPDATE SET employee_code = EXCLUDED.employee_code,
+                    display_name = EXCLUDED.display_name
+    `.catch(() => undefined);
+    jar.delete("line_link_pending");
   }
 
   await setSessionCookie(employee.employeeCode!);

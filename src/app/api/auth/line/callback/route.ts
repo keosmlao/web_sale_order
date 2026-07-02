@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth";
 import {
+  lineCallbackUrl,
   lineChannelId,
   lineChannelSecret,
   lineLoginConfigured,
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest) {
     return fail("line-state");
   }
 
-  const redirectUri = new URL("/api/auth/line/callback", request.nextUrl.origin).toString();
+  const redirectUri = lineCallbackUrl(request.nextUrl.origin);
 
   try {
     const tokenRes = await fetch("https://api.line.me/oauth2/v2.1/token", {
@@ -53,12 +54,30 @@ export async function GET(request: NextRequest) {
     };
     if (!profile.userId) return fail("line-profile");
 
-    // Already linked → straight in.
-    const linked = await prisma.$queryRaw<Array<{ employee_code: string }>>`
-      SELECT employee_code FROM app_employee_line
-      WHERE line_user_id = ${profile.userId}
+    // Match the LINE user straight against the roster: odg_employee.line_id
+    // already holds LINE userIds (collected via the shop's LINE OA — works
+    // because the Login channel lives under the same provider). Fall back to
+    // app_employee_line for accounts linked through the app itself.
+    const linked = await prisma.$queryRaw<Array<{ employee_code: string; employment_status: string | null }>>`
+      SELECT q.employee_code, e.employment_status
+      FROM (
+        SELECT employee_code, 0 AS pr FROM odg_employee
+          WHERE line_id = ${profile.userId}
+        UNION ALL
+        SELECT employee_code, 1 FROM app_employee_line
+          WHERE line_user_id = ${profile.userId}
+      ) q
+      JOIN odg_employee e ON e.employee_code = q.employee_code
+      ORDER BY q.pr
       LIMIT 1
     `;
+    if (
+      linked[0] &&
+      linked[0].employment_status &&
+      linked[0].employment_status !== "ACTIVE"
+    ) {
+      return fail("line-inactive");
+    }
     const employeeCode = linked[0]?.employee_code;
     if (employeeCode) {
       const roleRows = await prisma.$queryRaw<Array<{ app_role: string | null }>>`
@@ -80,8 +99,10 @@ export async function GET(request: NextRequest) {
       return res;
     }
 
-    // Not linked yet → one-time link step (employee code + password).
-    const res = NextResponse.redirect(new URL("/login/link-line", request.url));
+    // Not linked yet → back to the normal login page; a successful normal
+    // login while the pending cookie is set links this LINE account
+    // automatically (see loginAction). No extra screen.
+    const res = NextResponse.redirect(new URL("/login?line=link", request.url));
     res.cookies.set(
       "line_link_pending",
       signPayload(

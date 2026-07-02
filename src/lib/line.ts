@@ -26,6 +26,17 @@ export function lineChannelSecret(): string {
   return v;
 }
 
+// The redirect_uri must EXACTLY match a Callback URL registered in the LINE
+// console. By default it is derived from the request origin; set
+// LINE_LOGIN_CALLBACK_URL to pin it (e.g. behind a reverse proxy where the
+// app sees http://internal instead of the public https origin).
+export function lineCallbackUrl(requestOrigin: string): string {
+  return (
+    process.env.LINE_LOGIN_CALLBACK_URL ||
+    new URL("/api/auth/line/callback", requestOrigin).toString()
+  );
+}
+
 // --- tiny HMAC-signed tokens (state cookie / pending-link cookie) ----------
 
 function secret(): string {
