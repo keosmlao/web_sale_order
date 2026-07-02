@@ -7406,3 +7406,11 @@ a {
     flex-wrap: wrap;
   }
 }
+
+/* Phone: no submit button in the POS search bar — results are live while
+   typing and Enter / barcode scanners still submit the form. */
+@media (max-width: 640px) {
+  .pos-shell2 .pos-search-bar-btn {
+    display: none;
+  }
+}
