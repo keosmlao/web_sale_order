@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { createSessionToken, SESSION_COOKIE_NAME } from "@/lib/auth";
 import {
   lineCallbackUrl,
+  linePublicOrigin,
   lineChannelId,
   lineChannelSecret,
   lineLoginConfigured,
@@ -14,8 +15,11 @@ import {
 // the LINE profile, then either sign the linked employee in or hand off to
 // the one-time link page (/login/link-line).
 export async function GET(request: NextRequest) {
+  // Browser-facing redirects must use the PUBLIC origin — behind the reverse
+  // proxy request.url is the internal host (e.g. localhost:3004).
+  const publicOrigin = linePublicOrigin(request.nextUrl.origin);
   const fail = (reason: string) =>
-    NextResponse.redirect(new URL(`/login?error=${reason}`, request.url));
+    NextResponse.redirect(new URL(`/login?error=${reason}`, publicOrigin));
 
   if (!lineLoginConfigured()) return fail("line");
 
@@ -87,7 +91,7 @@ export async function GET(request: NextRequest) {
       `;
       const role = roleRows[0]?.app_role?.trim().toLowerCase();
       const dest = role === "pc" || role === "salesperson" ? "/orders/new" : "/";
-      const res = NextResponse.redirect(new URL(dest, request.url));
+      const res = NextResponse.redirect(new URL(dest, publicOrigin));
       res.cookies.set(SESSION_COOKIE_NAME, createSessionToken(employeeCode), {
         httpOnly: true,
         sameSite: "lax",
@@ -102,7 +106,7 @@ export async function GET(request: NextRequest) {
     // Not linked yet → back to the normal login page; a successful normal
     // login while the pending cookie is set links this LINE account
     // automatically (see loginAction). No extra screen.
-    const res = NextResponse.redirect(new URL("/login?line=link", request.url));
+    const res = NextResponse.redirect(new URL("/login?line=link", publicOrigin));
     res.cookies.set(
       "line_link_pending",
       signPayload(

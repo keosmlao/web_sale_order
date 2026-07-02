@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { lineCallbackUrl, lineChannelId, lineLoginConfigured, randomState } from "@/lib/line";
+import { lineCallbackUrl, linePublicOrigin, lineChannelId, lineLoginConfigured, randomState } from "@/lib/line";
 
 // Kick off LINE Login: remember a CSRF state in a short-lived cookie and
 // send the user to LINE's authorize page. Callback lands on
 // /api/auth/line/callback.
 export async function GET(request: NextRequest) {
   if (!lineLoginConfigured()) {
-    return NextResponse.redirect(new URL("/login?error=line", request.url));
+    return NextResponse.redirect(new URL("/login?error=line", linePublicOrigin(request.nextUrl.origin)));
   }
 
   const state = randomState();

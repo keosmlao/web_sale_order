@@ -37,6 +37,22 @@ export function lineCallbackUrl(requestOrigin: string): string {
   );
 }
 
+// Public origin for browser-facing redirects. Behind a reverse proxy the
+// request origin is the INTERNAL host (e.g. https://localhost:3004), so
+// redirecting relative to it would send the browser to localhost. When
+// LINE_LOGIN_CALLBACK_URL is pinned, its origin is the public one.
+export function linePublicOrigin(requestOrigin: string): string {
+  const pinned = process.env.LINE_LOGIN_CALLBACK_URL;
+  if (pinned) {
+    try {
+      return new URL(pinned).origin;
+    } catch {
+      /* fall through */
+    }
+  }
+  return requestOrigin;
+}
+
 // --- tiny HMAC-signed tokens (state cookie / pending-link cookie) ----------
 
 function secret(): string {
