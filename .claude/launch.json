@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "pos-repro",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["/private/tmp/claude-501/-Users-mac-Desktop-ODIENGROUP-ODG2026-web-sale-order/030c2dc7-571a-4bc2-98c3-33c49648cd0d/scratchpad/repro/server.js"],
+      "port": 8787
+    }
+  ]
+}

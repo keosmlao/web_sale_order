@@ -43,6 +43,7 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   { key: "/reports/promo-effectiveness", label: "ປະສິດທິພາບໂປຣ", section: "Reports" },
   { key: "/reports/daily-payments", label: "ສະຫຼຸບການຮັບເງິນ", section: "Reports" },
   { key: "/reports/salespeople", label: "ຍອດຂາຍຕາມພະນັກງານ", section: "Reports" },
+  { key: "/reports/incentives", label: "ໂບນັດພະນັກງານຂາຍ", section: "Reports" },
   { key: "/reports/items", label: "ສິນຄ້າຂາຍດີ", section: "Reports" },
   { key: "/reports/stock-refill", label: "ຂໍເຕີມສະຕ້ອກ", section: "Reports" },
 
@@ -58,8 +59,10 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   { key: "/monitor", label: "ຕິດຕາມມືຖື sale", section: "Management" },
   { key: "/settings/sales-warehouses", label: "ສາງຂາຍ", section: "Management · ການຕັ້ງຄ່າ" },
   { key: "/settings/stock-minimum", label: "Minimum Stock", section: "Management · ການຕັ້ງຄ່າ" },
+  { key: "/settings/incentives", label: "Config Incentive", section: "Management · ການຕັ້ງຄ່າ" },
   { key: "/settings/barcodes", label: "Barcode ສິນຄ້າ", section: "Management · ການຕັ້ງຄ່າ" },
   { key: "/settings/payment-accounts", label: "ບັນຊີຮັບເງິນ", section: "Management · ການຕັ້ງຄ່າ" },
+  { key: "/settings/test-mode", label: "ໂໝດທົດສອບ ໂອນເງິນ", section: "Management · ການຕັ້ງຄ່າ" },
   { key: "/promotions", label: "ໂປຣໂມຊັນ", section: "Management · ການຕັ້ງຄ່າ" },
   { key: "/loyalty", label: "ສະສົມແຕ້ມ", section: "Management · ການຕັ້ງຄ່າ" },
 ];

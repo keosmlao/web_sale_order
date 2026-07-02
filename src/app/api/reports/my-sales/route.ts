@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
+import { roleFromEmployee } from "@/lib/roles";
 
 type Totals = { sales: string | number | null; qty: string | number | null; target: string | number | null };
 type DailyRow = { d: Date; sales: string | number; qty: string | number };
@@ -112,20 +113,86 @@ export async function GET(request: NextRequest) {
     ]);
 
     const t = totalsRows[0] ?? { sales: 0, qty: 0, target: 0 };
-    const sales = num(t.sales);
-    const target = num(t.target);
+    let sales = num(t.sales);
+    let qty = num(t.qty);
+    let target = num(t.target);
+    let scope: "employee" | "team" = "employee";
+    let dailyOutput = daily;
+    const role = roleFromEmployee(employee);
+
+    // Supervisors normally do not carry a personal retail target. Keep the
+    // comparison visible on their homepage by showing the full targeted team.
+    if (target <= 0 && (role === "manager" || role === "head")) {
+      const [teamRows, teamDailyRows] = await Promise.all([prisma.$queryRaw<Totals[]>`
+        WITH roster AS (
+          SELECT DISTINCT emp_code
+          FROM odg_retail_target_employee
+          WHERE year = ${year.toString()}
+            AND LPAD(month, 2, '0') = LPAD(${month.toString()}, 2, '0')
+        ), names AS (
+          SELECT employee.employee_code, employee.fullname_lo AS salename
+          FROM odg_employee employee JOIN roster ON roster.emp_code = employee.employee_code
+          WHERE COALESCE(employee.fullname_lo, '') <> ''
+          UNION
+          SELECT alias.employee_code, alias.salename
+          FROM app_incentive_sale_alias alias JOIN roster ON roster.emp_code = alias.employee_code
+        )
+        SELECT
+          COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
+            WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+              AND detail.doc_date >= make_date(${year}, ${month}, 1)
+              AND detail.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+              AND detail.salename IN (SELECT salename FROM names)), 0) AS sales,
+          COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
+            WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+              AND detail.doc_date >= make_date(${year}, ${month}, 1)
+              AND detail.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+              AND detail.salename IN (SELECT salename FROM names)), 0) AS qty,
+          COALESCE((SELECT SUM(employee_target.target) FROM odg_retail_target_employee employee_target
+            WHERE employee_target.year = ${year.toString()}
+              AND LPAD(employee_target.month, 2, '0') = LPAD(${month.toString()}, 2, '0')), 0) AS target
+      `, prisma.$queryRaw<DailyRow[]>`
+        WITH roster AS (
+          SELECT DISTINCT emp_code FROM odg_retail_target_employee
+          WHERE year = ${year.toString()}
+            AND LPAD(month, 2, '0') = LPAD(${month.toString()}, 2, '0')
+        ), names AS (
+          SELECT employee.fullname_lo AS salename
+          FROM odg_employee employee JOIN roster ON roster.emp_code = employee.employee_code
+          WHERE COALESCE(employee.fullname_lo, '') <> ''
+          UNION SELECT alias.salename FROM app_incentive_sale_alias alias
+          JOIN roster ON roster.emp_code = alias.employee_code
+        )
+        SELECT detail.doc_date::date AS d,
+               COALESCE(SUM(detail.sum_amount), 0) AS sales,
+               COALESCE(SUM(detail.qty), 0) AS qty
+        FROM odg_sale_detail detail
+        WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+          AND detail.doc_date >= make_date(${year}, ${month}, 1)
+          AND detail.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+          AND detail.salename IN (SELECT salename FROM names)
+        GROUP BY detail.doc_date::date ORDER BY d
+      `]);
+      const team = teamRows[0];
+      sales = num(team?.sales);
+      qty = num(team?.qty);
+      target = num(team?.target);
+      scope = "team";
+      dailyOutput = teamDailyRows;
+    }
     return NextResponse.json({
       year,
       month,
       displayName: emp[0]?.display_name ?? empCode,
       employeeCode: empCode,
       totalSales: sales,
-      totalQty: num(t.qty),
+      totalQty: qty,
       target,
+      scope,
       achievementPct: target > 0 ? sales / target : 0,
       rank: Number(rankRows[0]?.rnk ?? 0),
       teamSize: Number(rankRows[0]?.team ?? 0),
-      daily: daily.map((r) => ({ date: r.d.toISOString().slice(0, 10), sales: num(r.sales), qty: num(r.qty) })),
+      daily: dailyOutput.map((r) => ({ date: r.d.toISOString().slice(0, 10), sales: num(r.sales), qty: num(r.qty) })),
       categories: categories.map((r) => ({ name: r.name ?? "ອື່ນໆ", sales: num(r.sales), qty: num(r.qty) })),
     });
   } catch (error) {

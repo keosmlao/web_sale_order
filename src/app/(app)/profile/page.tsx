@@ -4,8 +4,6 @@ import { roleFromEmployee } from "@/lib/roles";
 import { getHiddenMenuKeys } from "@/lib/menu-visibility";
 import { MENU_REGISTRY, ROLE_LABELS } from "@/lib/menu-registry";
 import { logoutAction } from "@/app/login/actions";
-import MyTargetCard from "../MyTargetCard";
-import MyBonusCard from "../MyBonusCard";
 
 export const dynamic = "force-dynamic";
 
@@ -37,12 +35,6 @@ export default async function ProfilePage() {
           <span className="mt-1 inline-block rounded-full bg-white/15 px-2 py-0.5 text-[11px] font-bold">{ROLE_LABELS[role] ?? role}</span>
         </div>
       </div>
-
-      {/* My target + bonus (shown for salespeople with a target) */}
-      <div className="mt-4">
-        <MyTargetCard />
-      </div>
-      <MyBonusCard />
 
       {/* Quick links */}
       <Link href="/reports/my-sales" className="odoo-card mt-3 flex items-center justify-between p-4 transition hover:bg-odoo-surface-muted">

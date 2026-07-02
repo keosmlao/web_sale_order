@@ -18,14 +18,56 @@ const canManage = (employee: Awaited<ReturnType<typeof getEmployeeFromRequest>>)
   return role === "manager" || role === "head";
 };
 
+// Distinct pick-list values sourced from the reference tables so the editor's
+// ໝວດ/ຍີ່ຫໍ້/ດີໄຊ/ຂະໜາດ fields are dropdowns pulled from the database rather
+// than free text. Each query is best-effort — a missing table yields [] and
+// never breaks the point-map rows.
+async function listOptions() {
+  const pick = async (q: Promise<Array<{ v: string | null }>>): Promise<string[]> => {
+    try {
+      const rows = await q;
+      return [...new Set(rows.map((r) => (r.v ?? "").trim()).filter(Boolean))];
+    } catch {
+      return [];
+    }
+  };
+  const [categories, brands, designTokens, sizeTokens] = await Promise.all([
+    pick(prisma.$queryRaw`
+      SELECT DISTINCT pointmap_category AS v FROM app_incentive_category
+      WHERE COALESCE(pointmap_category, '') <> '' ORDER BY 1
+    `),
+    pick(prisma.$queryRaw`
+      SELECT brand_code AS v FROM app_incentive_point_map WHERE COALESCE(brand_code, '') <> ''
+      UNION
+      SELECT brand_code AS v FROM app_incentive_brand_weight WHERE COALESCE(brand_code, '') <> ''
+      ORDER BY 1
+    `),
+    pick(prisma.$queryRaw`
+      SELECT DISTINCT design_token AS v FROM app_incentive_design_token
+      WHERE COALESCE(design_token, '') <> '' ORDER BY 1
+    `),
+    pick(prisma.$queryRaw`
+      SELECT DISTINCT size_token AS v FROM app_incentive_size_token
+      WHERE COALESCE(size_token, '') <> '' ORDER BY 1
+    `),
+  ]);
+  return { categories, brands, designTokens, sizeTokens };
+}
+
 async function listRows() {
   const rows = await prisma.$queryRaw<PointRow[]>`
     SELECT category_code, brand_code, design_token, size_token, points
     FROM app_incentive_point_map
     ORDER BY category_code, brand_code, design_token, size_token
   `;
+  const options = await listOptions();
+  const rowCats = [...new Set(rows.map((r) => r.category_code))];
+  // Category filter list = canonical categories from the reference table, plus
+  // any already present in point-map rows (so nothing gets hidden).
+  const categories = [...new Set([...options.categories, ...rowCats])];
   return {
-    categories: [...new Set(rows.map((r) => r.category_code))],
+    categories,
+    options,
     rows: rows.map((r) => ({
       categoryCode: r.category_code,
       brandCode: r.brand_code,

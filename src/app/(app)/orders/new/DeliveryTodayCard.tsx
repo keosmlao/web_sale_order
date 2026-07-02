@@ -55,8 +55,8 @@ export default function DeliveryTodayCard({ date }: { date?: string }) {
   const total = data ? data.totals.assigned + data.totals.pending : 0;
 
   return (
-    <div className="mt-3 overflow-hidden rounded-md border border-odoo-border">
-      <div className="flex items-center justify-between gap-2 bg-indigo-50 px-3 py-2.5 text-[12px] font-bold text-indigo-900">
+    <div className="pos-delivery-today mt-3 overflow-hidden rounded-md border border-odoo-border">
+      <div className="pos-delivery-today-head flex items-center justify-between gap-2 bg-indigo-50 px-3 py-2.5 text-[12px] font-bold text-indigo-900">
         <span className="flex items-center gap-2">
           <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
             <rect x="1" y="3" width="15" height="13" rx="1" />
@@ -81,7 +81,7 @@ export default function DeliveryTodayCard({ date }: { date?: string }) {
       </div>
 
       {data ? (
-        <div className="bg-odoo-surface">
+        <div className="pos-delivery-today-body bg-odoo-surface">
           <table className="w-full text-[12px]">
             <thead>
               <tr className="border-b border-odoo-border text-[10px] uppercase tracking-wide text-odoo-text-muted">

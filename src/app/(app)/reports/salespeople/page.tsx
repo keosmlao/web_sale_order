@@ -83,6 +83,35 @@ export default async function SalespeopleReportPage({
  GROUP BY t.sale_code, emp.fullname_lo, emp.nickname, emp.position_code, to_char(t.doc_date, 'YYYY-MM')
  `;
 
+ // Per-person sales target (odg_retail_target_employee) summed over the months
+ // in range. Same source the incentives report uses; AC+CE product groups are
+ // added together, taking the latest roworder per (emp, group, month).
+ // Best-effort — if the source table is missing, targets fall back to 0.
+ type TargetRow = { emp_code: string | null; target: string | number | null };
+ let targetRows: TargetRow[] = [];
+ try {
+   targetRows = await prisma.$queryRaw<TargetRow[]>`
+     WITH latest AS (
+       SELECT DISTINCT ON (emp_code, product_group, year, month)
+         emp_code, target
+       FROM odg_retail_target_employee
+       WHERE (LPAD(year::text, 4, '0') || '-' || LPAD(month::text, 2, '0'))
+             BETWEEN to_char(${from}::date, 'YYYY-MM') AND to_char(${to}::date, 'YYYY-MM')
+       ORDER BY emp_code, product_group, year, month, roworder DESC
+     )
+     SELECT emp_code, COALESCE(SUM(target), 0) AS target
+     FROM latest
+     GROUP BY emp_code
+   `;
+ } catch {
+   targetRows = [];
+ }
+ const targetByCode = new Map<string, number>();
+ for (const r of targetRows) {
+   const code = r.emp_code?.trim();
+   if (code) targetByCode.set(code, Number(r.target ?? 0));
+ }
+
  // Fold the (employee × month) rows into one aggregate per employee carrying a
  // month→baht map plus the running bill count.
  type ReceiptAgg = {
@@ -125,15 +154,18 @@ export default async function SalespeopleReportPage({
  positionCode: agg.positionCode,
  byMonth: Object.fromEntries(agg.byMonth),
  total: agg.total,
+ target: targetByCode.get(agg.code) ?? 0,
  }))
  .sort((a, b) => b.total - a.total);
 
  const grandReceipts = monthly.reduce((s, r) => s + r.total, 0);
+ const grandTarget = monthly.reduce((s, r) => s + r.target, 0);
  const grandBills = Array.from(byCode.values()).reduce((s, a) => s + a.count, 0);
 
  return (
  <SalespeopleClient
  grandReceipts={grandReceipts}
+ grandTarget={grandTarget}
  grandBills={grandBills}
  months={months}
  monthly={monthly}

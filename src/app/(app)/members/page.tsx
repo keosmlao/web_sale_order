@@ -63,7 +63,7 @@ export default function MembersPageWrapper() {
 
 function MembersSkeleton() {
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto animate-pulse">
+    <div className="px-4 py-6 sm:px-6 lg:px-8 w-full animate-pulse">
       {/* Header Skeleton */}
       <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -212,7 +212,7 @@ function MembersPage() {
   const endIdx = Math.min(currentPage * pageSize, total);
 
   return (
-    <div className="px-4 py-6 sm:px-6 lg:px-8 max-w-7xl mx-auto">
+    <div className="px-4 py-6 sm:px-6 lg:px-8 w-full">
       {/* Header */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>

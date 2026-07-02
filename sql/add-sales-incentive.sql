@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS app_incentive_config (
   low_multiplier numeric(8,4) NOT NULL DEFAULT 0.80,
   standard_multiplier numeric(8,4) NOT NULL DEFAULT 1.00,
   high_multiplier numeric(8,4) NOT NULL DEFAULT 1.10,
+  commission_base numeric(18,4) NOT NULL DEFAULT 6000,
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 

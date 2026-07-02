@@ -302,9 +302,39 @@ export async function GET(request: NextRequest) {
     // share of a split reward stays correct).
     const role = roleFromEmployee(employee);
     const isManager = role === "manager" || role === "head";
-    const visible = isManager
+    // ?self=1 forces the caller's own row only (used by the home bonus card so a
+    // manager sees THEIR own bonus, not the team). The report itself omits it.
+    const selfOnly = url.searchParams.get("self") === "1";
+    let visible = isManager && !selfOnly
       ? mapped
       : mapped.filter((row) => row.employeeCode === employee.employeeCode);
+    // The home bonus card (self=1) always renders the caller's own figures. If
+    // the caller isn't in this month's target roster — e.g. a manager/head, or a
+    // seller with no target set yet — synthesize a zero row so the card still
+    // shows (with 0 bonus / commission) instead of disappearing entirely.
+    if (selfOnly && visible.length === 0) {
+      visible = [
+        {
+          employeeCode: employee.employeeCode ?? "",
+          displayName:
+            employee.fullnameLo ?? employee.nickname ?? employee.employeeCode ?? "—",
+          groupCode: "",
+          soldQty: 0,
+          salesAmount: 0,
+          hisenseSales: 0,
+          bonusPoints: 0,
+          targetPerPerson: 0,
+          achievementPct: 0,
+          normalBonus: 0,
+          multiplier: number(config.standard_multiplier),
+          netBonus: 0,
+          specialReward: 0,
+          commissionRate: 0,
+          commission: 0,
+          totalPay: 0,
+        },
+      ];
+    }
 
     return NextResponse.json({
       year,

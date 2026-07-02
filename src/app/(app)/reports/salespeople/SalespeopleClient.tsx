@@ -10,7 +10,16 @@ export type MonthlyReceiptRow = {
  positionCode: string | null;
  byMonth: Record<string, number>;
  total: number;
+ target: number;
 };
+
+// Achievement colour tiers (mirror the commission tiers: <80% red, 80-99% amber,
+// ≥100% green).
+function achievementClass(pct: number): string {
+ if (pct >= 100) return "text-emerald-600";
+ if (pct >= 80) return "text-amber-600";
+ return "text-odoo-danger";
+}
 
 type Filters = { from: string; to: string };
 
@@ -33,12 +42,14 @@ const POSITION_LABEL: Record<string, string> = {
 
 export default function SalespeopleClient({
  grandReceipts,
+ grandTarget,
  grandBills,
  months,
  monthly,
  filters,
 }: {
  grandReceipts: number;
+ grandTarget: number;
  grandBills: number;
  months: string[];
  monthly: MonthlyReceiptRow[];
@@ -89,6 +100,16 @@ export default function SalespeopleClient({
  <div className="min-w-0">
  <div className="odoo-label mb-1">ຍອດຂາຍຈິງ (ບາດ)</div>
  <div className="font-mono text-xl font-bold text-odoo-primary">{moneyFmt.format(grandReceipts)}</div>
+ </div>
+ <div className="min-w-0">
+ <div className="odoo-label mb-1">ເປົ້າໝາຍ (ບາດ)</div>
+ <div className="font-mono text-xl font-bold text-odoo-text-strong">{moneyFmt.format(grandTarget)}</div>
+ </div>
+ <div className="min-w-0">
+ <div className="odoo-label mb-1">ບັນລຸ</div>
+ <div className={`font-mono text-xl font-bold ${grandTarget > 0 ? achievementClass((grandReceipts / grandTarget) * 100) : "text-odoo-text-muted"}`}>
+ {grandTarget > 0 ? `${((grandReceipts / grandTarget) * 100).toFixed(1)}%` : "—"}
+ </div>
  </div>
  <div className="min-w-0">
  <div className="odoo-label mb-1">ບິນ</div>
@@ -160,13 +181,15 @@ export default function SalespeopleClient({
  </th>
  ))}
  <th className="px-4 py-3 text-right">ລວມ</th>
+ <th className="px-4 py-3 text-right whitespace-nowrap">ເປົ້າໝາຍ</th>
+ <th className="px-4 py-3 text-right whitespace-nowrap">ບັນລຸ</th>
  </tr>
  </thead>
  <tbody className="divide-y divide-odoo-border">
  {monthly.length === 0 || months.length === 0 ? (
  <tr>
  <td
- colSpan={months.length + 3}
+ colSpan={months.length + 5}
  className="px-4 py-12 text-center text-sm text-odoo-text-muted"
  >
  ບໍ່ມີໃບຮັບເງິນໃນຊ່ວງວັນທີນີ້
@@ -202,6 +225,18 @@ export default function SalespeopleClient({
  <td className="px-4 py-3 text-right font-mono font-bold text-odoo-primary">
  {moneyFmt.format(r.total)}
  </td>
+ <td className="px-4 py-3 text-right font-mono text-xs text-odoo-text-strong">
+ {r.target > 0 ? moneyFmt.format(r.target) : "—"}
+ </td>
+ <td className="px-4 py-3 text-right font-mono text-xs font-bold">
+ {r.target > 0 ? (
+ <span className={achievementClass((r.total / r.target) * 100)}>
+ {((r.total / r.target) * 100).toFixed(0)}%
+ </span>
+ ) : (
+ <span className="text-odoo-text-muted">—</span>
+ )}
+ </td>
  </tr>
  ))
  )}
@@ -218,6 +253,18 @@ export default function SalespeopleClient({
  ))}
  <td className="px-4 py-3 text-right font-mono text-base text-odoo-primary">
  {moneyFmt.format(grandReceipts)}
+ </td>
+ <td className="px-4 py-3 text-right font-mono">
+ {grandTarget > 0 ? moneyFmt.format(grandTarget) : "—"}
+ </td>
+ <td className="px-4 py-3 text-right font-mono">
+ {grandTarget > 0 ? (
+ <span className={achievementClass((grandReceipts / grandTarget) * 100)}>
+ {((grandReceipts / grandTarget) * 100).toFixed(0)}%
+ </span>
+ ) : (
+ <span className="text-odoo-text-muted">—</span>
+ )}
  </td>
  </tr>
  </tfoot>

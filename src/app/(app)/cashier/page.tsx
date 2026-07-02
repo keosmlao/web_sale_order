@@ -16,6 +16,7 @@ import {
 } from "@/lib/payment";
 import ShiftBar from "./ShiftBar";
 import LowStockBanner from "./LowStockBanner";
+import OnePayWatcher from "./OnePayWatcher";
 import {
   publishCustomerDisplay,
   openCustomerDisplayWindow,
@@ -1123,11 +1124,35 @@ function SettleForm({
   // the common LAK-only flow stays uncluttered.
   const [showThb, setShowThb] = useState(false);
   const [qrPaymentSelected, setQrPaymentSelected] = useState(false);
+  // Test mode (per-device): when on, the BCEL transfer QR is generated for
+  // 1 ກີບ instead of the real amount, so the transfer flow can be tested with
+  // a real 1-kip transfer. The recorded bill amounts are unaffected.
+  const [testTransfer, setTestTransfer] = useState(false);
+  useEffect(() => {
+    let mounted = true;
+    Promise.resolve().then(() => {
+      if (!mounted) return;
+      try {
+        if (window.localStorage.getItem("pos-test-transfer") === "1") {
+          setTestTransfer(true);
+        }
+      } catch {
+        // localStorage unavailable — stay off
+      }
+    });
+    return () => {
+      mounted = false;
+    };
+  }, []);
   const [slips, setSlips] = useState<AttachedSlip[]>([]);
   const [slipBusy, setSlipBusy] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [submitBusy, setSubmitBusy] = useState(false);
   const [isPending, startTransition] = useTransition();
+  // Auto-confirm on OnePay payment: banner + guard so a single payment event
+  // settles the bill exactly once.
+  const [autoConfirming, setAutoConfirming] = useState(false);
+  const autoHandledRef = useRef(false);
 
   // Bill-level discount approval flow: cashier types an amount → "Request
   // approval" creates an app_price_request → UI polls /active-bill-discount
@@ -1239,19 +1264,36 @@ function SettleForm({
   const cashKipInput = paymentInputs[cashKipKey] ?? "0";
   const transferKipInput = paymentInputs[transferKipKey] ?? "0";
 
-  // QR transfer is always the exact bill balance. If a discount or points
-  // redemption changes the balance after QR was selected, refresh the amount
-  // automatically so the cashier never has to type or correct it.
+  // Split cash + transfer: the QR (KIP transfer) only needs to cover whatever
+  // the non-QR payments (cash KIP/THB, manual THB transfer) don't. So the
+  // cashier types the cash first, and the transfer picks up the rest.
+  const nonQrPaidInMain = numericPayments
+    .filter((p) => !(p.currency === MAIN_CURRENCY && p.method === "transfer"))
+    .reduce((s, p) => s + p.inMain, 0);
+  const transferRemaining = Math.max(
+    0,
+    Math.round(effectiveTotal - nonQrPaidInMain),
+  );
+
+  // While QR is selected, keep the transfer amount equal to whatever the cash
+  // (and other non-QR payments) don't cover — the "remaining". Recomputes live
+  // as the cashier edits cash, a discount changes the balance, etc. Does NOT
+  // wipe the cash the cashier already entered (that's what enables split
+  // cash + transfer).
   useEffect(() => {
     if (!qrPaymentSelected) return;
-    resetPayments({ [transferKipKey]: String(effectiveTotal) });
-  }, [effectiveTotal, qrPaymentSelected, transferKipKey]);
+    setTransferKipAmount(transferRemaining);
+  }, [qrPaymentSelected, transferRemaining, transferKipKey]);
 
   // Total transfer in KIP (any currency) — drives the BCEL QR on the customer
   // screen.
   const transferInMain = numericPayments
     .filter((p) => p.method === "transfer")
     .reduce((s, p) => s + p.inMain, 0);
+  // Amount actually encoded into the transfer QR (cashier + customer display).
+  // Test mode forces it to 1 ກີບ; otherwise it's the real rounded transfer.
+  const transferQrAmount =
+    testTransfer && transferInMain > 0 ? 1 : Math.round(transferInMain);
 
   // Keep the THB inputs revealed whenever they already hold a value, so a
   // collapsed section never hides money the cashier entered.
@@ -1274,7 +1316,7 @@ function SettleForm({
       paid: paidInMain,
       changeDue,
       remainingDue,
-      transferAmount: Math.round(transferInMain),
+      transferAmount: transferQrAmount,
       updatedAt: Date.now(),
     }),
     [
@@ -1283,7 +1325,7 @@ function SettleForm({
       paidInMain,
       changeDue,
       remainingDue,
-      transferInMain,
+      transferQrAmount,
     ],
   );
 
@@ -1319,10 +1361,29 @@ function SettleForm({
     setPaymentInputs({ ...reset, ...next });
   }
 
+  // Set just the KIP transfer field (leaves cash intact). Wrapped in a plain
+  // function so the sync effect below drives it without an inline setState.
+  function setTransferKipAmount(amount: number) {
+    const next = String(amount);
+    setPaymentInputs((prev) =>
+      prev[transferKipKey] === next ? prev : { ...prev, [transferKipKey]: next },
+    );
+  }
+
+  // Accept the remaining balance as a QR transfer. Keeps any cash already
+  // entered; the effect above keeps the transfer synced to the remaining.
   function selectQrPayment() {
     setQrPaymentSelected(true);
-    resetPayments({ [transferKipKey]: String(effectiveTotal) });
+    setTransferKipAmount(transferRemaining);
     openCustomerDisplay();
+  }
+
+  // Back out of the transfer (e.g. customer decides to pay all cash).
+  function cancelQrPayment() {
+    setQrPaymentSelected(false);
+    setTransferKipAmount(0);
+    autoHandledRef.current = false;
+    setAutoConfirming(false);
   }
 
   async function handleSlipFiles(files: FileList | null) {
@@ -1491,7 +1552,50 @@ function SettleForm({
       });
     } finally {
       setSubmitBusy(false);
+      setAutoConfirming(false);
     }
+  }
+
+  // Pull a numeric amount out of the OnePay payment callback (field name varies
+  // by BCEL payload), so we can match it against the QR amount before settling.
+  function extractPaidAmount(info: unknown): number | null {
+    if (!info || typeof info !== "object") return null;
+    const o = info as Record<string, unknown>;
+    for (const k of [
+      "amount",
+      "amt",
+      "txnAmount",
+      "trxAmount",
+      "trxamount",
+      "payAmount",
+      "paidAmount",
+      "total",
+    ]) {
+      const v = o[k];
+      if (v != null && v !== "" && Number.isFinite(Number(v))) {
+        return Math.round(Number(v));
+      }
+    }
+    return null;
+  }
+
+  // A OnePay transfer landed while the QR was on screen → auto-confirm (settle).
+  // If the callback carries an amount, it must match the QR amount so a payment
+  // for another bill on the shared shop channel can't settle this one.
+  function handleAutoPaid(info: unknown) {
+    if (autoHandledRef.current) return;
+    if (!canSettle || submitBusy) return;
+    const paid = extractPaidAmount(info);
+    if (
+      paid != null &&
+      transferQrAmount > 0 &&
+      Math.abs(paid - transferQrAmount) > 1
+    ) {
+      return; // amount mismatch — not this bill
+    }
+    autoHandledRef.current = true;
+    setAutoConfirming(true);
+    void submit();
   }
 
   return (
@@ -1675,7 +1779,8 @@ function SettleForm({
                     value={cashKipInput}
                     disabled={!canSettle}
                     onChange={(e) => {
-                      setQrPaymentSelected(false);
+                      // Keep any active QR selection — the transfer auto-adjusts
+                      // to the new remaining, enabling split cash + transfer.
                       setPaymentInputs((prev) => ({
                         ...prev,
                         [cashKipKey]: e.target.value,
@@ -1697,27 +1802,57 @@ function SettleForm({
               </label>
               <div className="settle-pay-field">
                 <span className="settle-pay-label">ເງິນໂອນ <b>ຜ່ານ QR</b></span>
-                <button
-                  type="button"
-                  disabled={!canSettle}
-                  onClick={selectQrPayment}
-                  className={
-                    "settle-qr-method " +
-                    (qrPaymentSelected
-                      ? "settle-qr-method--active"
-                      : "")
-                  }
-                >
-                  <span>
-                    <strong className="block text-sm">
-                      {qrPaymentSelected ? "✓ ເລືອກ QR ແລ້ວ" : "▦ ເລືອກໂອນຜ່ານ QR"}
+                {qrPaymentSelected ? (
+                  <div className="settle-qr-method settle-qr-method--active">
+                    <span>
+                      <strong className="block text-sm">✓ ຮັບໂອນຜ່ານ QR</strong>
+                      <small className="text-[10px] opacity-70">
+                        ສ່ວນທີ່ເຫຼືອ · ສະແດງ QR ໃຫ້ລູກຄ້າ
+                      </small>
+                    </span>
+                    <span className="flex items-center gap-2">
+                      <strong className="font-mono text-lg">
+                        {moneyFmt.format(Number(transferKipInput))} ₭
+                      </strong>
+                      <button
+                        type="button"
+                        disabled={!canSettle}
+                        onClick={cancelQrPayment}
+                        className="rounded-md border border-odoo-border bg-white px-2 py-1 text-[11px] font-bold text-odoo-text-muted transition hover:border-odoo-danger hover:text-odoo-danger"
+                      >
+                        ຍົກເລີກ
+                      </button>
+                    </span>
+                  </div>
+                ) : transferRemaining > 0 ? (
+                  <button
+                    type="button"
+                    disabled={!canSettle}
+                    onClick={selectQrPayment}
+                    className="settle-qr-method"
+                  >
+                    <span>
+                      <strong className="block text-sm">
+                        ▦ ຮັບສ່ວນທີ່ເຫຼືອເປັນເງິນໂອນ?
+                      </strong>
+                      <small className="text-[10px] opacity-70">
+                        ກົດເພື່ອສະແດງ QR ໃຫ້ລູກຄ້າ
+                      </small>
+                    </span>
+                    <strong className="font-mono text-lg">
+                      {moneyFmt.format(transferRemaining)} ₭
                     </strong>
-                    <small className="text-[10px] opacity-70">ບໍ່ຕ້ອງປ້ອນຈຳນວນເງິນ</small>
-                  </span>
-                  <strong className="font-mono text-lg">
-                    {moneyFmt.format(qrPaymentSelected ? Number(transferKipInput) : effectiveTotal)} ₭
-                  </strong>
-                </button>
+                  </button>
+                ) : (
+                  <div className="settle-qr-method opacity-60">
+                    <span>
+                      <small className="text-[11px]">
+                        ຮັບຄົບແລ້ວ — ບໍ່ຕ້ອງໂອນ
+                      </small>
+                    </span>
+                    <strong className="font-mono text-lg">0 ₭</strong>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -1746,7 +1881,6 @@ function SettleForm({
                       value={paymentInputs[paymentKey("01", "cash")] ?? "0"}
                       disabled={!canSettle}
                       onChange={(e) => {
-                        setQrPaymentSelected(false);
                         setPaymentInputs((prev) => ({
                           ...prev,
                           [paymentKey("01", "cash")]: e.target.value,
@@ -1793,15 +1927,38 @@ function SettleForm({
                   ໃຫ້ລູກຄ້າສະແກນ QR
                 </span>
                 <strong className="settle-pay-curtag">
-                  {moneyFmt.format(Math.round(transferInMain))} ₭
+                  {moneyFmt.format(transferQrAmount)} ₭
                 </strong>
               </div>
               <div className="flex justify-center py-1">
-                <TransferQr amount={Math.round(transferInMain)} size={210} />
+                <TransferQr amount={transferQrAmount} size={210} />
               </div>
-              <p className="mt-1 text-center text-xs text-odoo-text-muted">
-                ໃຫ້ລູກຄ້າສະແກນເພື່ອໂອນ · QR ດຽວກັນສະແດງຢູ່ໜ້າຈໍລູກຄ້າ
-              </p>
+              {/* Listen for the OnePay payment push while this QR is on screen. */}
+              <OnePayWatcher
+                active={qrPaymentSelected && transferInMain > 0 && canSettle}
+                onPaid={handleAutoPaid}
+              />
+              {autoConfirming ? (
+                <div className="mt-2 flex items-center justify-center gap-2 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-700">
+                  <span className="h-2.5 w-2.5 animate-ping rounded-full bg-emerald-500" />
+                  ✓ ລູກຄ້າໂອນສຳເລັດ — ກຳລັງຢືນຢັນອັດຕະໂນມັດ...
+                </div>
+              ) : (
+                <>
+                  <p className="mt-1 text-center text-xs text-odoo-text-muted">
+                    ⏳ ລໍຖ້າການໂອນ · ລະບົບຈະຢືນຢັນໃຫ້ອັດຕະໂນມັດເມື່ອລູກຄ້າໂອນສຳເລັດ
+                  </p>
+                  {testTransfer ? (
+                    <p className="mt-1 text-center text-[11px] font-bold text-odoo-danger">
+                      ⚠ ໂໝດທົດສອບ: QR = 1 ກີບ (ຍອດຈິງ {moneyFmt.format(Math.round(transferInMain))} ₭) · ປິດໄດ້ທີ່ ຕັ້ງຄ່າ › ໂໝດທົດສອບ
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-center text-xs text-odoo-text-muted">
+                      ໃຫ້ລູກຄ້າສະແກນເພື່ອໂອນ · QR ດຽວກັນສະແດງຢູ່ໜ້າຈໍລູກຄ້າ
+                    </p>
+                  )}
+                </>
+              )}
             </div>
           ) : null}
 

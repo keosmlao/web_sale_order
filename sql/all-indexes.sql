@@ -20,6 +20,12 @@ CREATE INDEX IF NOT EXISTS idx_ic_trans_sale_code
 CREATE INDEX IF NOT EXISTS idx_ic_trans_cust_code
   ON ic_trans (cust_code);
 
+-- Cashier order list: WHERE doc_format_code='SOK' ORDER BY create_date_time_now
+-- DESC LIMIT 200 (getCashierData). Without this the query full-scans + sorts
+-- the whole table and times out. See sql/add-cashier-order-index.sql.
+CREATE INDEX IF NOT EXISTS idx_ic_trans_sok_recent
+  ON ic_trans (doc_format_code, create_date_time_now DESC);
+
 -- ----------------------------------------------------------------------------
 -- odg_employee — staff, used on every authenticated request (layout calls
 -- requireEmployee → findUnique by employee_code).
@@ -99,6 +105,29 @@ CREATE INDEX IF NOT EXISTS idx_ic_warehouse_code
 
 CREATE INDEX IF NOT EXISTS idx_order_cart_create_date_time
   ON order_cart (create_date_time_now DESC);
+
+-- ----------------------------------------------------------------------------
+-- odg_sale_detail — denormalized sales sheet (~510k rows), scanned ~10x per
+-- home-dashboard load. Front-store cards filter branch_code='01' AND
+-- argroup_main='101' + a doc_date range (often + salename IN (...)). A PARTIAL
+-- composite index on that predicate replaces a ~1.2s Seq Scan with a tiny
+-- index range scan. See sql/add-dashboard-indexes.sql.
+-- ----------------------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_osd_frontstore
+  ON odg_sale_detail (doc_date, salename)
+  WHERE branch_code = '01' AND argroup_main = '101';
+
+-- ----------------------------------------------------------------------------
+-- ic_inventory_price — POS catalog price lookup. The /api/products query does
+-- SELECT DISTINCT ON (ic_code) over ~750k rows filtered to the active kip
+-- prices. A partial index on ic_code (active kip rows only) removes the ~143k
+-- full sort. See sql/add-pos-catalog-index.sql.
+-- ----------------------------------------------------------------------------
+CREATE INDEX IF NOT EXISTS idx_icprice_active_code
+  ON ic_inventory_price (ic_code)
+  WHERE currency_code = '02'
+    AND COALESCE(sale_price1, 0) > 0
+    AND COALESCE(status, 1) = 1;
 
 -- ----------------------------------------------------------------------------
 -- After running this file, refresh planner statistics.

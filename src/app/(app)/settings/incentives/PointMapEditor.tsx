@@ -10,7 +10,18 @@ type PointRow = {
   points: number;
 };
 
-type PointMap = { categories: string[]; rows: PointRow[] };
+type PointMapOptions = {
+  categories: string[];
+  brands: string[];
+  designTokens: string[];
+  sizeTokens: string[];
+};
+
+type PointMap = {
+  categories: string[];
+  rows: PointRow[];
+  options?: PointMapOptions;
+};
 
 const keyOf = (r: Pick<PointRow, "categoryCode" | "brandCode" | "designToken" | "sizeToken">) =>
   `${r.categoryCode}|${r.brandCode}|${r.designToken}|${r.sizeToken}`;
@@ -169,11 +180,22 @@ export default function PointMapEditor({ canManage }: { canManage: boolean }) {
         <div className="mt-4 grid gap-2 rounded-md border border-odoo-border bg-odoo-surface-muted p-3 sm:grid-cols-6">
           <input placeholder="ໝວດ (REF…)" value={draft.categoryCode} onChange={(e) => setDraft((d) => ({ ...d, categoryCode: e.target.value }))} className="odoo-input" list="pm-cats" />
           <datalist id="pm-cats">{(data?.categories ?? []).map((c) => <option key={c} value={c} />)}</datalist>
-          <input placeholder="ຍີ່ຫໍ້" value={draft.brandCode} onChange={(e) => setDraft((d) => ({ ...d, brandCode: e.target.value }))} className="odoo-input" />
-          <input placeholder="ດີໄຊ" value={draft.designToken} onChange={(e) => setDraft((d) => ({ ...d, designToken: e.target.value }))} className="odoo-input" />
-          <input placeholder="ຂະໜາດ" value={draft.sizeToken} onChange={(e) => setDraft((d) => ({ ...d, sizeToken: e.target.value }))} className="odoo-input" />
+          <input placeholder="ຍີ່ຫໍ້" value={draft.brandCode} onChange={(e) => setDraft((d) => ({ ...d, brandCode: e.target.value }))} className="odoo-input" list="pm-brands" />
+          <input placeholder="ດີໄຊ" value={draft.designToken} onChange={(e) => setDraft((d) => ({ ...d, designToken: e.target.value }))} className="odoo-input" list="pm-designs" />
+          <input placeholder="ຂະໜາດ" value={draft.sizeToken} onChange={(e) => setDraft((d) => ({ ...d, sizeToken: e.target.value }))} className="odoo-input" list="pm-sizes" />
           <input placeholder="ຄະແນນ" type="number" step="0.01" min="0" value={draft.points} onChange={(e) => setDraft((d) => ({ ...d, points: e.target.value }))} className="odoo-input" />
           <button type="button" onClick={addRow} className="odoo-btn odoo-btn-primary">ເພີ່ມ / ອັບເດດ</button>
+
+          {/* Pick-lists pulled from the database (reference tables). */}
+          <datalist id="pm-brands">
+            {(data?.options?.brands ?? []).map((b) => <option key={b} value={b} />)}
+          </datalist>
+          <datalist id="pm-designs">
+            {(data?.options?.designTokens ?? []).map((dt) => <option key={dt} value={dt} />)}
+          </datalist>
+          <datalist id="pm-sizes">
+            {(data?.options?.sizeTokens ?? []).map((s) => <option key={s} value={s} />)}
+          </datalist>
         </div>
       ) : null}
     </section>

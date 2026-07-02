@@ -4,8 +4,11 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireEmployee } from "@/lib/auth";
 import { roleFromEmployee, canApprovePriceRequests } from "@/lib/roles";
-import MyTargetCard from "./MyTargetCard";
+import MyTargetCard, { type TargetDashboard } from "./MyTargetCard";
 import MyBonusCard from "./MyBonusCard";
+import ActivePromosCard from "./ActivePromosCard";
+import LowStockBanner from "./cashier/LowStockBanner";
+import DeliveryTodayCard from "./orders/new/DeliveryTodayCard";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +20,13 @@ export const dynamic = "force-dynamic";
 // dashboard keeps it so the full storefront is represented. Drop "2042" here to
 // align the two.
 const KHUA_LUANG_DEPTS = ["2012", "2022", "2032", "2042", "2062"] as const;
+
+// odg_employee department_code(s) that make up the Khua Luang front-store sales
+// team. Used to scope the "actual sales per employee" leaderboard for managers /
+// heads so it lists only front-store departmental staff (not every person who
+// happened to ring up a front-store sale). 207 = ພະແນກຂາຍຍ່ອຍ ສາຂາຂົວຫຼວງ.
+// Add more codes here (e.g. "204", "205") if the front-store team spans them.
+const FRONT_STORE_SALE_DEPTS = ["207"] as const;
 
 type DayMetrics = {
   pending_count: bigint;
@@ -34,6 +44,13 @@ type SaleDayRow = {
   yesterday_sales: string | number | null;
   today_qty: string | number | null;
   yesterday_qty: string | number | null;
+  today_bills: bigint;
+  yesterday_bills: bigint;
+};
+
+type SaleMonthRow = {
+  month_sales: string | number | null;
+  month_bills: bigint | number | null;
 };
 
 type TopSalesperson = {
@@ -63,6 +80,31 @@ type DailyBar = {
 type PriceCounts = {
   pending: bigint;
   approved_today: bigint;
+};
+
+type HomeTargetRow = {
+  sales: string | number | null;
+  qty: string | number | null;
+  target: string | number | null;
+};
+
+type HomeTargetDailyRow = {
+  day: Date;
+  sales: string | number | null;
+  qty: string | number | null;
+};
+
+type CategoryRow = { category: string | null; amount: string | number | null; qty: string | number | null };
+type TopItemRow = { item_name: string | null; amount: string | number | null; qty: string | number | null };
+type RecentBillRow = { day: string; doc_no: string; amount: string | number | null; items: bigint };
+type MyRankRow = {
+  day_rnk: number | string | null;
+  week_rnk: number | string | null;
+  month_rnk: number | string | null;
+  team: number | string | null;
+  day_sales: number | string | null;
+  week_sales: number | string | null;
+  month_sales: number | string | null;
 };
 
 // Today's money actually received at the register — settled CAKAP receipts
@@ -102,6 +144,11 @@ const dateFmt = new Intl.DateTimeFormat("lo-LA", {
 export default async function HomePage() {
   const me = await requireEmployee();
   const role = roleFromEmployee(me);
+  const roleLabel =
+    role === "manager" ? "ຜູ້ຈັດການ"
+    : role === "head" ? "ຫົວໜ້າ"
+    : role === "pc" ? "ແຄຊເຢຍ"
+    : "ພະນັກງານຂາຍ";
   const canSeePriceRequests = canApprovePriceRequests(role);
   const displayName = me.fullnameLo || me.fullnameEn || me.employeeCode || "—";
   const greeting =
@@ -112,15 +159,55 @@ export default async function HomePage() {
   const deptIn = Prisma.sql`department_code IN (${Prisma.join([...KHUA_LUANG_DEPTS])})`;
   const deptInT = Prisma.sql`t.department_code IN (${Prisma.join([...KHUA_LUANG_DEPTS])})`;
 
+  // The home page is a PERSONAL dashboard — every "my performance" card (today,
+  // yesterday, month, week) shows only the logged-in person's own sales, for any
+  // role from salesperson up to manager. Team-wide data lives in the leaderboard
+  // card + the reports. `meNamesCte`/`meFilter` scope a query to this person via
+  // their roster name + aliases.
+  const meNamesCte = Prisma.sql`
+      WITH names AS (
+        SELECT fullname_lo AS salename FROM odg_employee
+          WHERE employee_code = ${me.employeeCode ?? ""} AND COALESCE(fullname_lo, '') <> ''
+        UNION
+        SELECT salename FROM app_incentive_sale_alias
+          WHERE employee_code = ${me.employeeCode ?? ""}
+      )`;
+  const meFilter = Prisma.sql`AND salename IN (SELECT salename FROM names)`;
+
+  // Insight cards (category / best-sellers / recent) scope: managers & heads run
+  // the whole front-store floor, so their team view aggregates ALL front-store
+  // sales (no per-seller / per-department filter — the branch/argroup WHERE
+  // already scopes it). Salespeople see only their own. (A single manager's
+  // department_code can't cover sellers spread across several selling depts, so
+  // department scoping left managers with empty cards.)
+  const insightIsTeam = role === "manager" || role === "head";
+  const insightNamesCte = insightIsTeam ? Prisma.empty : meNamesCte;
+  const insightFilter = insightIsTeam ? Prisma.empty : meFilter;
+  // Leaderboard ("ຍອດຂາຍຈິງຕາມພະນັກງານ"): managers/heads see the front-store
+  // SALES department staff (FRONT_STORE_SALE_DEPTS); a salesperson sees only
+  // their own department's peers.
+  const leaderboardDeptFilter = insightIsTeam
+    ? Prisma.sql`AND emp.department_code IN (${Prisma.join([...FRONT_STORE_SALE_DEPTS])})`
+    : Prisma.sql`AND emp.department_code = ${me.departmentCode ?? ""}`;
+
   const [
     todayRows,
-    yesterdayRows,
-    monthRows,
     topRows,
     recentRows,
     dailyRows,
     priceCountRows,
     saleDayRows,
+    homeTargetRows,
+    saleMonthRows,
+    homeTargetDailyRows,
+    pendingBillsRows,
+    categoryRows,
+    topItemRows,
+    recentMineRows,
+    myRankRows,
+    refillPendingRows,
+    monthCompareRows,
+    newMemberRows,
   ] = await Promise.all([
     prisma.$queryRaw<DayMetrics[]>`
       SELECT
@@ -135,64 +222,32 @@ export default async function HomePage() {
         AND create_date_time_now::date = CURRENT_DATE
         AND ${deptIn}
     `,
-    prisma.$queryRaw<DayMetrics[]>`
-      SELECT
-        COUNT(*) FILTER (WHERE status = 0)::bigint AS pending_count,
-        COUNT(*) FILTER (WHERE status = 1)::bigint AS completed_count,
-        COUNT(*) FILTER (WHERE status = 2)::bigint AS cancelled_count,
-        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 0), 0) AS pending_amount,
-        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 1), 0) AS completed_amount,
-        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 2), 0) AS cancelled_amount
-      FROM ic_trans
-      WHERE doc_format_code = 'SOK'
-        AND create_date_time_now::date = CURRENT_DATE - INTERVAL '1 day'
-        AND ${deptIn}
-    `,
-    prisma.$queryRaw<DayMetrics[]>`
-      SELECT
-        COUNT(*) FILTER (WHERE status = 0)::bigint AS pending_count,
-        COUNT(*) FILTER (WHERE status = 1)::bigint AS completed_count,
-        COUNT(*) FILTER (WHERE status = 2)::bigint AS cancelled_count,
-        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 0), 0) AS pending_amount,
-        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 1), 0) AS completed_amount,
-        COALESCE(SUM(total_amount_2) FILTER (WHERE status = 2), 0) AS cancelled_amount
-      FROM ic_trans
-      WHERE doc_format_code = 'SOK'
-        AND create_date_time_now >= date_trunc('month', CURRENT_DATE)
-        AND create_date_time_now < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
-        AND ${deptIn}
-    `,
     prisma.$queryRaw<TopSalesperson[]>`
+      -- Actual sales per employee this month (odg_sale_detail), salename resolved
+      -- to the employee via alias first, then roster fullname_lo.
       SELECT
-        eff.salesperson_code AS user_owner,
+        emp.employee_code AS user_owner,
         emp.fullname_lo,
         emp.nickname,
-        COUNT(*)::bigint AS orders,
-        COALESCE(SUM(t.total_amount_2), 0) AS total
-      FROM ic_trans t
+        COUNT(DISTINCT sd.doc_no)::bigint AS orders,
+        COALESCE(SUM(sd.sum_amount), 0) AS total
+      FROM odg_sale_detail sd
       LEFT JOIN LATERAL (
-        SELECT COALESCE(
-          NULLIF(NULLIF(t.sale_code, ''), '00000'),
-          NULLIF(NULLIF((
-            SELECT d.sale_code
-            FROM ic_trans_detail d
-            WHERE d.doc_no = t.doc_no
-              AND d.trans_type = t.trans_type
-              AND d.trans_flag = t.trans_flag
-            ORDER BY d.line_number
-            LIMIT 1
-          ), ''), '00000'),
-          NULLIF(t.creator_code, '')
-        ) AS salesperson_code
-      ) eff ON true
-      LEFT JOIN odg_employee emp ON emp.employee_code = eff.salesperson_code
-      WHERE t.doc_format_code = 'SOK'
-        AND t.create_date_time_now::date = CURRENT_DATE
-        AND t.status IN (0, 1)
-        AND ${deptInT}
-      GROUP BY eff.salesperson_code, emp.fullname_lo, emp.nickname
+        SELECT employee_code FROM (
+          SELECT a.employee_code, 0 AS pr FROM app_incentive_sale_alias a WHERE a.salename = sd.salename
+          UNION ALL SELECT e.employee_code, 1 FROM odg_employee e WHERE e.fullname_lo = sd.salename
+        ) q ORDER BY pr, employee_code LIMIT 1
+      ) resolved ON true
+      LEFT JOIN odg_employee emp ON emp.employee_code = resolved.employee_code
+      WHERE sd.branch_code = '01'
+        AND sd.argroup_main = '101'
+        AND sd.doc_date >= date_trunc('month', CURRENT_DATE)
+        AND sd.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+        AND resolved.employee_code IS NOT NULL
+        ${leaderboardDeptFilter}
+      GROUP BY emp.employee_code, emp.fullname_lo, emp.nickname
       ORDER BY total DESC
-      LIMIT 5
+      LIMIT 10
     `,
     prisma.$queryRaw<RecentOrder[]>`
       SELECT
@@ -227,15 +282,17 @@ export default async function HomePage() {
       LIMIT 8
     `,
     prisma.$queryRaw<DailyBar[]>`
+      ${meNamesCte}
       SELECT
-        create_date_time_now::date AS day,
-        COALESCE(SUM(total_amount_2), 0) AS total,
-        COUNT(*)::bigint AS orders
-      FROM ic_trans
-      WHERE doc_format_code = 'SOK'
-        AND create_date_time_now::date >= CURRENT_DATE - INTERVAL '6 days'
-        AND status IN (0, 1)
-        AND ${deptIn}
+        doc_date::date AS day,
+        COALESCE(SUM(sum_amount), 0) AS total,
+        COUNT(DISTINCT doc_no)::bigint AS orders
+      FROM odg_sale_detail
+      WHERE branch_code = '01'
+        AND argroup_main = '101'
+        -- sargable (no ::date cast) so the front-store index range-scans doc_date
+        AND doc_date >= CURRENT_DATE - 6
+        ${meFilter}
       GROUP BY 1
       ORDER BY 1
     `,
@@ -248,42 +305,251 @@ export default async function HomePage() {
       FROM app_price_request
     `,
     prisma.$queryRaw<SaleDayRow[]>`
-      WITH names AS (
-        -- odg_sale_detail keys the salesperson by free-text salename, so scope
-        -- to THIS employee via their roster name plus any configured aliases
-        -- (the same salename → employee mapping the my-sales report uses).
-        SELECT fullname_lo AS sn FROM odg_employee
-          WHERE employee_code = ${me.employeeCode ?? ""} AND COALESCE(fullname_lo, '') <> ''
-        UNION
-        SELECT salename FROM app_incentive_sale_alias
-          WHERE employee_code = ${me.employeeCode ?? ""}
-      )
+      ${meNamesCte}
       SELECT
         COALESCE(SUM(sum_amount) FILTER (WHERE doc_date::date = CURRENT_DATE), 0) AS today_sales,
         COALESCE(SUM(sum_amount) FILTER (WHERE doc_date::date = CURRENT_DATE - 1), 0) AS yesterday_sales,
         COALESCE(SUM(qty) FILTER (WHERE doc_date::date = CURRENT_DATE), 0) AS today_qty,
-        COALESCE(SUM(qty) FILTER (WHERE doc_date::date = CURRENT_DATE - 1), 0) AS yesterday_qty
+        COALESCE(SUM(qty) FILTER (WHERE doc_date::date = CURRENT_DATE - 1), 0) AS yesterday_qty,
+        COUNT(DISTINCT doc_no) FILTER (WHERE doc_date::date = CURRENT_DATE)::bigint AS today_bills,
+        COUNT(DISTINCT doc_no) FILTER (WHERE doc_date::date = CURRENT_DATE - 1)::bigint AS yesterday_bills
       FROM odg_sale_detail
       WHERE branch_code = '01'
         AND argroup_main = '101'
         AND doc_date >= CURRENT_DATE - 1
-        AND salename IN (SELECT sn FROM names)
+        ${meFilter}
     `,
+    role === "manager" || role === "head"
+      ? prisma.$queryRaw<HomeTargetRow[]>`
+          WITH roster AS (
+            SELECT DISTINCT emp_code FROM odg_retail_target_employee
+            WHERE year = to_char(CURRENT_DATE, 'YYYY')
+              AND LPAD(month, 2, '0') = to_char(CURRENT_DATE, 'MM')
+          ), names AS (
+            SELECT employee.fullname_lo AS salename
+            FROM odg_employee employee JOIN roster ON roster.emp_code = employee.employee_code
+            WHERE COALESCE(employee.fullname_lo, '') <> ''
+            UNION
+            SELECT alias.salename FROM app_incentive_sale_alias alias
+            JOIN roster ON roster.emp_code = alias.employee_code
+          )
+          SELECT
+            COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
+              WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+                AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
+                AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+                AND detail.salename IN (SELECT salename FROM names)), 0) AS sales,
+            COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
+              WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+                AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
+                AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+                AND detail.salename IN (SELECT salename FROM names)), 0) AS qty,
+            COALESCE((SELECT SUM(employee_target.target) FROM odg_retail_target_employee employee_target
+              WHERE employee_target.year = to_char(CURRENT_DATE, 'YYYY')
+                AND LPAD(employee_target.month, 2, '0') = to_char(CURRENT_DATE, 'MM')), 0) AS target
+        `
+      : prisma.$queryRaw<HomeTargetRow[]>`
+          WITH names AS (
+            SELECT fullname_lo AS salename FROM odg_employee
+            WHERE employee_code = ${me.employeeCode ?? ""} AND COALESCE(fullname_lo, '') <> ''
+            UNION SELECT salename FROM app_incentive_sale_alias
+            WHERE employee_code = ${me.employeeCode ?? ""}
+          )
+          SELECT
+            COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
+              WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+                AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
+                AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+                AND detail.salename IN (SELECT salename FROM names)), 0) AS sales,
+            COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
+              WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+                AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
+                AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+                AND detail.salename IN (SELECT salename FROM names)), 0) AS qty,
+            COALESCE((SELECT SUM(target) FROM odg_retail_target_employee
+              WHERE emp_code = ${me.employeeCode ?? ""}
+                AND year = to_char(CURRENT_DATE, 'YYYY')
+                AND LPAD(month, 2, '0') = to_char(CURRENT_DATE, 'MM')), 0) AS target
+        `,
+    prisma.$queryRaw<SaleMonthRow[]>`
+      ${meNamesCte}
+      SELECT
+        COALESCE(SUM(sum_amount), 0) AS month_sales,
+        COUNT(DISTINCT doc_no)::bigint AS month_bills
+      FROM odg_sale_detail
+      WHERE branch_code = '01'
+        AND argroup_main = '101'
+        AND doc_date >= date_trunc('month', CURRENT_DATE)
+        AND doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+        ${meFilter}
+    `,
+    role === "manager" || role === "head"
+      ? prisma.$queryRaw<HomeTargetDailyRow[]>`
+          WITH roster AS (
+            SELECT DISTINCT emp_code FROM odg_retail_target_employee
+            WHERE year = to_char(CURRENT_DATE, 'YYYY')
+              AND LPAD(month, 2, '0') = to_char(CURRENT_DATE, 'MM')
+          ), names AS (
+            SELECT employee.fullname_lo AS salename
+            FROM odg_employee employee JOIN roster ON roster.emp_code = employee.employee_code
+            WHERE COALESCE(employee.fullname_lo, '') <> ''
+            UNION
+            SELECT alias.salename FROM app_incentive_sale_alias alias
+            JOIN roster ON roster.emp_code = alias.employee_code
+          )
+          SELECT detail.doc_date::date AS day,
+                 COALESCE(SUM(detail.sum_amount), 0) AS sales,
+                 COALESCE(SUM(detail.qty), 0) AS qty
+          FROM odg_sale_detail detail
+          WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+            AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
+            AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+            AND detail.salename IN (SELECT salename FROM names)
+          GROUP BY detail.doc_date::date ORDER BY day
+        `
+      : prisma.$queryRaw<HomeTargetDailyRow[]>`
+          WITH names AS (
+            SELECT fullname_lo AS salename FROM odg_employee
+            WHERE employee_code = ${me.employeeCode ?? ""} AND COALESCE(fullname_lo, '') <> ''
+            UNION SELECT salename FROM app_incentive_sale_alias
+            WHERE employee_code = ${me.employeeCode ?? ""}
+          )
+          SELECT detail.doc_date::date AS day,
+                 COALESCE(SUM(detail.sum_amount), 0) AS sales,
+                 COALESCE(SUM(detail.qty), 0) AS qty
+          FROM odg_sale_detail detail
+          WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+            AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
+            AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+            AND detail.salename IN (SELECT salename FROM names)
+          GROUP BY detail.doc_date::date ORDER BY day
+        `,
+    // Cashier queue — SOK bills still awaiting settlement (front-store).
+    prisma.$queryRaw<Array<{ count: bigint; amount: string | number | null }>>`
+      SELECT COUNT(*)::bigint AS count,
+             COALESCE(SUM(total_amount_2), 0) AS amount
+      FROM ic_trans
+      WHERE doc_format_code = 'SOK'
+        AND status = 0
+        AND ${deptIn}
+    `,
+    // My sales by product category this month.
+    prisma.$queryRaw<CategoryRow[]>`
+      ${insightNamesCte}
+      SELECT COALESCE(NULLIF(item_category_name, ''), 'ອື່ນໆ') AS category,
+             COALESCE(SUM(sum_amount), 0) AS amount,
+             COALESCE(SUM(qty), 0) AS qty
+      FROM odg_sale_detail
+      WHERE branch_code = '01' AND argroup_main = '101'
+        AND doc_date >= date_trunc('month', CURRENT_DATE)
+        AND doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+        ${insightFilter}
+      GROUP BY 1 ORDER BY amount DESC LIMIT 8
+    `,
+    // My best-selling items this month.
+    prisma.$queryRaw<TopItemRow[]>`
+      ${insightNamesCte}
+      SELECT item_name,
+             COALESCE(SUM(sum_amount), 0) AS amount,
+             COALESCE(SUM(qty), 0) AS qty
+      FROM odg_sale_detail
+      WHERE branch_code = '01' AND argroup_main = '101'
+        AND doc_date >= date_trunc('month', CURRENT_DATE)
+        AND doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+        ${insightFilter}
+      GROUP BY item_name ORDER BY amount DESC LIMIT 5
+    `,
+    // My most recent bills (last 30 days).
+    prisma.$queryRaw<RecentBillRow[]>`
+      ${insightNamesCte}
+      SELECT to_char(MAX(doc_date)::date, 'YYYY-MM-DD') AS day,
+             doc_no,
+             COALESCE(SUM(sum_amount), 0) AS amount,
+             COUNT(*)::bigint AS items
+      FROM odg_sale_detail
+      WHERE branch_code = '01' AND argroup_main = '101'
+        AND doc_date >= CURRENT_DATE - 30
+        ${insightFilter}
+      GROUP BY doc_no ORDER BY MAX(doc_date) DESC LIMIT 8
+    `,
+    // My rank within my department — today / this week / this month.
+    prisma.$queryRaw<MyRankRow[]>`
+      WITH sold AS (
+        SELECT emp.employee_code, emp.department_code,
+          COALESCE(SUM(sd.sum_amount) FILTER (WHERE sd.doc_date::date = CURRENT_DATE), 0) AS day_sales,
+          COALESCE(SUM(sd.sum_amount) FILTER (WHERE sd.doc_date >= date_trunc('week', CURRENT_DATE)), 0) AS week_sales,
+          COALESCE(SUM(sd.sum_amount) FILTER (WHERE sd.doc_date >= date_trunc('month', CURRENT_DATE)), 0) AS month_sales
+        FROM odg_sale_detail sd
+        LEFT JOIN LATERAL (
+          SELECT employee_code FROM (
+            SELECT a.employee_code, 0 AS pr FROM app_incentive_sale_alias a WHERE a.salename = sd.salename
+            UNION ALL SELECT e.employee_code, 1 FROM odg_employee e WHERE e.fullname_lo = sd.salename
+          ) q ORDER BY pr, employee_code LIMIT 1
+        ) resolved ON true
+        LEFT JOIN odg_employee emp ON emp.employee_code = resolved.employee_code
+        WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+          AND sd.doc_date >= LEAST(date_trunc('month', CURRENT_DATE), date_trunc('week', CURRENT_DATE))
+          AND resolved.employee_code IS NOT NULL
+        GROUP BY emp.employee_code, emp.department_code
+      ),
+      dept AS (SELECT * FROM sold WHERE department_code = ${me.departmentCode ?? ""}),
+      ranked AS (
+        SELECT employee_code, day_sales, week_sales, month_sales,
+          RANK() OVER (ORDER BY day_sales DESC) AS day_rnk,
+          RANK() OVER (ORDER BY week_sales DESC) AS week_rnk,
+          RANK() OVER (ORDER BY month_sales DESC) AS month_rnk,
+          COUNT(*) OVER () AS team
+        FROM dept
+      )
+      SELECT day_rnk, week_rnk, month_rnk, team, day_sales, week_sales, month_sales
+      FROM ranked WHERE employee_code = ${me.employeeCode ?? ""}
+    `,
+    // Pending stock-refill requests (awaiting approval). Best-effort: a missing
+    // table must not crash the whole dashboard.
+    prisma.$queryRaw<Array<{ count: bigint }>>`
+      SELECT COUNT(*)::bigint AS count
+      FROM app_stock_refill_request
+      WHERE status = 'pending'
+    `.catch(() => [] as Array<{ count: bigint }>),
+    // Month-to-date vs the SAME day-span of last month (front-store, team-wide)
+    // — a fair month-direction signal for managers/heads.
+    role === "manager" || role === "head"
+      ? prisma.$queryRaw<Array<{ cur_sales: string | number | null; prev_sales: string | number | null }>>`
+          SELECT
+            COALESCE(SUM(sum_amount) FILTER (WHERE doc_date >= date_trunc('month', CURRENT_DATE)), 0) AS cur_sales,
+            COALESCE(SUM(sum_amount) FILTER (WHERE
+              doc_date >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
+              AND doc_date < date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
+                + (CURRENT_DATE - date_trunc('month', CURRENT_DATE)::date + 1) * INTERVAL '1 day'
+            ), 0) AS prev_sales
+          FROM odg_sale_detail
+          WHERE branch_code = '01' AND argroup_main = '101'
+            AND doc_date >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
+        `
+      : Promise.resolve([] as Array<{ cur_sales: string | number | null; prev_sales: string | number | null }>),
+    // New loyalty members registered this month (managers/heads).
+    role === "manager" || role === "head"
+      ? prisma.$queryRaw<Array<{ count: bigint }>>`
+          SELECT COUNT(*)::bigint AS count
+          FROM ar_customer
+          WHERE LOWER(TRIM(COALESCE(reg_group, ''))) = 'member'
+            AND create_date_time_now >= date_trunc('month', CURRENT_DATE)
+        `.catch(() => [] as Array<{ count: bigint }>)
+      : Promise.resolve([] as Array<{ count: bigint }>),
   ]);
 
   const today = normalizeMetrics(todayRows[0]);
-  const yesterday = normalizeMetrics(yesterdayRows[0]);
-  const month = normalizeMetrics(monthRows[0]);
 
   // Today vs yesterday realised sales come from odg_sale_detail (actual sale
   // sheet), not SOK sale-orders — those can include unrealised/pending carts.
   const saleDay = saleDayRows[0];
   const todayTotal = Number(saleDay?.today_sales ?? 0);
   const yesterdayTotal = Number(saleDay?.yesterday_sales ?? 0);
-  const monthTotal = month.pendingAmount + month.completedAmount;
-  const todayOrders = today.pendingCount + today.completedCount;
-  const yesterdayOrders = yesterday.pendingCount + yesterday.completedCount;
-  const monthOrders = month.pendingCount + month.completedCount;
+  const saleMonth = saleMonthRows[0];
+  const monthTotal = Number(saleMonth?.month_sales ?? 0);
+  const todayOrders = Number(saleDay?.today_bills ?? 0);
+  const yesterdayOrders = Number(saleDay?.yesterday_bills ?? 0);
+  const monthOrders = Number(saleMonth?.month_bills ?? 0);
   const avg = todayOrders > 0 ? todayTotal / todayOrders : 0;
 
   const totalDeltaPct = pctDelta(todayTotal, yesterdayTotal);
@@ -301,6 +567,44 @@ export default async function HomePage() {
   const priceCounts = priceCountRows[0];
   const pendingPriceRequests = Number(priceCounts?.pending ?? 0);
   const approvedPricesToday = Number(priceCounts?.approved_today ?? 0);
+  const pendingBills = pendingBillsRows[0];
+  const pendingBillsCount = Number(pendingBills?.count ?? 0);
+  const pendingBillsAmount = Number(pendingBills?.amount ?? 0);
+  // Operational overview (delivery / low stock / cashier queue) is for the
+  // people who run the floor — heads and managers.
+  const isManagerOrHead = role === "manager" || role === "head";
+  const myRank = myRankRows[0];
+  const myTeamSize = Number(myRank?.team ?? 0);
+  const rankPeriods = [
+    { label: "ວັນ", rnk: Number(myRank?.day_rnk ?? 0), amount: Number(myRank?.day_sales ?? 0) },
+    { label: "ອາທິດ", rnk: Number(myRank?.week_rnk ?? 0), amount: Number(myRank?.week_sales ?? 0) },
+    { label: "ເດືອນ", rnk: Number(myRank?.month_rnk ?? 0), amount: Number(myRank?.month_sales ?? 0) },
+  ];
+  const catMax = Math.max(1, ...categoryRows.map((c) => Number(c.amount ?? 0)));
+  const refillPendingCount = Number(refillPendingRows[0]?.count ?? 0);
+  // Month direction: this month-to-date vs the same day-span of last month.
+  const monthCompare = monthCompareRows[0];
+  const mtdCur = Number(monthCompare?.cur_sales ?? 0);
+  const mtdPrev = Number(monthCompare?.prev_sales ?? 0);
+  const mtdDeltaPct = mtdPrev > 0 ? ((mtdCur - mtdPrev) / mtdPrev) * 100 : null;
+  const newMembersCount = Number(newMemberRows[0]?.count ?? 0);
+  const homeTarget = homeTargetRows[0];
+  const homeTargetSales = Number(homeTarget?.sales ?? 0);
+  const homeTargetAmount = Number(homeTarget?.target ?? 0);
+  const initialTargetData: TargetDashboard = {
+    totalSales: homeTargetSales,
+    totalQty: Number(homeTarget?.qty ?? 0),
+    target: homeTargetAmount,
+    achievementPct: homeTargetAmount > 0 ? homeTargetSales / homeTargetAmount : 0,
+    rank: 0,
+    teamSize: 0,
+    daily: homeTargetDailyRows.map((row) => ({
+      date: row.day.toISOString().slice(0, 10),
+      sales: Number(row.sales ?? 0),
+      qty: Number(row.qty ?? 0),
+    })),
+    scope: role === "manager" || role === "head" ? "team" : "employee",
+  };
 
   const now = new Date();
   const hour = Number(
@@ -321,14 +625,14 @@ export default async function HomePage() {
   const todayRatio = totalBothDays > 0 ? (todayTotal / totalBothDays) * 100 : 50;
 
   return (
-    <div className="space-y-6 px-4 py-6 sm:px-6 lg:px-8">
+    <div className="space-y-4 px-3 py-3 pb-[calc(20px+env(safe-area-inset-bottom))] sm:space-y-6 sm:px-6 sm:py-6 lg:px-8">
       {/* Premium Hero Banner Greeting */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 text-white shadow-xl md:p-8">
+      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-4 text-white shadow-lg sm:p-6 md:p-8">
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:24px_24px] opacity-20" />
         <div className="absolute -left-20 -top-20 h-64 w-64 rounded-full bg-indigo-500/10 blur-3xl" />
         <div className="absolute -right-20 -bottom-20 h-64 w-64 rounded-full bg-violet-500/10 blur-3xl" />
         
-        <div className="relative flex flex-col justify-between gap-6 md:flex-row md:items-center">
+        <div className="relative flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div className="space-y-2">
             <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-300">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-1 text-emerald-300 backdrop-blur-sm">
@@ -338,30 +642,77 @@ export default async function HomePage() {
               <span>·</span>
               <span>{dateFmt.format(now)}</span>
             </div>
-            <h1 className="text-2xl font-extrabold tracking-tight text-white md:text-3xl">
-              {timeOfDay}, {greeting}
-            </h1>
+            <div className="flex flex-wrap items-center gap-2">
+              <h1 className="text-xl font-extrabold tracking-tight text-white sm:text-2xl md:text-3xl">
+                {timeOfDay}, {greeting}
+              </h1>
+              <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-bold text-white ring-1 ring-inset ring-white/20">
+                {roleLabel}
+              </span>
+            </div>
             <p className="max-w-xl text-xs text-slate-300">
-              ສະຫຼຸບການຂາຍ, ຄິວຮັບເງິນ, ແລະວຽກທີ່ຕ້ອງຕິດຕາມໃນມື້ນີ້
+              Dashboard ສ່ວນຕົວ · ຍອດຂາຍ, ເປົ້າ ແລະ ໂບນັດ ຂອງທ່ານມື້ນີ້
             </p>
           </div>
-          
+
         </div>
+
+        {/* My rank — one compact row inside the hero (day / week / month). */}
+        {myTeamSize > 0 ? (
+          <div className="relative mt-3 grid grid-cols-3 gap-2 border-t border-white/10 pt-3">
+            {rankPeriods.map((p) => {
+              const disc =
+                p.rnk === 1 ? "from-amber-300 to-yellow-500 text-amber-950"
+                : p.rnk === 2 ? "from-slate-100 to-slate-400 text-slate-800"
+                : p.rnk === 3 ? "from-orange-300 to-orange-500 text-orange-950"
+                : "from-slate-600 to-slate-700 text-slate-300";
+              return (
+                <div key={p.label} className="flex items-center justify-center gap-1.5">
+                  <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br font-mono text-[11px] font-black ${disc}`}>
+                    {p.rnk > 0 ? p.rnk : "–"}
+                  </span>
+                  <div className="min-w-0 text-left leading-tight">
+                    <div className="text-[8px] font-bold uppercase tracking-wide text-slate-400">
+                      {p.label} · /{myTeamSize}
+                    </div>
+                    <div className="truncate font-mono text-[11px] font-black text-slate-100">
+                      {compactMoneyFmt.format(p.amount)} <span className="text-[8px] font-bold text-slate-400">ບາດ</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : null}
       </div>
 
-      <MyTargetCard />
-      <MyBonusCard />
+      {/* Thumb-friendly launchers stay near the top on phones. */}
+      <section className="grid grid-cols-3 gap-2 sm:hidden" aria-label="ທາງລັດ">
+        <MobileLauncher href="/orders/new" label="ສ້າງບິນ" icon={<PosIcon />} accent="primary" />
+        <MobileLauncher href="/cashier" label="ຮັບເງິນ" icon={<CashIcon />} accent="warning" />
+        <MobileLauncher href="/reports/incentives" label="ໂບນັດ" icon={<SalesIcon />} accent="success" />
+      </section>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <MetricCard
+      {/* Bonus card first — its "ລວມທີ່ຕ້ອງຮັບ" headline must be visible the
+          moment the home page opens. */}
+      <MyBonusCard />
+      <MyTargetCard initialData={initialTargetData} />
+
+      {/* Running promotions — what to push today. Hidden when none active. */}
+      <ActivePromosCard />
+
+      <section className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
+        <div className="col-span-2 sm:col-span-1">
+          <MetricCard
           title="ຍອດຂາຍມື້ນີ້"
           value={moneyFmt.format(todayTotal)}
-          unit="ກີບ"
+          unit="ບາດ"
           sub={`${numFmt.format(todayOrders)} ບິນ · ສະເລ່ຍ ${compactMoneyFmt.format(avg)}/ບິນ`}
           delta={totalDeltaPct}
           icon={<SalesIcon />}
           accent="info"
-        />
+          />
+        </div>
         <MetricCard
           title="ຈຳນວນບິນ"
           value={numFmt.format(todayOrders)}
@@ -373,15 +724,218 @@ export default async function HomePage() {
         <MetricCard
           title="ຍອດຂາຍເດືອນນີ້"
           value={moneyFmt.format(monthTotal)}
-          unit="ກີບ"
+          unit="ບາດ"
           sub={`${numFmt.format(monthOrders)} ບິນໃນເດືອນນີ້`}
           icon={<CalendarIcon />}
           accent="warning"
         />
       </section>
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(340px,0.9fr)]">
+      {/* Operations overview — heads / managers who run the floor. */}
+      {isManagerOrHead ? (
+        <SectionHeading title="ພາບລວມທີມ / ຄຸມງານ" subtitle="ຍອດທີມ · ແຈ້ງເຕືອນ · ອະນຸມັດ" />
+      ) : null}
+      {isManagerOrHead ? (
+        <section className="space-y-3" aria-label="ພາບລວມການປະຕິບັດງານ">
+          {/* Team KPI: team sales vs target this month. */}
+          <div className="grid grid-cols-3 divide-x divide-indigo-100 rounded-xl border border-indigo-100 bg-indigo-50/50 py-3">
+            <div className="px-3 text-center">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">ຍອດທີມ/ເດືອນ</div>
+              <div className="mt-1 font-mono text-sm font-black text-indigo-700 sm:text-base">{moneyFmt.format(homeTargetSales)}</div>
+            </div>
+            <div className="px-3 text-center">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">ເປົ້າທີມ</div>
+              <div className="mt-1 font-mono text-sm font-black text-slate-700 sm:text-base">{moneyFmt.format(homeTargetAmount)}</div>
+            </div>
+            <div className="px-3 text-center">
+              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">ບັນລຸ</div>
+              <div className={`mt-1 font-mono text-sm font-black sm:text-base ${homeTargetAmount > 0 && homeTargetSales / homeTargetAmount >= 1 ? "text-emerald-600" : homeTargetAmount > 0 && homeTargetSales / homeTargetAmount >= 0.8 ? "text-amber-600" : "text-slate-500"}`}>
+                {homeTargetAmount > 0 ? `${((homeTargetSales / homeTargetAmount) * 100).toFixed(0)}%` : "—"}
+              </div>
+            </div>
+          </div>
+          {/* Month direction: this month vs the same days of last month. */}
+          {mtdPrev > 0 || mtdCur > 0 ? (
+            <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5">
+              <div className="text-[11px] font-bold text-slate-500">
+                ທຽບເດືອນກ່ອນ <span className="text-slate-400">(ວັນທີ 1–{new Date().getDate()})</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm font-black text-slate-800">{compactMoneyFmt.format(mtdCur)}</span>
+                <span className="text-[10px] text-slate-400">vs {compactMoneyFmt.format(mtdPrev)}</span>
+                {mtdDeltaPct !== null ? (
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${mtdDeltaPct >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+                    {mtdDeltaPct >= 0 ? "+" : ""}{mtdDeltaPct.toFixed(1)}%
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+          {/* Cancelled bills today — unusual cancellations are a floor-problem signal. */}
+          {today.cancelledCount > 0 ? (
+            <Link
+              href="/orders"
+              className="flex items-center justify-between rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 transition hover:bg-rose-100"
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-rose-500 text-white">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                    <circle cx="12" cy="12" r="9" />
+                    <path d="m15 9-6 6M9 9l6 6" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <div className="text-sm font-black text-rose-900">
+                    ບິນຍົກເລີກມື້ນີ້ {numFmt.format(today.cancelledCount)} ບິນ
+                  </div>
+                  <div className="text-[11px] font-semibold text-rose-700">
+                    ລວມ {moneyFmt.format(today.cancelledAmount)} ກີບ · ກົດເພື່ອກວດ
+                  </div>
+                </div>
+              </div>
+              <span className="text-lg text-rose-700">›</span>
+            </Link>
+          ) : null}
+          {/* New loyalty members registered this month. */}
+          {newMembersCount > 0 ? (
+            <Link
+              href="/members"
+              className="flex items-center justify-between rounded-xl border border-teal-200 bg-teal-50 px-4 py-2.5 transition hover:bg-teal-100"
+            >
+              <div className="flex items-center gap-2.5">
+                <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-teal-500 text-white">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                    <circle cx="9" cy="8" r="4" />
+                    <path d="M2 21a7 7 0 0 1 14 0" />
+                    <path d="M19 8v6M22 11h-6" />
+                  </svg>
+                </span>
+                <div className="text-sm font-black text-teal-900">
+                  ສະມາຊິກໃໝ່ເດືອນນີ້ {numFmt.format(newMembersCount)} ຄົນ
+                </div>
+              </div>
+              <span className="text-lg text-teal-700">›</span>
+            </Link>
+          ) : null}
+          {pendingBillsCount > 0 ? (
+            <Link
+              href="/cashier"
+              className="flex items-center justify-between rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 transition hover:bg-amber-100"
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-amber-500 text-white">
+                  <ReceiptIcon />
+                </span>
+                <div className="min-w-0">
+                  <div className="text-sm font-black text-amber-900">
+                    ບິນຄ້າງຊຳລະ {numFmt.format(pendingBillsCount)} ບິນ
+                  </div>
+                  <div className="text-[11px] font-semibold text-amber-700">
+                    ລວມ {moneyFmt.format(pendingBillsAmount)} ກີບ · ກົດໄປຮັບເງິນ
+                  </div>
+                </div>
+              </div>
+              <span className="text-lg text-amber-700">›</span>
+            </Link>
+          ) : null}
+          <LowStockBanner />
+          {refillPendingCount > 0 ? (
+            <Link
+              href="/reports/stock-refill"
+              className="flex items-center justify-between rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 transition hover:bg-sky-100"
+            >
+              <div className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-500 text-white">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
+                    <path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                    <path d="M12 22V12" />
+                    <path d="m3.3 7 8.7 5 8.7-5" />
+                  </svg>
+                </span>
+                <div className="min-w-0">
+                  <div className="text-sm font-black text-sky-900">
+                    ຄຳຂໍເຕີມ stock {numFmt.format(refillPendingCount)} ລາຍການ
+                  </div>
+                  <div className="text-[11px] font-semibold text-sky-700">
+                    ລໍຖ້າອະນຸມັດ · ກົດເພື່ອກວດ
+                  </div>
+                </div>
+              </div>
+              <span className="text-lg text-sky-700">›</span>
+            </Link>
+          ) : null}
+          <DeliveryTodayCard />
+        </section>
+      ) : null}
+
+      {/* Personal insights — my category mix, best sellers, recent bills. */}
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Panel title="ຍອດຂາຍຕາມໝວດ" eyebrow={insightIsTeam ? "ທີມ · ເດືອນນີ້" : "ຂອງຂ້ອຍ · ເດືອນນີ້"}>
+          {categoryRows.length === 0 ? (
+            <EmptyHint>ຍັງບໍ່ມີຍອດຂາຍ</EmptyHint>
+          ) : (
+            <ul className="space-y-2.5">
+              {categoryRows.map((c, i) => {
+                const amt = Number(c.amount ?? 0);
+                const pct = catMax > 0 ? (amt / catMax) * 100 : 0;
+                return (
+                  <li key={i}>
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="min-w-0 truncate font-semibold text-slate-700">{c.category}</span>
+                      <span className="shrink-0 font-mono font-bold text-slate-800">{compactMoneyFmt.format(amt)}</span>
+                    </div>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                      <div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.max(3, pct)}%` }} />
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel title={insightIsTeam ? "ສິນຄ້າຂາຍດີ (ທີມ)" : "ສິນຄ້າຂາຍດີຂອງຂ້ອຍ"} eyebrow="ເດືອນນີ້">
+          {topItemRows.length === 0 ? (
+            <EmptyHint>ຍັງບໍ່ມີ</EmptyHint>
+          ) : (
+            <ul className="space-y-2">
+              {topItemRows.map((it, i) => (
+                <li key={i} className="flex items-center gap-2">
+                  <span className={rankBadgeClass(i)}>{i + 1}</span>
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-xs font-bold text-slate-800">{it.item_name ?? "—"}</span>
+                    <span className="text-[10px] text-slate-400">x{numFmt.format(Number(it.qty ?? 0))}</span>
+                  </span>
+                  <span className="shrink-0 font-mono text-xs font-black text-indigo-600">{compactMoneyFmt.format(Number(it.amount ?? 0))}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
+        <Panel title={insightIsTeam ? "ຂາຍລ່າສຸດ (ທີມ)" : "ຂາຍລ່າສຸດຂອງຂ້ອຍ"} eyebrow="30 ວັນ">
+          {recentMineRows.length === 0 ? (
+            <EmptyHint>ຍັງບໍ່ມີ</EmptyHint>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {recentMineRows.map((b, i) => (
+                <li key={i} className="flex items-center justify-between py-2 text-xs">
+                  <span className="text-slate-500">
+                    <span className="font-mono font-bold text-slate-700">#{b.doc_no.slice(-5)}</span>{" "}
+                    <span className="text-slate-400">{b.day.slice(8, 10)}/{b.day.slice(5, 7)}</span>{" "}
+                    · {numFmt.format(Number(b.items))} ລາຍການ
+                  </span>
+                  <span className="shrink-0 font-mono font-bold text-slate-800">{compactMoneyFmt.format(Number(b.amount ?? 0))}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      </section>
+
+      <section className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.6fr)_minmax(340px,0.9fr)]">
         <div className="space-y-5">
+          <div className="hidden sm:block">
           <Panel
             title="ຍອດຂາຍ 7 ວັນຍ້ອນຫຼັງ"
             eyebrow="Sales trend"
@@ -394,18 +948,19 @@ export default async function HomePage() {
               </Link>
             }
           >
-            <div className="mb-4 grid gap-3 sm:grid-cols-3">
-              <MiniStat label="ຮວມ 7 ວັນ" value={`${moneyFmt.format(weekTotal)} ກີບ`} />
+            <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <MiniStat label="ຮວມ 7 ວັນ" value={`${moneyFmt.format(weekTotal)} ບາດ`} />
               <MiniStat label="ຈຳນວນບິນ" value={`${numFmt.format(weekOrders)} ບິນ`} />
               <MiniStat
                 label="ວັນສູງສຸດ"
-                value={`${compactMoneyFmt.format(highestDay.total)} ກີບ`}
+                value={`${compactMoneyFmt.format(highestDay.total)} ບາດ`}
               />
             </div>
             <AreaChart series={dailySeries} />
           </Panel>
+          </div>
 
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)]">
+          <div className="grid grid-cols-1 gap-4 sm:gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.75fr)]">
             <Panel title="ມື້ນີ້ ທຽບກັບ ມື້ວານ" eyebrow="Comparison">
               <div className="space-y-4">
                 <div>
@@ -414,7 +969,7 @@ export default async function HomePage() {
                       ສັດສ່ວນຍອດຂາຍ
                     </span>
                     <span className="text-slate-400 font-semibold">
-                      ຮວມ {moneyFmt.format(totalBothDays)} ກີບ
+                      ຮວມ {moneyFmt.format(totalBothDays)} ບາດ
                     </span>
                   </div>
                   <div className="flex h-3 overflow-hidden rounded-full bg-slate-100 border border-slate-200/50">
@@ -425,16 +980,16 @@ export default async function HomePage() {
                     <div className="flex-1 bg-slate-200" />
                   </div>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                   <SplitStat
                     label="ມື້ນີ້"
-                    value={`${moneyFmt.format(todayTotal)} ກີບ`}
+                    value={`${moneyFmt.format(todayTotal)} ບາດ`}
                     meta={`${todayRatio.toFixed(0)}%`}
                     tone="primary"
                   />
                   <SplitStat
                     label="ມື້ວານ"
-                    value={`${moneyFmt.format(yesterdayTotal)} ກີບ`}
+                    value={`${moneyFmt.format(yesterdayTotal)} ບາດ`}
                     meta={`${(100 - todayRatio).toFixed(0)}%`}
                     tone="muted"
                   />
@@ -454,7 +1009,7 @@ export default async function HomePage() {
 
           <div className="hidden sm:block">
             <Panel title="ທາງລັດ" eyebrow="Quick actions">
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <LauncherButton
                   href="/orders/new"
                   label="POS / ສ້າງບິນ"
@@ -468,12 +1023,6 @@ export default async function HomePage() {
                   accent="warning"
                 />
                 <LauncherButton
-                  href="/reports/daily-sales"
-                  label="ລາຍງານ"
-                  icon={<ReportIcon />}
-                  accent="info"
-                />
-                <LauncherButton
                   href="/employees"
                   label="ຈັດການທີມ"
                   icon={<UsersIcon />}
@@ -484,10 +1033,10 @@ export default async function HomePage() {
           </div>
         </div>
 
-        <aside className="space-y-5">
+        <aside className="space-y-4 sm:space-y-5">
           <Panel
-            title="Top ພະນັກງານຂາຍ"
-            eyebrow="Today ranking"
+            title="ຍອດຂາຍຈິງຕາມພະນັກງານ"
+            eyebrow="ເດືອນນີ້"
             action={
               <Link
                 href="/reports/salespeople"
@@ -498,7 +1047,7 @@ export default async function HomePage() {
             }
           >
             {topRows.length === 0 ? (
-              <EmptyHint>ຍັງບໍ່ມີຍອດຂາຍວັນນີ້</EmptyHint>
+              <EmptyHint>ຍັງບໍ່ມີຍອດຂາຍເດືອນນີ້</EmptyHint>
             ) : (
               <ul className="space-y-3">
                 {topRows.map((r, i) => {
@@ -721,24 +1270,28 @@ function MetricCard({
   accent: AccentName;
 }) {
   const c = ACCENTS[accent];
+  // Compact one-row layout: icon left, title/value/sub stacked beside it —
+  // roughly a third the height of the old stacked card.
   return (
-    <article
-      className={`odoo-card border-l-4 ${c.border} p-5 hover:scale-[1.015] hover:shadow-xl transition-all duration-300`}
-    >
-      <div className="mb-4 flex items-start justify-between gap-3">
-        <span className={`flex h-9 w-9 items-center justify-center rounded-md ${c.icon}`}>
+    <article className={`odoo-card border-l-4 ${c.border} p-3 transition-shadow duration-300 hover:shadow-lg`}>
+      <div className="flex items-center gap-2.5">
+        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-md ${c.icon}`}>
           {icon}
         </span>
-        {delta !== undefined && delta !== null ? <DeltaPill value={delta} /> : null}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center justify-between gap-1">
+            <span className="truncate text-[10px] font-semibold text-odoo-text-muted">{title}</span>
+            {delta !== undefined && delta !== null ? <DeltaPill value={delta} /> : null}
+          </div>
+          <div className="flex min-w-0 flex-wrap items-baseline gap-x-1">
+            <span className="break-all text-base font-bold leading-tight text-odoo-text-strong sm:text-lg">
+              {value}
+            </span>
+            {unit ? <span className="text-[9px] font-semibold text-odoo-text-muted">{unit}</span> : null}
+          </div>
+          {sub ? <div className="truncate text-[9px] text-odoo-text-muted">{sub}</div> : null}
+        </div>
       </div>
-      <div className="text-[10px] font-semibold text-odoo-text-muted">{title}</div>
-      <div className="mt-1 flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5">
-        <span className="break-all text-lg font-bold text-odoo-text-strong sm:text-xl">
-          {value}
-        </span>
-        {unit ? <span className="text-[10px] font-semibold text-odoo-text-muted">{unit}</span> : null}
-      </div>
-      {sub ? <div className="mt-2 text-[10px] text-odoo-text-muted">{sub}</div> : null}
     </article>
   );
 }
@@ -757,6 +1310,15 @@ function DeltaPill({ value }: { value: number }) {
       {positive ? "+" : "-"}
       {Math.abs(value).toFixed(1)}%
     </span>
+  );
+}
+
+function SectionHeading({ title, subtitle }: { title: string; subtitle?: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-2 pt-1">
+      <h2 className="text-sm font-black text-odoo-text-strong">{title}</h2>
+      {subtitle ? <span className="text-[11px] font-semibold text-odoo-text-muted">{subtitle}</span> : null}
+    </div>
   );
 }
 
@@ -891,6 +1453,32 @@ function LauncherButton({
   );
 }
 
+function MobileLauncher({
+  href,
+  label,
+  icon,
+  accent,
+}: {
+  href: string;
+  label: string;
+  icon: ReactNode;
+  accent: AccentName;
+}) {
+  const c = ACCENTS[accent];
+  // Compact pill: icon + label on one row.
+  return (
+    <Link
+      href={href}
+      className="flex min-h-10 min-w-0 items-center justify-center gap-1.5 rounded-xl border border-odoo-border bg-white px-2 py-1.5 shadow-sm active:scale-95"
+    >
+      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${c.soft} [&_svg]:h-4 [&_svg]:w-4`}>
+        {icon}
+      </span>
+      <span className="truncate text-[11px] font-bold text-odoo-text-strong">{label}</span>
+    </Link>
+  );
+}
+
 function getBezierPath(points: Array<{ x: number; y: number }>) {
   if (points.length === 0) return "";
   let d = `M ${points[0].x.toFixed(1)} ${points[0].y.toFixed(1)}`;
@@ -1013,7 +1601,7 @@ function AreaChart({
               {dayShortFmt.format(p.date)}
             </text>
             <title>
-              {`${dayShortFmt.format(p.date)} · ${moneyFmt.format(p.total)} ກີບ · ${p.orders} ບິນ`}
+              {`${dayShortFmt.format(p.date)} · ${moneyFmt.format(p.total)} ບາດ · ${p.orders} ບິນ`}
             </title>
           </g>
         ))}
@@ -1074,14 +1662,6 @@ function rankBarClass(i: number) {
   return "h-full rounded-full bg-gradient-to-r from-indigo-400 to-indigo-600";
 }
 
-function PlusIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-      <path d="M12 5v14M5 12h14" />
-    </svg>
-  );
-}
-
 function SalesIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
@@ -1118,15 +1698,6 @@ function PosIcon() {
       <path d="M8 13h2" />
       <path d="M14 13h2" />
       <path d="M8 17h8" />
-    </svg>
-  );
-}
-
-function ReportIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">
-      <path d="M3 3v18h18" />
-      <path d="m7 14 4-4 4 4 5-6" />
     </svg>
   );
 }

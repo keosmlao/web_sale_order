@@ -104,6 +104,17 @@ const sections: NavSection[] = [
         ),
       },
       {
+        href: "/reports/incentives",
+        label: "ໂບນັດພະນັກງານຂາຍ",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <circle cx="12" cy="8" r="5" />
+            <path d="m8.5 12-1 9 4.5-2 4.5 2-1-9" />
+            <path d="m10 8 1.3 1.3L14 6.7" />
+          </svg>
+        ),
+      },
+      {
         href: "/reports/items",
         label: "ສິນຄ້າຂາຍດີ",
         icon: (
@@ -272,6 +283,17 @@ const sections: NavSection[] = [
             ),
           },
           {
+            href: "/settings/incentives",
+            label: "Config Incentive",
+            roles: ["head", "manager"],
+            icon: (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
+                <circle cx="12" cy="8" r="5" />
+                <path d="m8.5 12-1 9 4.5-2 4.5 2-1-9" />
+              </svg>
+            ),
+          },
+          {
             href: "/settings/barcodes",
             label: "Barcode ສິນຄ້າ",
             icon: (
@@ -291,6 +313,17 @@ const sections: NavSection[] = [
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
                 <rect x="2" y="5" width="20" height="14" rx="2" />
                 <path d="M2 10h20" />
+              </svg>
+            ),
+          },
+          {
+            href: "/settings/test-mode",
+            label: "ໂໝດທົດສອບ ໂອນເງິນ",
+            icon: (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
+                <path d="M9 3h6" />
+                <path d="M10 3v6l-4.5 8A2 2 0 0 0 7.3 20h9.4a2 2 0 0 0 1.8-3L14 9V3" />
+                <path d="M7 14h10" />
               </svg>
             ),
           },
@@ -536,7 +569,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
           </button>
         </div>
 
-        <nav className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3 [-webkit-overflow-scrolling:touch]" aria-label="ເມນູ">
+        <nav className="sbd-mnav min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3 [-webkit-overflow-scrolling:touch]" aria-label="ເມນູ">
           {visibleSections.map((section) => (
             <div key={section.id} className="mb-1.5">
               <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
