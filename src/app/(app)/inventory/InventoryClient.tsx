@@ -24,7 +24,7 @@ type StockLocation = {
 const moneyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const qtyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 
-const PAGE_SIZE = 30;
+const PAGE_SIZE = 10;
 const MIN_QUERY = 2;
 
 // Colour-code on-hand qty so low stock pops at a glance.
