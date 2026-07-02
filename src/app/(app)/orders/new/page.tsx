@@ -225,6 +225,18 @@ function PosScreen({
   const [productPickerOptions, setProductPickerOptions] = useState<WhLocOption[]>([]);
   const [productPickerLoading, setProductPickerLoading] = useState(false);
   const [productPickerError, setProductPickerError] = useState<string | null>(null);
+  // Always-visible quick search on the POS screen. Enter/click opens the
+  // product picker seeded with the query; a barcode-looking value is added
+  // straight to the cart.
+  const [quickSearch, setQuickSearch] = useState("");
+
+  // Barcode scanning. A USB/Bluetooth scanner behaves like a keyboard that
+  // types the code in a tight burst and ends with Enter. We buffer keystrokes
+  // globally (see the scanner effect below) and resolve them to a catalog
+  // product. `scanFeedback` drives a small on-screen toast for confirmation.
+  const [scanFeedback, setScanFeedback] = useState<
+    { kind: "ok" | "error" | "loading"; text: string } | null
+  >(null);
 
   const [salesWarehouses, setSalesWarehouses] = useState<string[]>([
     DEFAULT_WAREHOUSE_CODE,
@@ -353,6 +365,9 @@ function PosScreen({
       locationName: string;
       balance: number;
     }>;
+    // When set, picking edits this existing cart line's warehouse/location
+    // instead of adding a new line.
+    editLineIdx?: number;
   } | null>(null);
   const [whPickerLoading, setWhPickerLoading] = useState(false);
 
@@ -417,6 +432,19 @@ function PosScreen({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<{ cartNumber: string } | null>(null);
+
+  // Mobile step wizard (≤1024px, CSS-driven): 1 ສິນຄ້າ → 2 ລູກຄ້າ → 3 ສະຫຼຸບ.
+  // Desktop shows everything at once; this state only affects which segment is
+  // visible on small screens (pos-mstep-* classes in globals.css).
+  const [mStep, setMStep] = useState<1 | 2 | 3>(1);
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [mStep]);
+  // After the bill is sent (cart cleared) drop back to step 1 for the next sale.
+  // Step 2 stays reachable with an empty cart so customer-first flow still works.
+  useEffect(() => {
+    if (items.length === 0 && mStep === 3) setMStep(1);
+  }, [items.length, mStep]);
 
   useEffect(() => {
     let cancelled = false;
@@ -617,6 +645,40 @@ function PosScreen({
     return matched.slice(0, isAirQuery ? matched.length : q ? 24 : 36);
   }, [products, productPickerQuery]);
 
+  // Search-first POS: results for the always-visible quick-search box render
+  // inline right under the bar (tap a row → straight into the cart via
+  // addProduct), so on mobile the cashier never has to open the picker modal.
+  // Same matcher as the picker grid above, capped short for a tidy dropdown.
+  const quickResults = useMemo(() => {
+    const q = quickSearch.trim().toLowerCase();
+    if (!q) return [] as Product[];
+    const isAirQuery = q === "ແອ" || q === "air";
+    const matched = products.filter((p) => {
+      if (isExcludedPosCategory(p)) return false;
+      const searchable = [
+        p.name,
+        p.code,
+        p.brand ?? "",
+        p.unitName ?? "",
+        p.category ?? "",
+        p.categoryName ?? "",
+        p.groupMain ?? "",
+        p.groupMainName ?? "",
+        productCategoryLabel(p),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return (
+        searchable.includes(q) ||
+        (isAirQuery &&
+          (searchable.includes("air") ||
+            p.category?.trim() === "032" ||
+            p.groupMain?.trim() === "12"))
+      );
+    });
+    return matched.slice(0, 8);
+  }, [products, quickSearch]);
+
   const currentPromotions = useMemo(() => {
     const now = new Date();
     return activePromotions.filter((promo) => isPromoActiveNow(promo, now));
@@ -746,6 +808,15 @@ function PosScreen({
   function openProductPicker() {
     setProductPickerOpen(true);
     setProductPickerQuery("");
+    setProductPickerProduct(null);
+    setProductPickerOptions([]);
+    setProductPickerError(null);
+  }
+
+  // Open the picker pre-filtered by a query (from the on-screen quick search).
+  function openProductPickerWith(q: string) {
+    setProductPickerOpen(true);
+    setProductPickerQuery(q);
     setProductPickerProduct(null);
     setProductPickerOptions([]);
     setProductPickerError(null);
@@ -919,6 +990,170 @@ function PosScreen({
       setWhPickerLoading(false);
     }
   }
+
+  // Re-open the warehouse/location picker for an existing cart line so the
+  // cashier can move that line to a different ສາງ/location. Selecting an
+  // option updates the line in place (see the whPicker onPick handler).
+  async function openWarehousePickerForLine(idx: number) {
+    const line = itemsRef.current[idx];
+    if (!line) return;
+    // Set builds draw from component stock, not a single warehouse row —
+    // their warehouse is chosen in the set builder, so skip the picker.
+    if (line.buildFromComponents) return;
+    const product = products.find((p) => p.id === line.productId);
+    if (!product) return;
+    setSubmitError(null);
+    setWhPickerLoading(true);
+    try {
+      const res = await fetch("/api/inventory/stock-balance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ codes: [product.id] }),
+      });
+      if (!res.ok) throw new Error(`stock-balance ${res.status}`);
+      const data = (await res.json()) as {
+        items?: Array<{
+          locations?: Array<{
+            warehouse: string | null;
+            warehouseName: string | null;
+            location: string | null;
+            locationName: string | null;
+            balanceQty: number;
+          }>;
+        }>;
+      };
+      const options = (data.items?.[0]?.locations ?? [])
+        .filter((loc) => loc.warehouse && loc.location)
+        .map((loc) => ({
+          warehouseCode: loc.warehouse as string,
+          warehouseName: loc.warehouseName?.trim() || (loc.warehouse as string),
+          locationCode: loc.location as string,
+          locationName: loc.locationName?.trim() || (loc.location as string),
+          balance: loc.balanceQty,
+        }))
+        .sort((a, b) => b.balance - a.balance);
+      if (options.length === 0) {
+        setSubmitError(`ສິນຄ້າ ${product.code} ບໍ່ມີ stock ໃນສາງໃດ`);
+        return;
+      }
+      setWhPicker({ product, options, editLineIdx: idx });
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : "ບໍ່ສາມາດໂຫລດ stock ໄດ້");
+    } finally {
+      setWhPickerLoading(false);
+    }
+  }
+
+  // Resolve a scanned/typed code to a catalog product and add it to the
+  // cart. Tries a direct code match first (works when the tag is the item
+  // code itself), then falls back to the barcode → ic_code lookup so a real
+  // EAN/UPC resolves to the same product the manual picker would add.
+  async function resolveScanAndAdd(rawCode: string) {
+    const code = rawCode.trim();
+    if (!code) return;
+    let product = products.find((p) => p.id === code || p.code === code) ?? null;
+    if (!product) {
+      setScanFeedback({ kind: "loading", text: `ກຳລັງຄົ້ນຫາ barcode ${code}...` });
+      try {
+        const res = await fetch(
+          `/api/inventory/barcode?code=${encodeURIComponent(code)}`,
+        );
+        if (res.ok) {
+          const data = (await res.json()) as {
+            found?: boolean;
+            item?: { code?: string };
+          };
+          const resolved = data.found ? data.item?.code?.trim() : "";
+          if (resolved) {
+            product =
+              products.find((p) => p.id === resolved || p.code === resolved) ??
+              null;
+          }
+        }
+      } catch {
+        // network hiccup — fall through to the not-found path below
+      }
+    }
+    if (!product) {
+      setScanFeedback({ kind: "error", text: `ບໍ່ພົບສິນຄ້າ: ${code}` });
+      return;
+    }
+    setScanFeedback({ kind: "ok", text: `ເພີ່ມ: ${product.name}` });
+    void addProduct(product);
+  }
+
+  // Submit handler for the on-screen quick search. A value that looks like a
+  // barcode/exact code is added straight to the cart; anything else opens the
+  // picker filtered by the text.
+  function submitQuickSearch() {
+    const q = quickSearch.trim();
+    if (!q) return;
+    const looksLikeCode =
+      /^[0-9]{6,}$/.test(q) ||
+      products.some((p) => p.id === q || p.code === q);
+    if (looksLikeCode) {
+      void resolveScanAndAdd(q);
+    } else {
+      openProductPickerWith(q);
+    }
+    setQuickSearch("");
+  }
+
+  // Keep the latest resolver in a ref so the window listener (bound once)
+  // always reads fresh `products`/cart state without re-subscribing.
+  const resolveScanRef = useRef<(code: string) => void>(() => {});
+  useEffect(() => {
+    resolveScanRef.current = (code: string) => void resolveScanAndAdd(code);
+  });
+
+  // Auto-dismiss the scan toast shortly after a success/failure lands.
+  useEffect(() => {
+    if (!scanFeedback || scanFeedback.kind === "loading") return;
+    const id = window.setTimeout(() => setScanFeedback(null), 2200);
+    return () => window.clearTimeout(id);
+  }, [scanFeedback]);
+
+  // Global barcode listener. Scanner keystrokes arrive in a tight burst and
+  // finish with Enter; a human can't type that fast, so timing tells the two
+  // apart and we only intercept genuine scans. Keys are ignored while a text
+  // field is focused so manual search/qty entry is never hijacked.
+  useEffect(() => {
+    let buffer = "";
+    let lastTime = 0;
+    const SCAN_CHAR_GAP_MS = 40;
+    const isEditable = (el: EventTarget | null) => {
+      const node = el as HTMLElement | null;
+      if (!node) return false;
+      const tag = node.tagName;
+      return (
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        tag === "SELECT" ||
+        node.isContentEditable
+      );
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (isEditable(document.activeElement)) return;
+      const now = e.timeStamp || Date.now();
+      if (e.key === "Enter") {
+        if (buffer.length >= 3) {
+          const code = buffer;
+          buffer = "";
+          e.preventDefault();
+          resolveScanRef.current(code);
+        } else {
+          buffer = "";
+        }
+        return;
+      }
+      if (e.key.length !== 1) return; // skip Shift/Tab/arrows/etc.
+      if (now - lastTime > SCAN_CHAR_GAP_MS) buffer = "";
+      buffer += e.key;
+      lastTime = now;
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   // Inner add. Used both from the single-option fast path and after the
   // user picks a (warehouse, location) pair from the modal.
@@ -1664,37 +1899,101 @@ function PosScreen({
       : "ຊິ້ນ";
 
   return (
-    <div className="pos-shell2">
+    <div className={`pos-shell2 pos-mstep-${mStep}`}>
+      <header className="pos-mobile-appbar">
+        <div className="pos-mobile-appbar-icon" aria-hidden>
+          <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="9" cy="20" r="1"/><circle cx="19" cy="20" r="1"/><path d="M3 4h2l2.4 10.2a2 2 0 0 0 2 1.5h7.8a2 2 0 0 0 2-1.6L21 8H7"/>
+          </svg>
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="pos-mobile-appbar-title">ຂາຍໜ້າຮ້ານ</div>
+          <div className="pos-mobile-appbar-subtitle truncate">ຜູ້ຂາຍ: {salespersonName}</div>
+        </div>
+        <div className="pos-mobile-appbar-count">
+          <strong>{moneyFmt.format(totalQty)}</strong>
+          <span>{totalQtyUnit}</span>
+        </div>
+      </header>
+      {scanFeedback ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className={
+            "pos-scan-toast " +
+            (scanFeedback.kind === "error"
+              ? "pos-scan-toast-error"
+              : scanFeedback.kind === "loading"
+                ? "pos-scan-toast-loading"
+                : "pos-scan-toast-ok")
+          }
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M3 5v14M7 5v14M11 5v14M15 5v14M19 5v14" />
+          </svg>
+          <span className="min-w-0 truncate">{scanFeedback.text}</span>
+        </div>
+      ) : null}
       <div className="pos-order pos-order-left">
         <div className="pos-flow-panel">
           <div className="pos-flow-list">
-            <div className={"pos-step-card " + (customer ? "pos-step-done" : "pos-step-active")}>
+            {/* Tappable wizard steps. On mobile only the active step's segment is
+                visible (pos-mstep-* CSS); on desktop everything shows anyway, so
+                tapping just moves the highlight. */}
+            <button
+              type="button"
+              onClick={() => setMStep(1)}
+              className={
+                "pos-step-card " +
+                (mStep === 1 ? "pos-step-active" : items.length > 0 ? "pos-step-done" : "")
+              }
+            >
               <span className="pos-step-badge">1</span>
-              <div className="min-w-0">
-                <div className="pos-step-title">ລູກຄ້າ</div>
-                <div className="pos-step-text">
-                  ບໍ່ບັງຄັບ · ຂ້າມໄດ້ (walk-in)
-                </div>
-              </div>
-            </div>
-            <div className={"pos-step-card " + (items.length === 0 ? "pos-step-active" : "pos-step-done")}>
-              <span className="pos-step-badge">2</span>
               <div className="min-w-0">
                 <div className="pos-step-title">ສິນຄ້າ</div>
                 <div className="pos-step-text">
-                  ເລືອກສິນຄ້າ ແລະ ສາງ
+                  {items.length > 0
+                    ? `${items.length} ລາຍການ · ${moneyFmt.format(totalQty)} ${totalQtyUnit}`
+                    : "ຄົ້ນຫາ / ສະແກນ ເພີ່ມສິນຄ້າ"}
                 </div>
               </div>
-            </div>
-            <div className={"pos-step-card " + (items.length > 0 ? "pos-step-active" : "pos-step-disabled")}>
+            </button>
+            <button
+              type="button"
+              onClick={() => setMStep(2)}
+              className={
+                "pos-step-card " +
+                (mStep === 2 ? "pos-step-active" : customer ? "pos-step-done" : "")
+              }
+            >
+              <span className="pos-step-badge">2</span>
+              <div className="min-w-0">
+                <div className="pos-step-title">ລູກຄ້າ</div>
+                <div className="pos-step-text">
+                  {customer ? customer.name : "ຂ້າມໄດ້ (walk-in)"}
+                </div>
+              </div>
+            </button>
+            <button
+              type="button"
+              onClick={() => items.length > 0 && setMStep(3)}
+              className={
+                "pos-step-card " +
+                (mStep === 3
+                  ? "pos-step-active"
+                  : items.length === 0
+                    ? "pos-step-disabled"
+                    : "")
+              }
+            >
               <span className="pos-step-badge">3</span>
               <div className="min-w-0">
-                <div className="pos-step-title">ກວດສອບ</div>
+                <div className="pos-step-title">ສະຫຼຸບ</div>
                 <div className="pos-step-text">
-                  ຢືນຢັນກ່ອນຮັບເງິນ
+                  ກວດ ແລະ ສົ່ງບິນ
                 </div>
               </div>
-            </div>
+            </button>
           </div>
         </div>
         <div className="pos-order-header">
@@ -1767,6 +2066,95 @@ function PosScreen({
           </div>
         </div>
 
+        <form
+          className="pos-search-bar"
+          onSubmit={(e) => {
+            e.preventDefault();
+            submitQuickSearch();
+          }}
+        >
+          <span className="pos-search-bar-icon" aria-hidden>
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="7" />
+              <path d="m20 20-3-3" />
+            </svg>
+          </span>
+          <input
+            type="text"
+            inputMode="search"
+            value={quickSearch}
+            onChange={(e) => setQuickSearch(e.target.value)}
+            placeholder="ຄົ້ນຫາສິນຄ້າ / barcode / ລະຫັດ..."
+            className="pos-search-bar-input"
+            aria-label="ຄົ້ນຫາສິນຄ້າ"
+          />
+          {quickSearch ? (
+            <button
+              type="button"
+              onClick={() => setQuickSearch("")}
+              className="pos-search-bar-clear"
+              aria-label="ລຶບ"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M18 6 6 18M6 6l12 12" />
+              </svg>
+            </button>
+          ) : null}
+          <button type="submit" className="pos-search-bar-btn">
+            ຄົ້ນຫາ
+          </button>
+        </form>
+
+        {/* Inline live results — tap to add straight to the cart (search-first
+            flow). Appears only while typing; the picker modal + scanner still
+            work as before. */}
+        {quickSearch.trim() && quickResults.length > 0 ? (
+          <div className="pos-quick-results" role="listbox">
+            {quickResults.map((p) => {
+              const out = p.stock <= 0 && !isAirSetProduct(p);
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  disabled={out}
+                  onClick={() => {
+                    void addProduct(p);
+                    setQuickSearch("");
+                  }}
+                  className="pos-quick-result"
+                >
+                  <div className="min-w-0">
+                    <div className="pos-quick-result-name">{p.name}</div>
+                    <div className="pos-quick-result-meta">
+                      <span className="font-mono">{p.code}</span>
+                      {p.brand ? <span>{p.brand}</span> : null}
+                      {isAirSetProduct(p) ? (
+                        <span className="pos-unit-badge">ຊຸດ</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <div className="pos-quick-result-right">
+                    <span
+                      className={
+                        "pos-quick-result-stock" + (out ? " is-out" : "")
+                      }
+                    >
+                      {isAirSetProduct(p)
+                        ? "ຊຸດ"
+                        : out
+                          ? "ໝົດ"
+                          : `stock ${moneyFmt.format(p.stock)}`}
+                    </span>
+                    <span className="pos-quick-result-price font-mono">
+                      {moneyFmt.format(p.price)}
+                    </span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        ) : null}
+
         <div className="pos-add-bar">
           <button
             type="button"
@@ -1797,6 +2185,12 @@ function PosScreen({
               <span className="pos-promo-chip-count">{currentPromotions.length}</span>
             ) : null}
           </button>
+          <div className="pos-scan-hint" title="ຍິງ barcode ໄດ້ເລີຍ — ບໍ່ຕ້ອງກົດຫຍັງ">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+              <path d="M3 5v14M7 5v14M11 5v14M15 5v14M19 5v14" />
+            </svg>
+            <span>ພ້ອມຍິງ barcode</span>
+          </div>
         </div>
 
         <div className="pos-order-lines m-3 rounded-2xl border border-slate-200 bg-white shadow-sm">
@@ -2034,11 +2428,35 @@ function PosScreen({
                                 })()}
                               </span>
                             </button>
+                            {line.buildFromComponents ? null : (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                void openWarehousePickerForLine(idx);
+                              }}
+                              disabled={line.loadingLocations}
+                              className="inline-flex items-center gap-1 rounded border border-odoo-border bg-odoo-surface-muted px-1.5 py-0.5 text-left transition hover:border-odoo-primary disabled:opacity-60"
+                              aria-label="ປ່ຽນສາງ / location"
+                              title="ກົດເພື່ອປ່ຽນສາງ"
+                            >
+                              <svg
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.8"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className="h-3 w-3 shrink-0 text-odoo-text-muted"
+                              >
+                                <path d="M3 9 12 4l9 5-9 5-9-5Z" />
+                                <path d="M3 9v6l9 5 9-5V9" />
+                              </svg>
                             {line.loadingLocations ? (
                               <span className="text-[10px] text-odoo-text-muted">
                                 ກຳລັງໂຫລດ stock...
                               </span>
-                            ) : line.buildFromComponents ? null : line.locations.length === 0 ? (
+                            ) : line.locations.length === 0 ? (
                               line.warehouseStock > 0 ? (
                                 <span className="text-[10px] text-odoo-text-muted">
                                   ສາງ {warehouseNames[line.warehouseCode] ?? line.warehouseCode}
@@ -2106,6 +2524,8 @@ function PosScreen({
                                 </span>
                               );
                             })()}
+                            </button>
+                            )}
                             {(() => {
                               const selectedLocation = line.locations.find(
                                 (loc) => loc.location === line.locationCode,
@@ -2191,7 +2611,7 @@ function PosScreen({
         </div>
       </div>
 
-      <aside className="pos-checkout-col">
+      <aside className="pos-checkout-col" id="pos-mobile-summary">
         <div className="pos-order-summary pos-checkout-card">
           <div className="px-4 py-3">
             <div className="space-y-1 text-sm">
@@ -2377,6 +2797,67 @@ function PosScreen({
         </div>
       </aside>
 
+      {/* Mobile-only sticky quick-pay bar — keeps the running total and the
+          pay action reachable without scrolling past the cart/summary. Sits
+          just above the app bottom-nav; hidden on ≥sm where the checkout rail
+          is always visible. */}
+      <div className="pos-mobile-paybar">
+        {mStep > 1 ? (
+          <button
+            type="button"
+            onClick={() => setMStep(mStep === 3 ? 2 : 1)}
+            className="pos-mobile-paybar-back"
+            aria-label="ຂັ້ນຕອນກ່ອນໜ້າ"
+          >
+            ←
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="pos-mobile-paybar-total"
+          onClick={() => {
+            setMStep(3);
+            document.getElementById("pos-mobile-summary")?.scrollIntoView({ behavior: "smooth", block: "start" });
+          }}
+          aria-label="ເບິ່ງສະຫຼຸບບິນ"
+        >
+          <span className="pos-mobile-paybar-label">ລວມ</span>
+          <span className="pos-mobile-paybar-amount">
+            {moneyFmt.format(total)} <span>ກີບ</span>
+          </span>
+        </button>
+        {mStep === 1 ? (
+          <button
+            type="button"
+            onClick={() => setMStep(2)}
+            disabled={items.length === 0}
+            className="pos-mobile-paybar-btn"
+          >
+            <span>ຕໍ່ໄປ: ລູກຄ້າ</span>
+            <span aria-hidden>→</span>
+          </button>
+        ) : mStep === 2 ? (
+          <button
+            type="button"
+            onClick={() => setMStep(3)}
+            className="pos-mobile-paybar-btn"
+          >
+            <span>ຕໍ່ໄປ: ສະຫຼຸບ</span>
+            <span aria-hidden>→</span>
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!canSubmit}
+            className="pos-mobile-paybar-btn"
+          >
+            <span>{submitting ? "ກຳລັງສ້າງ..." : "ສົ່ງໄປຮັບເງິນ"}</span>
+            <span aria-hidden>→</span>
+          </button>
+        )}
+      </div>
+
       {/* Customer picker overlay */}
       {productPickerOpen ? (
         <ProductPickerModal
@@ -2427,7 +2908,43 @@ function PosScreen({
           options={whPicker.options}
           onPick={(opt) => {
             const product = whPicker.product;
+            const editLineIdx = whPicker.editLineIdx;
+            const allOptions = whPicker.options;
             setWhPicker(null);
+            if (editLineIdx != null) {
+              // Editing an existing line: move it to the picked warehouse and
+              // location, seeding the line's location list from the options we
+              // already fetched so the display/qty check stay accurate.
+              const whLocs = allOptions
+                .filter((o) => o.warehouseCode === opt.warehouseCode)
+                .map((o) => ({
+                  warehouse: o.warehouseCode,
+                  warehouseName: o.warehouseName,
+                  location: o.locationCode,
+                  locationName: o.locationName,
+                  balanceQty: o.balance,
+                }));
+              setWarehouseNames((prev) => ({
+                ...prev,
+                [opt.warehouseCode]: opt.warehouseName,
+              }));
+              setItems((prev) => {
+                const next = [...prev];
+                const t = next[editLineIdx];
+                if (!t) return prev;
+                next[editLineIdx] = {
+                  ...t,
+                  warehouseCode: opt.warehouseCode,
+                  locationCode: opt.locationCode,
+                  warehouseStock: opt.balance,
+                  locations: whLocs,
+                  loadingLocations: false,
+                  locationLoadError: null,
+                };
+                return next;
+              });
+              return;
+            }
             addProductWithLocation(
               product,
               opt.warehouseCode,
@@ -2851,6 +3368,22 @@ function ProductPickerModal({
                   type="text"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    // Scanning/typing a barcode into the picker: an exact code
+                    // hit, or a query that narrows to a single product, adds it
+                    // straight away.
+                    const raw = query.trim();
+                    if (!raw) return;
+                    const exact = products.find(
+                      (p) => p.id === raw || p.code === raw,
+                    );
+                    const target = exact ?? (products.length === 1 ? products[0] : null);
+                    if (target) {
+                      e.preventDefault();
+                      onPickProduct(target);
+                    }
+                  }}
                   placeholder="ຄົ້ນຫາສິນຄ້າ / barcode / ລະຫັດ..."
                   className="pos-search-input"
                   autoFocus
@@ -2998,14 +3531,14 @@ function WarehouseLocationPickerModal({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/40 px-4">
+    <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:px-4">
       <button
         type="button"
         aria-label="ປິດ"
         className="absolute inset-0 cursor-default"
         onClick={onClose}
       />
-      <div className="relative w-full max-w-md overflow-hidden rounded-md bg-white shadow-xl">
+      <div className="relative w-full max-w-md overflow-hidden rounded-t-2xl bg-white shadow-xl sm:rounded-md">
         <header className="border-b border-odoo-border px-5 py-4">
           <div className="text-[10px] font-bold uppercase tracking-widest text-odoo-text-muted">
             ເລືອກສາງ ແລະ ສະພາບ
@@ -3285,7 +3818,7 @@ function CustomerPicker({
   onClose: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-4 pt-16">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-start sm:p-4 sm:pt-16">
       <button
         type="button"
         aria-label="ປິດ"
@@ -3294,7 +3827,7 @@ function CustomerPicker({
           if (!required) onClose();
         }}
       />
-      <div className="relative w-full max-w-2xl rounded-md border border-odoo-border bg-odoo-surface">
+      <div className="relative flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-2xl border border-odoo-border bg-odoo-surface sm:max-h-none sm:rounded-md">
         <div className="flex items-center justify-between border-b border-odoo-border px-4 py-3">
           <div>
             <div className="text-base font-bold text-odoo-text-strong">

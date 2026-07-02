@@ -118,6 +118,9 @@ body {
   font-size: 11px;
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Disable double-tap / pinch zoom (kiosk-style POS use). Pairs with the
+     viewport user-scalable=no in src/app/layout.tsx. */
+  touch-action: pan-x pan-y;
   /* Mobile safety net: a stray wide child (table, chip row, fixed-width tag)
      must never make the whole page scroll sideways. `clip` — not `hidden` —
      so it doesn't create a scroll container that would break the sticky
@@ -5638,6 +5641,50 @@ a {
 }
 
 @media (max-width: 640px) {
+  .pos-mobile-appbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 62px;
+    padding: 9px 12px;
+    background: linear-gradient(135deg, #172554, #1e3a8a 58%, #315ddd);
+    color: #fff;
+    border-bottom: 1px solid rgba(255,255,255,.12);
+  }
+  .pos-mobile-appbar-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    flex: 0 0 auto;
+    border-radius: 13px;
+    background: rgba(255,255,255,.14);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.12);
+  }
+  .pos-mobile-appbar-title {
+    font-size: 15px;
+    line-height: 1.2;
+    font-weight: 900;
+  }
+  .pos-mobile-appbar-subtitle {
+    margin-top: 3px;
+    font-size: 10px;
+    color: rgba(255,255,255,.68);
+    font-weight: 600;
+  }
+  .pos-mobile-appbar-count {
+    min-width: 48px;
+    padding: 5px 8px;
+    text-align: center;
+    border-radius: 11px;
+    background: rgba(255,255,255,.12);
+  }
+  .pos-mobile-appbar-count strong,
+  .pos-mobile-appbar-count span { display: block; }
+  .pos-mobile-appbar-count strong { font: 900 16px/1 ui-monospace, monospace; }
+  .pos-mobile-appbar-count span { margin-top: 3px; font-size: 9px; color: rgba(255,255,255,.7); }
+
   .pt-modern {
     padding-left: 10px;
     padding-right: 10px;
@@ -6333,4 +6380,942 @@ a {
 .pos-shell2 .pos-action-row .pos-iconaction {
   border-radius: 12px;
   border: 1px solid #e2e8f0;
+}
+
+/* ============================================================
+   POS redesign pass — barcode scanning UI, full-screen width,
+   and a lighter visual polish. Appended last so it wins the
+   cascade over every rule above.
+   ============================================================ */
+
+/* — Barcode scan toast (fixed, top-center) ---------------- */
+.pos-scan-toast {
+  position: fixed;
+  left: 50%;
+  top: 16px;
+  transform: translateX(-50%);
+  z-index: 80;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(92vw, 440px);
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 800;
+  color: #ffffff;
+  box-shadow: 0 12px 34px rgba(15, 23, 42, 0.24);
+  animation: pos-scan-in 160ms ease-out;
+}
+@keyframes pos-scan-in {
+  from { opacity: 0; transform: translate(-50%, -8px); }
+  to   { opacity: 1; transform: translate(-50%, 0); }
+}
+.pos-scan-toast-ok { background: linear-gradient(135deg, #16a34a, #15803d); }
+.pos-scan-toast-error { background: linear-gradient(135deg, #dc2626, #b91c1c); }
+.pos-scan-toast-loading { background: linear-gradient(135deg, #334155, #1e293b); }
+
+/* — "Ready to scan" hint chip in the add bar -------------- */
+.pos-shell2 .pos-scan-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 12px;
+  border: 1.5px dashed var(--odoo-primary-200);
+  background: var(--odoo-primary-50);
+  color: var(--odoo-primary-dark);
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  user-select: none;
+}
+.pos-shell2 .pos-scan-hint svg { color: var(--odoo-primary); }
+@media (max-width: 520px) {
+  .pos-shell2 .pos-scan-hint span { display: none; }
+  .pos-shell2 .pos-scan-hint { padding: 0 10px; }
+}
+
+/* — Full-screen width: edge-to-edge shell, a more substantial
+     payment rail on large monitors. --------------------------- */
+.pos-shell2 {
+  width: 100%;
+  max-width: none;
+}
+/* The cart column carries `.pos-order`, which caps at max-width:1040px — on
+   wide monitors that leaves a large empty gap between the cart card and the
+   total card. Drop the cap so the cart column fills its full grid track. */
+.pos-shell2 .pos-order-left {
+  max-width: none;
+  width: 100%;
+}
+@media (min-width: 1280px) {
+  .pos-shell2 {
+    grid-template-columns: minmax(0, 1fr) minmax(380px, 460px);
+  }
+}
+@media (min-width: 1680px) {
+  .pos-shell2 {
+    grid-template-columns: minmax(0, 1fr) minmax(420px, 520px);
+  }
+}
+
+/* — Light polish: calmer canvas, roomier cart, softer cards - */
+.pos-shell2 .pos-order-left {
+  background:
+    radial-gradient(1200px 400px at 0% -10%, #ffffff 0%, #f8fafc 55%, #f8fafc 100%);
+}
+.pos-shell2 .pos-order-lines {
+  margin: 10px 10px 12px 12px;
+  border-radius: 16px;
+  border: 1px solid #e6ebf2;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.05);
+}
+/* Bring the two cards together: a single balanced gutter between the cart
+   card (right edge) and the checkout card (left edge) across the divider,
+   and let the checkout card fill the column height so it matches the tall
+   cart card instead of floating short at the top. */
+.pos-shell2 .pos-checkout-col {
+  padding: 10px 12px 12px 10px;
+}
+.pos-shell2 .pos-checkout-card {
+  margin-top: 0;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+/* The card's single inner wrapper (px-4 py-3) grows to fill the card, and the
+   pay/action row is pushed to the bottom so the two cards read as a matched
+   pair (equal height, aligned bottoms). */
+.pos-shell2 .pos-checkout-card > div {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.pos-shell2 .pos-checkout-card .pos-action-row {
+  margin-top: auto;
+}
+.pos-shell2 .pos-cart-empty {
+  padding: 40px 20px;
+}
+.pos-shell2 .pos-cart-empty-icon {
+  width: 76px;
+  height: 76px;
+  border-radius: 20px;
+}
+
+/* — On-screen quick search bar ---------------------------- */
+.pos-shell2 .pos-search-bar {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px 0;
+  background: transparent;
+}
+.pos-shell2 .pos-search-bar-icon {
+  position: absolute;
+  left: 26px;
+  top: 10px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  color: #94a3b8;
+  pointer-events: none;
+}
+.pos-shell2 .pos-search-bar-input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 46px;
+  padding: 0 14px 0 40px;
+  border-radius: 12px;
+  border: 1.5px solid #e2e8f0;
+  background: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--odoo-text-strong, #0f172a);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.pos-shell2 .pos-search-bar-input::placeholder {
+  color: #94a3b8;
+  font-weight: 500;
+}
+.pos-shell2 .pos-search-bar-input:focus {
+  outline: none;
+  border-color: var(--odoo-primary);
+  box-shadow: 0 0 0 3px var(--odoo-primary-100);
+}
+.pos-shell2 .pos-search-bar-clear {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 46px;
+  border-radius: 10px;
+  color: #94a3b8;
+  transition: background 120ms ease, color 120ms ease;
+}
+.pos-shell2 .pos-search-bar-clear:hover {
+  background: #f1f5f9;
+  color: #475569;
+}
+.pos-shell2 .pos-search-bar-btn {
+  flex: 0 0 auto;
+  height: 46px;
+  padding: 0 18px;
+  border-radius: 12px;
+  background: var(--odoo-primary);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 800;
+  box-shadow: 0 6px 16px rgba(37, 99, 235, 0.22);
+  transition: filter 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+.pos-shell2 .pos-search-bar-btn:hover {
+  filter: brightness(1.04);
+  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.3);
+  transform: translateY(-1px);
+}
+
+/* — Inline quick-search results (search-first POS) ---------- */
+.pos-shell2 .pos-quick-results {
+  margin: 8px 14px 0;
+  border: 1px solid #e6ebf2;
+  border-radius: 14px;
+  background: #ffffff;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+.pos-shell2 .pos-quick-result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  text-align: left;
+  border-bottom: 1px solid #f1f5f9;
+  transition: background 120ms ease;
+}
+.pos-shell2 .pos-quick-result:last-child {
+  border-bottom: 0;
+}
+.pos-shell2 .pos-quick-result:hover:not(:disabled),
+.pos-shell2 .pos-quick-result:active:not(:disabled) {
+  background: var(--odoo-primary-50);
+}
+.pos-shell2 .pos-quick-result:disabled {
+  opacity: 0.5;
+}
+.pos-shell2 .pos-quick-result-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pos-shell2 .pos-quick-result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+.pos-shell2 .pos-quick-result-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 3px;
+  flex: 0 0 auto;
+}
+.pos-shell2 .pos-quick-result-stock {
+  font-size: 9px;
+  font-weight: 800;
+  color: #16a34a;
+  background: #f0fdf4;
+  padding: 1px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.pos-shell2 .pos-quick-result-stock.is-out {
+  color: var(--odoo-danger);
+  background: var(--odoo-danger-bg, #fef2f2);
+}
+.pos-shell2 .pos-quick-result-price {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--odoo-primary-dark);
+  white-space: nowrap;
+}
+
+/* ============================================================
+   Sidebar font balance — Noto Sans Lao draws Latin glyphs taller
+   than its Lao glyphs at the same px, so mixed-script menu labels
+   (e.g. "Cashier performance", "POS") looked bigger than the Lao
+   ones. Re-declare the Latin subset scaled down so both scripts
+   read as one size. Scoped to the sidebar via font-family below.
+   ============================================================ */
+@font-face {
+  font-family: "SidebarLatinFix";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  size-adjust: 85%;
+  src: url(https://fonts.gstatic.com/s/notosanslao/v33/bx6lNx2Ol_ixgdYWLm9BwxM3NW6BOkuf763Clj73CiQ_J1Djx9pidOt4lsHteJkL_L2R2pU4.woff2)
+    format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
+    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
+    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+/* SidebarLatinFix only covers the Latin range, so Lao still uses the app
+   font; only Latin glyphs get the size-adjust. Covers desktop (.sbd-*) and
+   the mobile drawer (.sbd-mnav). */
+.sbd-item,
+.sbd-sub-item,
+.sbd-brand-name,
+.sbd-mnav a,
+.sbd-mnav button {
+  font-family: "SidebarLatinFix", var(--font-noto-sans-lao), "Noto Sans Lao",
+    Arial, Helvetica, sans-serif;
+}
+
+/* ============================================================
+   POS cart — mobile card reflow. On phones the 6-column cart
+   table is unusable; turn each row into a stacked card so the
+   POS is thumb-friendly. Appended last so it wins the cascade.
+   ============================================================ */
+@media (max-width: 640px) {
+  .pos-shell2 .pos-cart-table,
+  .pos-shell2 .pos-cart-table tbody {
+    display: block;
+    width: 100%;
+  }
+  .pos-shell2 .pos-cart-table thead {
+    display: none;
+  }
+  /* Dense cart card: name+delete on top, then qty · unit-price · total on
+     ONE row, then the seller/warehouse chips inline — no stacked label
+     lines. Roughly half the height of the previous card. */
+  .pos-shell2 .pos-cart-row {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    grid-template-areas:
+      "product product actions"
+      "qty     price   total"
+      "seller  seller  seller";
+    gap: 4px 8px;
+    align-items: center;
+    width: 100%;
+    max-width: 100%;
+    padding: 8px 10px;
+    margin: 0 0 7px;
+    border: 1px solid #e6ebf2;
+    border-radius: 12px;
+    background: #ffffff;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+  .pos-shell2 .pos-cart-row-selected {
+    border-color: var(--odoo-primary);
+    box-shadow: 0 0 0 1px var(--odoo-primary), 0 6px 16px rgba(37, 99, 235, 0.12);
+  }
+  .pos-shell2 .pos-cart-cell {
+    display: block;
+    min-width: 0;
+    padding: 0;
+    border: 0 !important;
+    background: transparent !important;
+  }
+  .pos-shell2 .pos-cart-product { grid-area: product; min-width: 0; align-self: start; }
+  .pos-shell2 .pos-cart-price { grid-area: price; text-align: left; font-size: 12px; }
+  .pos-shell2 .pos-cart-qty { grid-area: qty; }
+  .pos-shell2 .pos-cart-total { grid-area: total; text-align: right; justify-self: end; }
+  .pos-shell2 .pos-cart-total .font-mono { font-size: 13px; }
+  .pos-shell2 .pos-cart-seller { grid-area: seller; }
+  .pos-shell2 .pos-cart-actions { grid-area: actions; justify-self: end; align-self: start; }
+  /* product name: cap at 2 lines so long names don't blow up height */
+  .pos-shell2 .pos-cart-name {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    line-height: 1.22;
+  }
+  /* smaller qty stepper */
+  .pos-shell2 .pos-cart-qty .pos-qty-input {
+    height: 30px;
+    width: 46px;
+    font-size: 13px;
+  }
+  /* seller + warehouse chips: inline on one row, tiny */
+  .pos-shell2 .pos-cart-seller > div {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+  }
+  .pos-shell2 .pos-cart-seller button {
+    font-size: 10px;
+    padding: 2px 6px;
+  }
+  /* detail / warning rows span the full card width */
+  .pos-shell2 tr:has(.pos-cart-detail-cell) {
+    display: block;
+    margin: -5px 0 9px;
+  }
+  .pos-shell2 .pos-cart-detail-cell {
+    display: block;
+    padding: 0;
+    border: 0;
+  }
+
+  /* --- Compact horizontal stepper on phones -----------------
+     The three step cards stack vertically on desktop; on a phone
+     that wastes the whole first screen. Collapse them into a
+     single row of three compact chips (badge + title only). */
+  .pos-shell2 .pos-flow-panel {
+    padding: 8px 10px 0;
+  }
+  /* The base ≤640 rules turn this into a 72vw horizontal-scroll
+     strip (meant for the old .pos-shell). Override back to a
+     3-up grid so all three steps fit without scrolling. */
+  .pos-shell2 .pos-flow-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+    overflow: visible;
+  }
+  .pos-shell2 .pos-step-card {
+    min-width: 0;
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    gap: 7px;
+    padding: 8px 9px;
+    border-radius: 11px;
+  }
+  .pos-shell2 .pos-step-badge {
+    width: 20px;
+    height: 20px;
+    font-size: 11px;
+  }
+  .pos-shell2 .pos-step-title {
+    font-size: 11px;
+    line-height: 1.15;
+  }
+  /* the descriptive sub-text is redundant on a phone — hide it */
+  .pos-shell2 .pos-step-text {
+    display: none;
+  }
+
+  /* --- Compact add-bar: keep "+ ເພີ່ມສິນຄ້າ" and "ໂປຣ" on one row
+     instead of three stacked rows, and drop the standalone scan
+     hint (the search box placeholder already mentions barcode). */
+  .pos-shell2 .pos-add-bar {
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+  .pos-shell2 .pos-add-big {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+  .pos-shell2 .pos-promo-chip {
+    flex: 0 0 auto;
+    /* an earlier ≤960 rule sets width:100% (forces its own row) — undo it */
+    width: auto;
+  }
+  .pos-shell2 .pos-scan-hint {
+    display: none;
+  }
+
+  /* --- Global compaction: shrink the whole POS on phones so more
+     fits on screen and it stops feeling oversized. -------------- */
+  /* stepper — tighter chips */
+  .pos-shell2 .pos-flow-panel { padding: 6px 8px 0; }
+  .pos-shell2 .pos-flow-list { gap: 5px; }
+  .pos-shell2 .pos-step-card { padding: 6px 7px; gap: 6px; border-radius: 9px; }
+  .pos-shell2 .pos-step-badge { width: 17px; height: 17px; font-size: 10px; }
+  .pos-shell2 .pos-step-title { font-size: 10px; }
+  /* header + customer */
+  .pos-shell2 .pos-order-header { padding: 8px 12px; }
+  .pos-shell2 .pos-order-header .text-base { font-size: 13px; }
+  .pos-shell2 .pos-customer-card,
+  .pos-shell2 .pos-customer-empty { padding: 8px 10px; font-size: 12px; }
+  /* search bar */
+  .pos-shell2 .pos-search-bar { padding: 8px 12px 0; }
+  .pos-shell2 .pos-search-bar-icon { top: 8px; height: 40px; }
+  .pos-shell2 .pos-search-bar-input { height: 40px; font-size: 13px; }
+  .pos-shell2 .pos-search-bar-clear { height: 40px; }
+  .pos-shell2 .pos-search-bar-btn { height: 40px; padding: 0 14px; font-size: 13px; }
+  /* add / promo */
+  .pos-shell2 .pos-add-bar { padding: 8px 12px; }
+  .pos-shell2 .pos-add-big { min-height: 40px; font-size: 13px; }
+  .pos-shell2 .pos-promo-chip { height: 40px; font-size: 13px; }
+  /* cart card + empty state (cell padding handled by the card grid above) */
+  .pos-shell2 .pos-order-lines { margin: 8px; }
+  .pos-shell2 .pos-cart-empty { min-height: 0; height: auto; padding: 0; }
+  .pos-shell2 .pos-cart-empty-inner { padding: 20px 16px; }
+  .pos-shell2 .pos-cart-empty-icon { width: 48px; height: 48px; border-radius: 14px; }
+  .pos-shell2 .pos-cart-empty-icon svg { width: 24px; height: 24px; }
+  /* checkout summary */
+  .pos-shell2 .pos-checkout-card .px-4 { padding-left: 12px; padding-right: 12px; }
+  .pos-shell2 .pos-checkout-card .py-3 { padding-top: 10px; padding-bottom: 10px; }
+  .pos-shell2 .pos-checkout-card .pos-total-line { padding: 10px 12px; margin-top: 6px; }
+  .pos-shell2 .pos-checkout-card .pos-total-line .font-mono,
+  .pos-shell2 .pos-checkout-card .text-2xl { font-size: 20px; }
+  /* sticky pay bar — slimmer */
+  .pos-mobile-paybar { padding: 6px 12px; }
+  .pos-mobile-paybar-amount { font-size: 16px; }
+  .pos-mobile-paybar-btn { min-height: 44px; font-size: 14px; }
+
+  /* --- Search-first layout ----------------------------------
+     Drop the stepper and float the search box to the very top as
+     the hero. Order: search → inline results → add-bar →
+     cart-header(customer/count) → cart list. Reorder via flex so
+     no JSX move is needed. */
+  .pos-shell2 .pos-order-left {
+    display: flex;
+    flex-direction: column;
+  }
+  .pos-shell2 .pos-flow-panel { display: none; }
+  .pos-shell2 .pos-search-bar { order: 1; }
+  .pos-shell2 .pos-quick-results { order: 2; }
+  .pos-shell2 .pos-add-bar { order: 3; }
+  .pos-shell2 .pos-order-header { order: 4; }
+  .pos-shell2 .pos-order-lines { order: 5; }
+  /* search = hero (overrides the compaction sizes above) */
+  .pos-shell2 .pos-search-bar { padding: 12px 14px 0; }
+  .pos-shell2 .pos-search-bar-input {
+    height: 48px;
+    font-size: 15px;
+    font-weight: 700;
+    border-width: 2px;
+  }
+  .pos-shell2 .pos-search-bar-icon { height: 48px; top: 12px; }
+  .pos-shell2 .pos-search-bar-clear { height: 48px; }
+  .pos-shell2 .pos-search-bar-btn { height: 48px; font-size: 14px; }
+  /* results dropdown flush to the hero, roomier tap targets */
+  .pos-shell2 .pos-quick-results { margin: 8px 14px 0; }
+  .pos-shell2 .pos-quick-result { padding: 12px; }
+
+  /* --- CRITICAL: don't let the checkout overlay the cart -----
+     Un-prefixed rules (meant for the old .pos-shell) turn the
+     summary into a `position: sticky; bottom: 0; max-height: 52dvh`
+     panel. On a phone the tall summary (with the delivery card +
+     delivery fields) gets pinned to the bottom and pulled up OVER
+     the header / search / add / cart — leaving no way to add
+     products. Put the whole checkout back in normal document flow
+     so the page scrolls: stepper → customer → search → add → cart
+     → totals → pay. */
+  .pos-shell2 .pos-checkout-col {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    background: transparent;
+    backdrop-filter: none;
+    padding: 0 12px 16px;
+    /* leave room for the fixed quick-pay bar (~64px) + the app bottom-nav */
+    padding-bottom: calc(84px + env(safe-area-inset-bottom));
+  }
+  .pos-shell2 .pos-order-summary {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    bottom: auto;
+  }
+  /* the big in-flow pay CTA is redundant with the sticky quick-pay bar;
+     keep the delete / clear controls, drop the duplicate button. */
+  .pos-shell2 .pos-action-row .pos-cta {
+    display: none;
+  }
+
+  /* --- Sticky quick-pay bar (mobile only) ------------------- */
+  .pos-mobile-paybar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: fixed;
+    left: 0;
+    right: 0;
+    /* stack just above the app bottom-nav (~56px + safe area) */
+    bottom: calc(56px + env(safe-area-inset-bottom));
+    z-index: 45;
+    padding: 8px 12px;
+    background: #ffffff;
+    border-top: 1px solid #e6ebf2;
+    box-shadow: 0 -6px 18px rgba(15, 23, 42, 0.10);
+  }
+  .pos-mobile-paybar-total {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.05;
+    white-space: nowrap;
+  }
+  .pos-mobile-paybar-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #94a3b8;
+  }
+  .pos-mobile-paybar-amount {
+    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--odoo-primary-dark);
+  }
+  .pos-mobile-paybar-amount span {
+    font-size: 11px;
+    font-weight: 600;
+    color: #64748b;
+  }
+  .pos-mobile-paybar-btn {
+    flex: 1;
+    min-height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--odoo-primary);
+    color: #ffffff;
+    font-size: 15px;
+    font-weight: 800;
+    box-shadow: 0 6px 16px rgba(37, 99, 235, 0.24);
+  }
+  .pos-mobile-paybar-btn:disabled {
+    opacity: 0.45;
+    box-shadow: none;
+  }
+}
+
+/* Sticky quick-pay bar is a phone-only affordance — never on ≥sm, where the
+   checkout rail is always visible. Scoped to min-width so it never competes
+   with the ≤640 `display: flex` rule at equal specificity. */
+@media (min-width: 641px) {
+  .pos-mobile-paybar {
+    display: none;
+  }
+}
+
+/* ============================================================
+   POS mobile 2026 — purpose-built phone composition.
+   Desktop is intentionally untouched. These rules are last so
+   they supersede the older incremental mobile POS experiments.
+   ============================================================ */
+@media (max-width: 640px) {
+  .pos-shell2 {
+    display: block;
+    min-height: 100dvh;
+    background: #f5f7fb;
+    padding: 0;
+  }
+
+  .pos-shell2 .pos-order-left {
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: #f5f7fb;
+  }
+
+  /* Search is the primary action: one clean, compact toolbar. */
+  .pos-shell2 .pos-search-bar {
+    gap: 7px;
+    padding: 10px 10px 8px;
+    background: #fff;
+    border-bottom: 1px solid #e8edf5;
+  }
+  .pos-shell2 .pos-search-bar-icon {
+    left: 23px;
+    top: 10px;
+    height: 44px;
+  }
+  .pos-shell2 .pos-search-bar-input {
+    height: 44px;
+    padding-left: 38px;
+    border: 1px solid #dbe3ee;
+    border-radius: 13px;
+    background: #f8fafc;
+    box-shadow: none;
+    font-size: 14px;
+  }
+  .pos-shell2 .pos-search-bar-btn {
+    height: 44px;
+    padding: 0 14px;
+    border-radius: 13px;
+    box-shadow: none;
+    font-size: 13px;
+  }
+
+  /* Product actions become a compact split toolbar. */
+  .pos-shell2 .pos-add-bar {
+    gap: 7px;
+    padding: 8px 10px;
+    background: #fff;
+    border-bottom: 1px solid #e8edf5;
+  }
+  .pos-shell2 .pos-add-big {
+    min-height: 42px;
+    border: 0;
+    border-radius: 12px;
+    background: var(--odoo-primary);
+    color: #fff;
+    font-size: 13px;
+    box-shadow: 0 5px 12px rgba(37, 99, 235, .16);
+  }
+  .pos-shell2 .pos-promo-chip {
+    height: 42px;
+    min-width: 74px;
+    justify-content: center;
+    border: 1px solid #dbe7ff;
+    border-radius: 12px;
+    background: #f4f7ff;
+    color: #315ddc;
+    font-size: 12px;
+  }
+
+  /* Cart identity + customer: compact card instead of a tall centred block. */
+  .pos-shell2 .pos-order-header {
+    margin: 8px 8px 0;
+    padding: 10px;
+    border: 1px solid #e5eaf2;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, .035);
+  }
+  .pos-shell2 .pos-order-title {
+    margin-bottom: 8px;
+    align-items: center;
+  }
+  .pos-shell2 .pos-order-title .text-base {
+    font-size: 14px;
+  }
+  .pos-shell2 .pos-order-title .odoo-pill {
+    padding: 3px 8px;
+    font-size: 10px;
+  }
+  .pos-shell2 .pos-customer-empty,
+  .pos-shell2 .pos-customer-card {
+    min-height: 42px;
+    padding: 8px 10px;
+    border: 1px dashed #cbd7e8;
+    border-radius: 11px;
+    background: #fbfdff;
+    text-align: left;
+  }
+  .pos-shell2 .pos-order-header > .flex.flex-wrap.items-center.gap-2 {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 5px;
+  }
+  .pos-shell2 .pos-order-header > .flex.flex-wrap.items-center.gap-2 > .text-\[11px\] {
+    padding: 0 2px;
+    font-size: 10px;
+    line-height: 1.35;
+  }
+  .pos-shell2 .pos-order-header > .mt-2 {
+    margin-top: 7px;
+    padding-top: 7px;
+    border-top: 1px solid #eef2f7;
+    font-size: 10px;
+  }
+
+  /* Cart content: no giant white placeholder. */
+  .pos-shell2 .pos-order-lines {
+    margin: 8px;
+    border: 0;
+    border-radius: 14px;
+    box-shadow: none;
+    background: transparent;
+  }
+  .pos-shell2 .pos-cart-empty {
+    border: 1px dashed #d6deea;
+    border-radius: 14px;
+    background: #fff;
+  }
+  .pos-shell2 .pos-cart-empty-inner {
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    align-items: center;
+    column-gap: 11px;
+    min-height: 92px;
+    padding: 13px;
+    text-align: left;
+  }
+  .pos-shell2 .pos-cart-empty-icon {
+    grid-row: 1 / span 2;
+    width: 42px;
+    height: 42px;
+    margin: 0;
+    border-radius: 12px;
+  }
+  .pos-shell2 .pos-cart-empty-inner .mt-2 {
+    margin-top: 0;
+    align-self: end;
+    font-size: 13px;
+  }
+  .pos-shell2 .pos-cart-empty-inner .mt-1 {
+    margin-top: 2px;
+    align-self: start;
+    font-size: 10px;
+    line-height: 1.4;
+  }
+
+  /* Checkout reads as a concise receipt; secondary delivery data is one line. */
+  .pos-shell2 .pos-checkout-col {
+    padding: 0 8px calc(82px + env(safe-area-inset-bottom));
+  }
+  .pos-shell2 .pos-checkout-card {
+    border: 1px solid #e5eaf2;
+    border-radius: 14px;
+    box-shadow: 0 3px 12px rgba(15, 23, 42, .045);
+    background: #fff;
+  }
+  .pos-shell2 .pos-checkout-card > .px-4.py-3 {
+    padding: 12px;
+  }
+  .pos-shell2 .pos-checkout-card .space-y-1 {
+    font-size: 12px;
+  }
+  .pos-shell2 .pos-checkout-card .pos-total-line {
+    margin-top: 8px;
+    padding: 11px 12px;
+    border: 0;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #eef5ff, #f5f7ff);
+  }
+  .pos-shell2 .pos-checkout-card .pos-total-line .font-mono {
+    font-size: 22px;
+  }
+  .pos-shell2 .pos-delivery-today {
+    margin-top: 8px;
+    border-radius: 11px;
+  }
+  .pos-shell2 .pos-delivery-today-head {
+    padding: 8px 10px;
+    font-size: 10px;
+  }
+  .pos-shell2 .pos-delivery-today-body {
+    display: none;
+  }
+
+  /* Bottom action is compact, safe-area aware, and never obscures content. */
+  .pos-mobile-paybar {
+    gap: 9px;
+    padding: 7px 9px;
+    border-top-color: #e5eaf2;
+    box-shadow: 0 -8px 24px rgba(15, 23, 42, .10);
+  }
+  .pos-mobile-paybar-total {
+    min-width: 82px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+  }
+  .pos-mobile-paybar-amount {
+    font-size: 17px;
+  }
+  .pos-mobile-paybar-btn {
+    min-height: 46px;
+    border-radius: 13px;
+    font-size: 14px;
+    box-shadow: none;
+  }
+}
+
+@media (min-width: 641px) {
+  .pos-mobile-appbar { display: none; }
+}
+
+/* ============================================================
+   POS mobile step wizard (≤640px) — 1 ສິນຄ້າ → 2 ລູກຄ້າ → 3 ສະຫຼຸບ.
+   The pos-mstep-N class on .pos-shell2 decides which segment shows;
+   the flow panel becomes a sticky tappable stepper. Desktop (>640px)
+   is untouched: every segment stays visible there.
+   ============================================================ */
+.pos-step-card {
+  text-align: left;
+  cursor: pointer;
+}
+@media (max-width: 640px) {
+  /* Sticky stepper nav (an earlier search-first rule hid it — bring it back). */
+  .pos-shell2 .pos-flow-panel {
+    display: block;
+    order: 0;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    padding: 8px 10px 6px;
+    background: #eef2f7;
+    border-bottom: 1px solid #e2e8f0;
+  }
+  .pos-shell2 .pos-flow-list {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .pos-shell2 .pos-step-card {
+    padding: 7px 8px;
+    gap: 6px;
+  }
+  .pos-shell2 .pos-step-text {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Step 1 — ສິນຄ້າ: search + results + add bar + cart lines. */
+  .pos-shell2.pos-mstep-1 .pos-order-header,
+  .pos-shell2.pos-mstep-1 .pos-checkout-col {
+    display: none;
+  }
+
+  /* Step 2 — ລູກຄ້າ: customer card only. */
+  .pos-shell2.pos-mstep-2 .pos-search-bar,
+  .pos-shell2.pos-mstep-2 .pos-quick-results,
+  .pos-shell2.pos-mstep-2 .pos-add-bar,
+  .pos-shell2.pos-mstep-2 .pos-order-lines,
+  .pos-shell2.pos-mstep-2 .pos-checkout-col {
+    display: none;
+  }
+
+  /* Step 3 — ສະຫຼຸບ: the checkout column, expanded (not the sticky mini bar). */
+  .pos-shell2.pos-mstep-3 .pos-search-bar,
+  .pos-shell2.pos-mstep-3 .pos-quick-results,
+  .pos-shell2.pos-mstep-3 .pos-add-bar,
+  .pos-shell2.pos-mstep-3 .pos-order-lines,
+  .pos-shell2.pos-mstep-3 .pos-order-header {
+    display: none;
+  }
+  .pos-shell2.pos-mstep-3 .pos-checkout-col {
+    position: static;
+    background: transparent;
+    backdrop-filter: none;
+    padding: 10px;
+  }
+
+  /* Back button in the pay bar. */
+  .pos-mobile-paybar-back {
+    flex-shrink: 0;
+    width: 44px;
+    min-height: 46px;
+    border-radius: 13px;
+    border: 1px solid #d7dce5;
+    background: #ffffff;
+    color: #475569;
+    font-size: 18px;
+    font-weight: 900;
+  }
+}
+@media (min-width: 641px) {
+  .pos-mobile-paybar-back {
+    display: none;
+  }
 }
