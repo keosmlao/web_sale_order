@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { getCurrentEmployee } from "@/lib/auth";
+import { lineLoginConfigured } from "@/lib/line";
 import LoginForm from "./LoginForm";
 
 export const dynamic = "force-dynamic";
@@ -100,6 +101,24 @@ export default async function LoginPage() {
           </div>
 
           <LoginForm />
+
+          {lineLoginConfigured() ? (
+            <>
+              <div className="my-4 flex items-center gap-3 text-[11px] font-bold text-odoo-text-muted">
+                <span className="h-px flex-1 bg-odoo-border" /> ຫຼື{" "}
+                <span className="h-px flex-1 bg-odoo-border" />
+              </div>
+              <a
+                href="/api/auth/line/start"
+                className="flex items-center justify-center gap-2 rounded-lg bg-[#06C755] px-4 py-2.5 text-sm font-bold text-white transition hover:brightness-105"
+              >
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor" aria-hidden>
+                  <path d="M12 2C6.48 2 2 5.64 2 10.13c0 4.03 3.58 7.4 8.41 8.04.33.07.77.22.89.5.1.26.07.66.03.92l-.14.86c-.04.26-.2 1.02.89.56 1.1-.46 5.93-3.49 8.09-5.98C21.75 13.31 22 11.78 22 10.13 22 5.64 17.52 2 12 2Z" />
+                </svg>
+                ເຂົ້າສູ່ລະບົບດ້ວຍ LINE
+              </a>
+            </>
+          ) : null}
 
           <a
             href="/download"
