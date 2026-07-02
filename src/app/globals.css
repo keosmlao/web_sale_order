@@ -7414,3 +7414,12 @@ a {
     display: none;
   }
 }
+
+/* The desktop cart table sizes the actions column with width:1% (classic
+   shrink-to-fit column hack). As a grid item on phones that computes to a
+   1px-wide cell and the 32px ✕ button overflows it clean off the screen. */
+@media (max-width: 640px) {
+  .pos-shell2 .pos-cart-actions {
+    width: auto;
+  }
+}
