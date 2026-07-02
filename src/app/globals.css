@@ -7279,6 +7279,10 @@ a {
   .pos-shell2.pos-mstep-1 .pos-checkout-col {
     display: none;
   }
+  /* ...and no cart title/count on the customer step — just the customer card. */
+  .pos-shell2.pos-mstep-1 .pos-order-title {
+    display: none;
+  }
 
   /* Step 2 — ສິນຄ້າ: search + results + add bar + cart lines. */
   .pos-shell2.pos-mstep-2 .pos-order-header,
