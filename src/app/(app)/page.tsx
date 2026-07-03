@@ -7,6 +7,7 @@ import { roleFromEmployee, canApprovePriceRequests } from "@/lib/roles";
 import MyTargetCard, { type TargetDashboard } from "./MyTargetCard";
 import MyBonusCard from "./MyBonusCard";
 import ActivePromosCard from "./ActivePromosCard";
+import SpecialRewardCard from "./SpecialRewardCard";
 import LowStockBanner from "./cashier/LowStockBanner";
 import DeliveryTodayCard from "./orders/new/DeliveryTodayCard";
 
@@ -722,6 +723,10 @@ export default async function HomePage() {
         <MyBonusCard />
         <MyTargetCard initialData={initialTargetData} />
       </div>
+
+      {/* Special department rewards (ລາງວັນພິເສດ) — the month's announced
+          target-hit prizes with live progress. Hidden when none configured. */}
+      <SpecialRewardCard />
 
       {/* Running promotions — what to push today. Hidden when none active. */}
       <ActivePromosCard />
