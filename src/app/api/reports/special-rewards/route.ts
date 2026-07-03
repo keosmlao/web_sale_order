@@ -29,6 +29,18 @@ type RewardMemberRow = {
 const number = (value: string | number | bigint | null | undefined) =>
   Number(value ?? 0) || 0;
 
+function currentVientianePeriod(): { year: number; month: number } {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Vientiane",
+    year: "numeric",
+    month: "numeric",
+  }).formatToParts(new Date());
+  return {
+    year: Number(parts.find((p) => p.type === "year")?.value),
+    month: Number(parts.find((p) => p.type === "month")?.value),
+  };
+}
+
 export async function GET(request: NextRequest) {
   const employee = await getEmployeeFromRequest(request);
   if (!employee) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -36,6 +48,15 @@ export async function GET(request: NextRequest) {
   const myCode = employee.employeeCode ?? "";
   const role = roleFromEmployee(employee);
   const seesEveryone = role === "manager" || role === "head";
+
+  // ?year=&month= lets the report page browse past months; defaults to the
+  // current Vientiane period (used by the home card).
+  const current = currentVientianePeriod();
+  const url = new URL(request.url);
+  const yr = Number(url.searchParams.get("year"));
+  const mo = Number(url.searchParams.get("month"));
+  const year = Number.isInteger(yr) && yr >= 2020 && yr <= 2100 ? yr : current.year;
+  const month = Number.isInteger(mo) && mo >= 1 && mo <= 12 ? mo : current.month;
 
   try {
     const rows = await prisma.$queryRaw<RewardMemberRow[]>`
@@ -47,8 +68,8 @@ export async function GET(request: NextRequest) {
           t.emp_code,
           CASE WHEN t.product_group = 'AC' THEN 'AIR' ELSE 'CE_SDA' END AS group_code
         FROM odg_retail_target_employee t
-        WHERE t.year = to_char(CURRENT_DATE, 'YYYY')
-          AND LPAD(t.month, 2, '0') = to_char(CURRENT_DATE, 'MM')
+        WHERE t.year = ${year.toString()}
+          AND LPAD(t.month, 2, '0') = LPAD(${month.toString()}, 2, '0')
         ORDER BY t.emp_code, t.roworder DESC
       ),
       names AS (
@@ -88,8 +109,8 @@ export async function GET(request: NextRequest) {
         WHERE n.emp_code = r.emp_code
           AND sd.branch_code = '01'
           AND sd.argroup_main = '101'
-          AND sd.doc_date >= date_trunc('month', CURRENT_DATE)
-          AND sd.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+          AND sd.doc_date >= make_date(${year}, ${month}, 1)
+          AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
           AND (
             COALESCE(rw.brand_code, '') = ''
             OR UPPER(COALESCE(sd.item_brand, '')) = UPPER(rw.brand_code)
@@ -145,7 +166,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ rewards });
+    return NextResponse.json({ year, month, rewards });
   } catch (error) {
     console.error("GET /api/reports/special-rewards failed", error);
     // Table not installed — the home card simply hides.

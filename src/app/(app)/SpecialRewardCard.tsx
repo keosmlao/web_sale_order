@@ -1,11 +1,13 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 
 // "🎁 ລາງວັນພິເສດ" — the month's special department rewards (workbook table),
 // shown on the home page with the department's live progress toward each
 // target. Renders nothing while loading or when no reward is configured.
-type RewardMember = {
+// The list itself (RewardList) is shared with /reports/special-rewards.
+export type RewardMember = {
   code: string;
   name: string;
   amount: number;
@@ -13,7 +15,7 @@ type RewardMember = {
   reward: number;
 };
 
-type Reward = {
+export type Reward = {
   code: string;
   description: string;
   brandCode: string | null;
@@ -33,7 +35,7 @@ type Reward = {
 
 const moneyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 // Intl "lo-LA" month names fall back to English on some devices — spell them out.
-const LAO_MONTHS = [
+export const LAO_MONTHS = [
   "ມັງກອນ", "ກຸມພາ", "ມີນາ", "ເມສາ", "ພຶດສະພາ", "ມິຖຸນາ",
   "ກໍລະກົດ", "ສິງຫາ", "ກັນຍາ", "ຕຸລາ", "ພະຈິກ", "ທັນວາ",
 ];
@@ -45,49 +47,12 @@ const currentLaoMonth = () => {
   return LAO_MONTHS[Number(m) - 1] ?? m;
 };
 
-export default function SpecialRewardCard() {
-  const [rewards, setRewards] = useState<Reward[] | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/reports/special-rewards", { cache: "no-store" });
-        if (!res.ok) throw new Error(String(res.status));
-        const data = (await res.json()) as { rewards: Reward[] };
-        if (!cancelled) setRewards(Array.isArray(data.rewards) ? data.rewards : []);
-      } catch {
-        if (!cancelled) setRewards([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (!rewards || rewards.length === 0) return null;
-
+// The reward rows themselves — shared between the home card and the
+// /reports/special-rewards history page.
+export function RewardList({ rewards }: { rewards: Reward[] }) {
   const hasSplit = rewards.some((r) => r.splitByShare);
-
   return (
-    <section className="overflow-hidden rounded-2xl border border-amber-200/70 bg-white shadow-[0_10px_35px_-18px_rgba(217,119,6,0.45)]">
-      <div className="flex items-center justify-between border-b border-amber-100 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50/60 px-4 py-3">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-lg shadow-sm shadow-amber-300">
-            🎁
-          </span>
-          <div>
-            <div className="text-base font-black text-slate-900">ລາງວັນພິເສດ</div>
-            <div className="text-xs font-semibold text-slate-500">
-              ບັນລຸເປົ້າພະແນກ · ຮັບເງິນລາງວັນເພີ່ມ
-            </div>
-          </div>
-        </div>
-        <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-700">
-          ເດືອນ{currentLaoMonth()}
-        </span>
-      </div>
-
+    <>
       <ul className="divide-y divide-slate-100">
         {rewards.map((r) => {
           const pct = Math.max(0, r.pct * 100);
@@ -226,6 +191,59 @@ export default function SpecialRewardCard() {
           * HISENSE: ແບ່ງລາງວັນຕາມ % ສັດສ່ວນຍອດຂາຍຂອງແຕ່ລະຄົນໃນພະແນກ
         </div>
       ) : null}
+    </>
+  );
+}
+
+export default function SpecialRewardCard() {
+  const [rewards, setRewards] = useState<Reward[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/reports/special-rewards", { cache: "no-store" });
+        if (!res.ok) throw new Error(String(res.status));
+        const data = (await res.json()) as { rewards: Reward[] };
+        if (!cancelled) setRewards(Array.isArray(data.rewards) ? data.rewards : []);
+      } catch {
+        if (!cancelled) setRewards([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  if (!rewards || rewards.length === 0) return null;
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-amber-200/70 bg-white shadow-[0_10px_35px_-18px_rgba(217,119,6,0.45)]">
+      <div className="flex items-center justify-between border-b border-amber-100 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50/60 px-4 py-3">
+        <div className="flex items-center gap-2.5">
+          <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-lg shadow-sm shadow-amber-300">
+            🎁
+          </span>
+          <div>
+            <div className="text-base font-black text-slate-900">ລາງວັນພິເສດ</div>
+            <div className="text-xs font-semibold text-slate-500">
+              ບັນລຸເປົ້າພະແນກ · ຮັບເງິນລາງວັນເພີ່ມ
+            </div>
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-black text-amber-700">
+            ເດືອນ{currentLaoMonth()}
+          </span>
+          <Link
+            href="/reports/special-rewards"
+            className="text-[13px] font-bold text-amber-700 hover:underline"
+          >
+            ຍ້ອນຫຼັງ ›
+          </Link>
+        </div>
+      </div>
+      <RewardList rewards={rewards} />
     </section>
   );
 }
