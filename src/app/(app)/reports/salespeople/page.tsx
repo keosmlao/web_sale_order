@@ -237,11 +237,17 @@ export default async function SalespeopleReportPage({
  ytdActual: ytdActualByCode.get(agg.code) ?? 0,
  ytdTarget: ytdTargetByCode.get(agg.code) ?? 0,
  }))
+ // Only people with a target in the selected range appear — matches the
+ // home performance table.
+ .filter((r) => r.target > 0)
  .sort((a, b) => b.total - a.total);
 
  const grandReceipts = monthly.reduce((s, r) => s + r.total, 0);
  const grandTarget = monthly.reduce((s, r) => s + r.target, 0);
- const grandBills = Array.from(byCode.values()).reduce((s, a) => s + a.count, 0);
+ // Bill count restricted to the same target-holders the table shows.
+ const grandBills = Array.from(byCode.values())
+   .filter((a) => (targetByCode.get(a.code) ?? 0) > 0)
+   .reduce((s, a) => s + a.count, 0);
 
  // Days left in the CURRENT month — Req/Day only makes sense while the
  // selected range reaches into it.
