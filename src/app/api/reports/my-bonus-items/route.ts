@@ -10,6 +10,7 @@ type ItemRow = {
   category: string | null;
   qty: string | number;
   points: string | number;
+  is_return: boolean;
 };
 
 const num = (v: string | number | null | undefined) => Number(v ?? 0) || 0;
@@ -91,14 +92,19 @@ export async function GET(request: NextRequest) {
         LEFT JOIN app_incentive_status_multiplier sm ON sm.status_code = l.status_code
       )
       SELECT MAX(item_name) AS item_name, MAX(brand) AS brand, MAX(category) AS category,
-             SUM(qty) AS qty, SUM(pts) AS points
-      FROM scored
-      GROUP BY item_name
+             SUM(qty) AS qty, SUM(pts) AS points, is_return
+      FROM (SELECT scored.*, (qty < 0) AS is_return FROM scored) split
+      -- Sold and returned lines aggregate SEPARATELY (not netted) so a
+      -- credit-note / cancelled-bill deduction shows as its own entry instead
+      -- of silently shrinking (or hiding) the sold row.
+      GROUP BY item_name, is_return
       -- Zero-point items stay in the list so sellers can SEE which of their
       -- sold products earn points and which don't; zero-qty pseudo lines
-      -- (e.g. money-discount rows) are dropped.
-      HAVING SUM(qty) > 0
-      ORDER BY points DESC, item_name
+      -- (e.g. money-discount rows) are dropped. Return rows always stay.
+      HAVING is_return OR SUM(qty) > 0
+      -- Deduction rows FIRST so the LIMIT can never truncate them away on a
+      -- month with 150+ distinct sold items (the client groups rows itself).
+      ORDER BY is_return DESC, points DESC, item_name
       LIMIT 150
     `;
 
@@ -111,6 +117,7 @@ export async function GET(request: NextRequest) {
         category: r.category ?? "",
         qty: num(r.qty),
         points: num(r.points),
+        isReturn: r.is_return,
       })),
     });
   } catch (error) {

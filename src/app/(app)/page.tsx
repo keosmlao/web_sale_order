@@ -226,7 +226,11 @@ export default async function HomePage() {
         AND create_date_time_now::date = CURRENT_DATE
         AND ${deptIn}
     `,
-    prisma.$queryRaw<TopSalesperson[]>`
+    // Managers / heads only — the per-employee performance table is hidden
+    // from salespeople, so skip its (heavy) query for them entirely.
+    !insightIsTeam
+      ? Promise.resolve([] as TopSalesperson[])
+      : prisma.$queryRaw<TopSalesperson[]>`
       -- Performance table per employee: this-month sales + target and YTD
       -- figures. Employee-based (not sale-based) so people with a target but
       -- no sales yet still show a 0 row. Sales resolved employee → salenames
@@ -899,7 +903,10 @@ export default async function HomePage() {
       ) : null}
 
       {/* Personal insights — my category mix, best sellers, recent bills. */}
-      {/* Per-employee performance table — placed above the category insights. */}
+      {/* Per-employee performance table — placed above the category insights.
+          Managers / heads only: salespeople must not see each other's targets
+          and achievement figures. */}
+      {isManagerOrHead ? (
       <section>
           <Panel
             title="ຍອດຂາຍຈິງຕາມພະນັກງານ"
@@ -992,6 +999,7 @@ export default async function HomePage() {
             })()}
           </Panel>
       </section>
+      ) : null}
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Panel title="ຍອດຂາຍຕາມໝວດ" eyebrow={insightIsTeam ? "ທີມ · ເດືອນນີ້" : "ຂອງຂ້ອຍ · ເດືອນນີ້"}>

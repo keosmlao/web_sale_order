@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import MobileReloadButton from "@/components/MobileReloadButton";
 
 type Tab = { href: string; label: string; icon: ReactNode; match: (p: string) => boolean };
 
@@ -36,6 +37,7 @@ export default function BottomNav() {
           </Link>
         );
       })}
+      <MobileReloadButton />
     </nav>
   );
 }

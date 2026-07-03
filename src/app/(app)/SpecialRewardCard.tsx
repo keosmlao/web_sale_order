@@ -5,6 +5,14 @@ import { useEffect, useState } from "react";
 // "🎁 ລາງວັນພິເສດ" — the month's special department rewards (workbook table),
 // shown on the home page with the department's live progress toward each
 // target. Renders nothing while loading or when no reward is configured.
+type RewardMember = {
+  code: string;
+  name: string;
+  amount: number;
+  share: number;
+  reward: number;
+};
+
 type Reward = {
   code: string;
   description: string;
@@ -13,9 +21,14 @@ type Reward = {
   reward: number;
   splitByShare: boolean;
   current: number;
+  mine: number;
+  myShare: number;
+  myReward: number;
   people: number;
   achieved: boolean;
   pct: number;
+  // Present only for managers / unit heads — every roster member's share.
+  breakdown?: RewardMember[];
 };
 
 const moneyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
@@ -134,6 +147,75 @@ export default function SpecialRewardCard() {
                   </span>
                 )}
               </div>
+
+              {/* Managers / unit heads: every member's sales, % share and
+                  (for split rewards) their slice of the pot. */}
+              {r.breakdown && r.breakdown.length > 0 ? (
+                <div className="mt-2 overflow-hidden rounded-xl ring-1 ring-inset ring-slate-100">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                        <th className="px-2.5 py-1.5 text-left">ພະນັກງານ</th>
+                        <th className="px-2.5 py-1.5 text-right">ຍອດຂາຍ</th>
+                        <th className="px-2.5 py-1.5 text-right">%</th>
+                        {r.splitByShare ? (
+                          <th className="px-2.5 py-1.5 text-right">ຈະໄດ້ຮັບ</th>
+                        ) : null}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {r.breakdown.map((m) => (
+                        <tr key={m.code} className={m.amount > 0 ? "" : "text-slate-400"}>
+                          <td className="max-w-32 truncate px-2.5 py-1.5 font-bold text-slate-700">
+                            {m.name}
+                          </td>
+                          <td className="px-2.5 py-1.5 text-right font-mono font-bold">
+                            {moneyFmt.format(m.amount)}
+                          </td>
+                          <td className="px-2.5 py-1.5 text-right font-mono font-black text-amber-600">
+                            {(m.share * 100).toFixed(1)}%
+                          </td>
+                          {r.splitByShare ? (
+                            <td className="px-2.5 py-1.5 text-right font-mono font-black text-emerald-700">
+                              {moneyFmt.format(Math.round(m.reward))}
+                            </td>
+                          ) : null}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : null}
+
+              {/* My slice of the pot — split_by_share rewards pay each person
+                  their % of the department's qualifying sales. Hidden when the
+                  full team breakdown above is shown. */}
+              {!r.breakdown && r.splitByShare ? (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-xl bg-amber-50/70 px-3 py-2 ring-1 ring-inset ring-amber-100">
+                  <span className="text-xs font-bold text-slate-600">
+                    ຂ້ອຍຂາຍໄດ້{" "}
+                    <b className="font-mono text-slate-900">{moneyFmt.format(r.mine)}</b> ບາດ
+                    <span className="text-slate-400"> = </span>
+                    <b className="font-mono text-amber-700">{(r.myShare * 100).toFixed(1)}%</b>
+                    <span className="text-slate-400"> ຂອງຍອດລວມ</span>
+                  </span>
+                  <span className="text-xs font-black">
+                    {r.achieved ? (
+                      <span className="text-emerald-700">
+                        ສ່ວນຂອງຂ້ອຍ ≈ {moneyFmt.format(Math.round(r.myReward))} ບາດ
+                      </span>
+                    ) : (
+                      <span className="text-slate-500">
+                        ຖ້າບັນລຸເປົ້າ ≈{" "}
+                        <b className="font-mono text-amber-700">
+                          {moneyFmt.format(Math.round(r.myReward))}
+                        </b>{" "}
+                        ບາດ
+                      </span>
+                    )}
+                  </span>
+                </div>
+              ) : null}
             </li>
           );
         })}

@@ -40,7 +40,7 @@ type Tiers = {
 const pointFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 const pctFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 type Report = { currencyCode: string; rows: Row[]; tiers?: Tiers; commissionBase?: number };
-type Item = { itemName: string; brand: string; category: string; qty: number; points: number };
+type Item = { itemName: string; brand: string; category: string; qty: number; points: number; isReturn?: boolean };
 type DailyPoint = { day: string; points: number };
 
 const fmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
@@ -187,7 +187,9 @@ export default function MyBonusCard() {
       <div className="flex items-center justify-center gap-2 px-2 py-2">
         <span className="h-2 w-2 rounded-full bg-indigo-500" />
         <span className="text-[11px] font-black text-slate-500">ມື້ນີ້</span>
-        <span className="font-mono text-lg font-black text-indigo-700">+{pointFmt.format(todayPoints)}</span>
+        <span className={`font-mono text-lg font-black ${todayPoints < 0 ? "text-rose-600" : "text-indigo-700"}`}>
+          {todayPoints >= 0 ? "+" : ""}{pointFmt.format(todayPoints)}
+        </span>
       </div>
       <div className="flex items-center justify-center gap-2 px-2 py-2">
         <span className="h-2 w-2 rounded-full bg-emerald-500" />
@@ -339,7 +341,8 @@ export default function MyBonusCard() {
     const todayDom = now.getDate();
     const byDom = new Map(daily.map((d) => [Number(d.day.slice(8, 10)), d.points]));
     const monthDays = Array.from({ length: daysInMonth }, (_, i) => ({ day: i + 1, points: byDom.get(i + 1) ?? 0 }));
-    const maxDaily = Math.max(1, ...monthDays.map((d) => d.points));
+    // Scale by magnitude — a return-heavy day can be net negative.
+    const maxDaily = Math.max(1, ...monthDays.map((d) => Math.abs(d.points)));
     return (
       <div className="mt-3">
         <div className="mb-1 flex items-center justify-between text-xs font-bold text-slate-400">
@@ -350,8 +353,13 @@ export default function MyBonusCard() {
           {monthDays.map((d) => (
             <div
               key={d.day}
-              className={`flex-1 rounded-sm ${d.day === todayDom ? "bg-emerald-500" : d.points > 0 ? "bg-emerald-300" : "bg-slate-200"}`}
-              style={{ height: d.points > 0 ? `${Math.max(10, (d.points / maxDaily) * 100)}%` : "3px" }}
+              className={`flex-1 rounded-sm ${
+                d.points < 0 ? "bg-rose-400"
+                : d.day === todayDom ? "bg-emerald-500"
+                : d.points > 0 ? "bg-emerald-300"
+                : "bg-slate-200"
+              }`}
+              style={{ height: d.points !== 0 ? `${Math.max(10, (Math.abs(d.points) / maxDaily) * 100)}%` : "3px" }}
               title={`ວັນທີ ${d.day}: ${pointFmt.format(d.points)} ຄະແນນ`}
             />
           ))}
@@ -389,19 +397,32 @@ export default function MyBonusCard() {
       ) : items.length === 0 ? (
         <div className="py-6 text-center text-sm text-slate-400">ຍັງບໍ່ມີລາຍການຂາຍ</div>
       ) : (() => {
-        // Sold items split so the seller SEES which products earn points
-        // and which don't.
-        const earned = items.filter((it) => it.points > 0);
-        const zero = items.filter((it) => it.points <= 0);
-        const rows = (list: Item[], got: boolean) =>
+        // Sold items split so the seller SEES which products earn points and
+        // which don't — plus a separate deduction group for returned /
+        // cancelled bills (credit notes), whose points come back negative.
+        const deducted = items.filter((it) => it.isReturn);
+        const sold = items.filter((it) => !it.isReturn);
+        const earned = sold.filter((it) => it.points > 0);
+        const zero = sold.filter((it) => it.points <= 0);
+        const deductedPoints = deducted.reduce((s, it) => s + it.points, 0);
+        const rows = (list: Item[], tone: "got" | "zero" | "deduct") =>
           list.map((it, i) => (
-            <li key={`${got ? "p" : "z"}-${it.itemName}-${i}`} className={`flex items-center gap-2 px-3 py-2 ${got ? "" : "bg-slate-50/60"}`}>
+            <li
+              key={`${tone}-${it.itemName}-${i}`}
+              className={`flex items-center gap-2 px-3 py-2 ${tone === "zero" ? "bg-slate-50/60" : tone === "deduct" ? "bg-rose-50/50" : ""}`}
+            >
               <span className="min-w-0 flex-1">
-                <span className={`block truncate text-sm font-bold ${got ? "text-slate-800" : "text-slate-500"}`}>{it.itemName}</span>
+                <span className={`block truncate text-sm font-bold ${tone === "got" ? "text-slate-800" : tone === "deduct" ? "text-rose-800" : "text-slate-500"}`}>{it.itemName}</span>
                 <span className="text-xs text-slate-400">{it.brand}{it.category ? ` · ${it.category}` : ""} · x{fmt.format(it.qty)}</span>
               </span>
-              {got ? (
+              {tone === "got" ? (
                 <span className="shrink-0 rounded-lg bg-emerald-50 px-2 py-1 font-mono text-sm font-black text-emerald-700">+{pointFmt.format(it.points)}</span>
+              ) : tone === "deduct" ? (
+                it.points < 0 ? (
+                  <span className="shrink-0 rounded-lg bg-rose-100 px-2 py-1 font-mono text-sm font-black text-rose-700">{pointFmt.format(it.points)}</span>
+                ) : (
+                  <span className="shrink-0 rounded-lg bg-rose-50 px-2 py-1 text-xs font-black text-rose-300">ບໍ່ຫັກແຕ້ມ</span>
+                )
               ) : (
                 <span className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-xs font-black text-slate-400">ບໍ່ໄດ້ແຕ້ມ</span>
               )}
@@ -409,18 +430,27 @@ export default function MyBonusCard() {
           ));
         return (
           <>
-            <div className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 text-xs font-bold">
+            <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-0.5 border-b border-slate-100 px-3 py-1.5 text-xs font-bold">
               <span className="text-emerald-700">✓ ໄດ້ແຕ້ມ {fmt.format(earned.length)} ລາຍການ</span>
               <span className="text-slate-400">✗ ບໍ່ໄດ້ແຕ້ມ {fmt.format(zero.length)} ລາຍການ</span>
+              {deducted.length > 0 ? (
+                <span className="text-rose-600">↩ ຫັກຄືນ {fmt.format(deducted.length)} ລາຍການ ({pointFmt.format(deductedPoints)} ຄະແນນ)</span>
+              ) : null}
             </div>
             <ul className="divide-y divide-slate-100">
-              {rows(earned, true)}
+              {rows(earned, "got")}
               {zero.length > 0 ? (
                 <li className="bg-slate-100/80 px-3 py-1 text-xs font-black uppercase tracking-wide text-slate-400">
                   ຂາຍແລ້ວ ແຕ່ບໍ່ໄດ້ແຕ້ມ
                 </li>
               ) : null}
-              {rows(zero, false)}
+              {rows(zero, "zero")}
+              {deducted.length > 0 ? (
+                <li className="bg-rose-100/70 px-3 py-1 text-xs font-black uppercase tracking-wide text-rose-600">
+                  ຫັກແຕ້ມຄືນ — ຮັບຄືນສິນຄ້າ / ຍົກເລີກບິນ
+                </li>
+              ) : null}
+              {rows(deducted, "deduct")}
             </ul>
           </>
         );
