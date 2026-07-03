@@ -141,7 +141,7 @@ export default function MyBonusCard() {
       <div className="flex items-center justify-between border-b border-emerald-100/70 bg-gradient-to-r from-emerald-50 to-teal-50/60 px-4 py-3.5">
         <div className="flex items-center gap-2.5">
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-600 text-white shadow-sm shadow-emerald-300">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6"/></svg>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7H14a3.5 3.5 0 0 1 0 7H6" /></svg>
           </span>
           <div><div className="text-sm font-black text-slate-900">{isRoleComm ? "ຄ່າຄອມ" : "ໂບນັດ ແລະ ຄ່າຄອມ"}</div><div className="text-[10px] font-semibold text-slate-500">ລາຍຮັບເພີ່ມເດືອນນີ້</div></div>
         </div>
@@ -189,29 +189,30 @@ export default function MyBonusCard() {
         </div>
 
         {isRoleComm ? null : (
-        <div className="mt-3 grid grid-cols-2 divide-x divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70">
-          <div className="flex items-center justify-center gap-2 px-2 py-2">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            <span className="text-[9px] font-black text-slate-500">ສະສົມ</span>
-            <span className="font-mono text-base font-black text-emerald-700">{pointFmt.format(row.bonusPoints)}</span>
+          <div className="mt-3 grid grid-cols-2 divide-x divide-slate-200 overflow-hidden rounded-xl border border-slate-200 bg-slate-50/70">
+            <div className="flex items-center justify-center gap-2 px-2 py-2">
+              <span className="h-2 w-2 rounded-full bg-indigo-500" />
+              <span className="text-[9px] font-black text-slate-500">ມື້ນີ້</span>
+              <span className="font-mono text-base font-black text-indigo-700">+{pointFmt.format(todayPoints)}</span>
+            </div>
+            <div className="flex items-center justify-center gap-2 px-2 py-2">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              <span className="text-[9px] font-black text-slate-500">ສະສົມ</span>
+              <span className="font-mono text-base font-black text-emerald-700">{pointFmt.format(row.bonusPoints)}</span>
+            </div>
+
           </div>
-          <div className="flex items-center justify-center gap-2 px-2 py-2">
-            <span className="h-2 w-2 rounded-full bg-indigo-500" />
-            <span className="text-[9px] font-black text-slate-500">ມື້ນີ້</span>
-            <span className="font-mono text-base font-black text-indigo-700">+{pointFmt.format(todayPoints)}</span>
-          </div>
-        </div>
         )}
 
         {/* Bonus and commission as two clearly separate cards, then the
             combined total — so it's obvious what comes from points earned
             (ໂບນັດ) versus from hitting the sales target (ຄ່າຄອມ). */}
-        <div className={`mt-3 grid gap-2 ${isRoleComm ? "grid-cols-1" : "grid-cols-2"}`}>
-          {isRoleComm ? null : (
-          <div className="rounded-xl bg-gradient-to-br from-emerald-600 to-emerald-700 px-2.5 py-2 text-white shadow-sm">
+        {/* <div className={`mt-3 grid gap-2 ${isRoleComm ? "grid-cols-1" : "grid-cols-2"}`}> */}
+        {isRoleComm ? null : (
+          <div className="rounded-xl bg-gradient-to-br from-yellow-500 to-yellow-700 px-2.5 py-2 text-white shadow-sm">
             <div className="flex items-center justify-between gap-1">
               <span className="text-[9px] font-black text-emerald-100">ໂບນັດ</span>
-              <span className="text-[8px] font-semibold text-emerald-100/90">
+              <span className="text-[12px] font-semibold text-emerald-100/90">
                 {pointFmt.format(row.bonusPoints)} ຄະແນນ × {pointFmt.format(row.multiplier)}
               </span>
             </div>
@@ -225,73 +226,14 @@ export default function MyBonusCard() {
               </div>
             ) : null}
           </div>
-          )}
-          <div className="rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-700 px-2.5 py-2 text-white shadow-sm">
-            <div className="flex items-center justify-between gap-1">
-              <span className="text-[9px] font-black text-indigo-100">ຄ່າຄອມ</span>
-              <span className="text-[8px] font-semibold text-indigo-100/90">
-                {isRoleComm ? "ຕາມຜົນງານທີມ" : `ບັນລຸ ${pctFmt.format(row.achievementPct * 100)}%`}
-              </span>
-            </div>
-            <div className="mt-1 flex items-baseline gap-1">
-              <span className="font-mono text-base font-black leading-none">{fmt.format(row.commission)}</span>
-              <span className="text-[8px] font-black text-indigo-100">{currencyLabel}</span>
-            </div>
-          </div>
-        </div>
+        )}
+
+        {/* </div> */}
         {/* How the commission is worked out — the caller's OWN numbers first
             (base × rate = amount), then the 3 tier rules with concrete
             examples so "rounded up/down to 5%" is obvious. Managers / unit
             heads get a per-product-group breakdown driven by the TEAM's
             achievement instead of the single personal formula. */}
-        <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
-          <div className="text-[11px] font-black text-slate-700">ວິທີຄິດຄ່າຄອມ</div>
-          {row.commissionLines && row.commissionLines.length > 0 ? (
-            <div className="mt-2 space-y-1">
-              {row.commissionLines.map((l) => (
-                <div key={l.groupCode} className="flex items-center justify-between rounded-lg bg-white px-2.5 py-1.5 font-mono text-[11px] font-bold ring-1 ring-inset ring-indigo-100">
-                  <span className="text-slate-500">
-                    {GROUP_LABEL[l.groupCode] ?? l.groupCode}
-                    <span className="ml-1 text-[9px] text-slate-400">ທີມບັນລຸ {pctFmt.format(l.achievementPct * 100)}%</span>
-                  </span>
-                  <span>
-                    <span className="text-slate-800">{fmt.format(l.base)}</span>
-                    <span className="text-slate-400"> × </span>
-                    <span className="text-indigo-600">{pctFmt.format(l.rate * 100)}%</span>
-                    <span className="text-slate-400"> = </span>
-                    <span className="text-emerald-700">{fmt.format(l.amount)}</span>
-                  </span>
-                </div>
-              ))}
-              <div className="flex items-center justify-between rounded-lg bg-slate-900 px-2.5 py-1.5 font-mono text-[11px] font-black text-white">
-                <span>ລວມຄ່າຄອມ</span>
-                <span>{fmt.format(row.commission)} {currencyLabel}</span>
-              </div>
-            </div>
-          ) : (
-            <>
-              <div className="mt-2 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 rounded-lg bg-white px-2 py-2.5 text-center font-mono text-[13px] font-black ring-1 ring-inset ring-indigo-100">
-                <span className="text-slate-400">ຖານ</span>
-                <span className="text-slate-800">{fmt.format(commissionBase)}</span>
-                <span className="text-slate-400">×</span>
-                <span className="text-indigo-600">{pctFmt.format(row.commissionRate * 100)}%</span>
-                <span className="text-slate-400">=</span>
-                <span className="text-emerald-700">{fmt.format(row.commission)}</span>
-                <span className="text-[9px] font-bold text-slate-400">{currencyLabel}</span>
-              </div>
-              <div className="mt-1.5 text-center text-[10px] font-bold text-slate-500">
-                ເລກ {pctFmt.format(row.commissionRate * 100)}% ມາຈາກ ຍอดขาย{" "}
-                <b className="text-indigo-700">{pctFmt.format(row.achievementPct * 100)}%</b> ຂອງເປົ້າ
-              </div>
-            </>
-          )}
-          <div className="mt-2.5 divide-y divide-indigo-100 overflow-hidden rounded-lg border border-indigo-100 bg-white/70 text-[10px]">
-            <CommissionCondition range="ຕ່ຳກວ່າ 80%" description="ບໍ່ໄດ້ຄ່າຄອມ" tone="muted" />
-            <CommissionCondition range="80–99%" description="ປັດ​ລົງ​ຫາ 5% ໃກ້ຄຽງ (ເຊັ່ນ 87% ໄດ້ເລກ 85%)" tone="indigo" />
-            <CommissionCondition range="100% ຂຶ້ນໄປ" description="ປັດ​ຂຶ້ນ​ຫາ 5% ໃກ້ຄຽງ (ເຊັ່ນ 103% ໄດ້ເລກ 105%)" tone="emerald" />
-          </div>
-        </div>
-
         {row.targetPerPerson > 0 && tiers ? (() => {
           // Progress bar scaled 0 → 120% of target so the ×1.1 zone (over 100%)
           // is visible. Tier ticks sit at low_max_pct (50%) and standard_max_pct
@@ -372,7 +314,6 @@ export default function MyBonusCard() {
             </div>
           );
         })() : null}
-
         {daily.length > 0 && !isRoleComm ? (() => {
           const now = new Date();
           const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -399,74 +340,133 @@ export default function MyBonusCard() {
             </div>
           );
         })() : null}
-
         {isRoleComm ? null : (
-        <button type="button" onClick={() => void toggleItems()} className="mt-4 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-700 transition active:scale-[.98] hover:bg-emerald-100">
-          {open ? "ເຊື່ອງລາຍການ" : "ເບິ່ງລາຍການຄະແນນ"} <span className={`transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
-        </button>
+          <button type="button" onClick={() => void toggleItems()} className="mt-4 flex min-h-10 w-full items-center justify-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 text-xs font-black text-emerald-700 transition active:scale-[.98] hover:bg-emerald-100">
+            {open ? "ເຊື່ອງລາຍການ" : "ເບິ່ງລາຍການຄະແນນ"} <span className={`transition-transform ${open ? "rotate-180" : ""}`}>⌄</span>
+          </button>
         )}
-
         {open && !isRoleComm ? (
-        <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
-          <div className="grid grid-cols-2 gap-1 border-b border-slate-100 bg-slate-50 p-1">
-            <button
-              type="button"
-              onClick={() => switchItemsTab("month")}
-              className={`rounded-lg px-3 py-1.5 text-[11px] font-black transition ${itemsTab === "month" ? "bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200" : "text-slate-400"}`}
-            >
-              ສະສົມ (ເດືອນນີ້)
-            </button>
-            <button
-              type="button"
-              onClick={() => switchItemsTab("today")}
-              className={`rounded-lg px-3 py-1.5 text-[11px] font-black transition ${itemsTab === "today" ? "bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200" : "text-slate-400"}`}
-            >
-              ມື້ນີ້
-            </button>
+          <div className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white">
+            <div className="grid grid-cols-2 gap-1 border-b border-slate-100 bg-slate-50 p-1">
+              <button
+                type="button"
+                onClick={() => switchItemsTab("month")}
+                className={`rounded-lg px-3 py-1.5 text-[11px] font-black transition ${itemsTab === "month" ? "bg-white text-emerald-700 shadow-sm ring-1 ring-slate-200" : "text-slate-400"}`}
+              >
+                ສະສົມ (ເດືອນນີ້)
+              </button>
+              <button
+                type="button"
+                onClick={() => switchItemsTab("today")}
+                className={`rounded-lg px-3 py-1.5 text-[11px] font-black transition ${itemsTab === "today" ? "bg-white text-indigo-700 shadow-sm ring-1 ring-slate-200" : "text-slate-400"}`}
+              >
+                ມື້ນີ້
+              </button>
+            </div>
+            {items === null ? (
+              <div className="py-6 text-center text-xs text-slate-400">ກຳລັງໂຫລດ…</div>
+            ) : items.length === 0 ? (
+              <div className="py-6 text-center text-xs text-slate-400">ຍັງບໍ່ມີລາຍການຂາຍ</div>
+            ) : (() => {
+              // Sold items split so the seller SEES which products earn points
+              // and which don't.
+              const earned = items.filter((it) => it.points > 0);
+              const zero = items.filter((it) => it.points <= 0);
+              const rows = (list: Item[], got: boolean) =>
+                list.map((it, i) => (
+                  <li key={`${got ? "p" : "z"}-${it.itemName}-${i}`} className={`flex items-center gap-2 px-3 py-2 ${got ? "" : "bg-slate-50/60"}`}>
+                    <span className="min-w-0 flex-1">
+                      <span className={`block truncate text-[13px] font-bold ${got ? "text-slate-800" : "text-slate-500"}`}>{it.itemName}</span>
+                      <span className="text-[11px] text-slate-400">{it.brand}{it.category ? ` · ${it.category}` : ""} · x{fmt.format(it.qty)}</span>
+                    </span>
+                    {got ? (
+                      <span className="shrink-0 rounded-lg bg-emerald-50 px-2 py-1 font-mono text-sm font-black text-emerald-700">+{pointFmt.format(it.points)}</span>
+                    ) : (
+                      <span className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-400">ບໍ່ໄດ້ແຕ້ມ</span>
+                    )}
+                  </li>
+                ));
+              return (
+                <>
+                  <div className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 text-[10px] font-bold">
+                    <span className="text-emerald-700">✓ ໄດ້ແຕ້ມ {fmt.format(earned.length)} ລາຍການ</span>
+                    <span className="text-slate-400">✗ ບໍ່ໄດ້ແຕ້ມ {fmt.format(zero.length)} ລາຍການ</span>
+                  </div>
+                  <ul className="divide-y divide-slate-100">
+                    {rows(earned, true)}
+                    {zero.length > 0 ? (
+                      <li className="bg-slate-100/80 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
+                        ຂາຍແລ້ວ ແຕ່ບໍ່ໄດ້ແຕ້ມ
+                      </li>
+                    ) : null}
+                    {rows(zero, false)}
+                  </ul>
+                </>
+              );
+            })()}
           </div>
-          {items === null ? (
-            <div className="py-6 text-center text-xs text-slate-400">ກຳລັງໂຫລດ…</div>
-          ) : items.length === 0 ? (
-            <div className="py-6 text-center text-xs text-slate-400">ຍັງບໍ່ມີລາຍການຂາຍ</div>
-          ) : (() => {
-            // Sold items split so the seller SEES which products earn points
-            // and which don't.
-            const earned = items.filter((it) => it.points > 0);
-            const zero = items.filter((it) => it.points <= 0);
-            const rows = (list: Item[], got: boolean) =>
-              list.map((it, i) => (
-                <li key={`${got ? "p" : "z"}-${it.itemName}-${i}`} className={`flex items-center gap-2 px-3 py-2 ${got ? "" : "bg-slate-50/60"}`}>
-                  <span className="min-w-0 flex-1">
-                    <span className={`block truncate text-[13px] font-bold ${got ? "text-slate-800" : "text-slate-500"}`}>{it.itemName}</span>
-                    <span className="text-[11px] text-slate-400">{it.brand}{it.category ? ` · ${it.category}` : ""} · x{fmt.format(it.qty)}</span>
-                  </span>
-                  {got ? (
-                    <span className="shrink-0 rounded-lg bg-emerald-50 px-2 py-1 font-mono text-sm font-black text-emerald-700">+{pointFmt.format(it.points)}</span>
-                  ) : (
-                    <span className="shrink-0 rounded-lg bg-slate-100 px-2 py-1 text-[10px] font-black text-slate-400">ບໍ່ໄດ້ແຕ້ມ</span>
-                  )}
-                </li>
-              ));
-            return (
-              <>
-                <div className="flex items-center justify-between border-b border-slate-100 px-3 py-1.5 text-[10px] font-bold">
-                  <span className="text-emerald-700">✓ ໄດ້ແຕ້ມ {fmt.format(earned.length)} ລາຍການ</span>
-                  <span className="text-slate-400">✗ ບໍ່ໄດ້ແຕ້ມ {fmt.format(zero.length)} ລາຍການ</span>
-                </div>
-                <ul className="divide-y divide-slate-100">
-                  {rows(earned, true)}
-                  {zero.length > 0 ? (
-                    <li className="bg-slate-100/80 px-3 py-1 text-[10px] font-black uppercase tracking-wide text-slate-400">
-                      ຂາຍແລ້ວ ແຕ່ບໍ່ໄດ້ແຕ້ມ
-                    </li>
-                  ) : null}
-                  {rows(zero, false)}
-                </ul>
-              </>
-            );
-          })()}
-        </div>
         ) : null}
+                <br className="my-4 border-slate-200" />
+        <div className="rounded-xl bg-gradient-to-br from-indigo-600 to-indigo-700 px-2.5 py-2 text-white shadow-sm">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[9px] font-black text-indigo-100">ຄ່າຄອມ</span>
+            <span className="text-[12px] font-semibold text-indigo-100/90">
+              {isRoleComm ? "ຕາມຜົນງານທີມ" : `ບັນລຸ ${pctFmt.format(row.achievementPct * 100)}%`}
+            </span>
+          </div>
+          <div className="mt-1 flex items-baseline gap-1">
+            <span className="font-mono text-base font-black leading-none">{fmt.format(row.commission)}</span>
+            <span className="text-[8px] font-black text-indigo-100">{currencyLabel}</span>
+          </div>
+        </div>
+        <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
+          <div className="text-[11px] font-black text-slate-700">ວິທີຄິດຄ່າຄອມ</div>
+          {row.commissionLines && row.commissionLines.length > 0 ? (
+            <div className="mt-2 space-y-1">
+              {row.commissionLines.map((l) => (
+                <div key={l.groupCode} className="flex items-center justify-between rounded-lg bg-white px-2.5 py-1.5 font-mono text-[11px] font-bold ring-1 ring-inset ring-indigo-100">
+                  <span className="text-slate-500">
+                    {GROUP_LABEL[l.groupCode] ?? l.groupCode}
+                    <span className="ml-1 text-[9px] text-slate-400">ທີມບັນລຸ {pctFmt.format(l.achievementPct * 100)}%</span>
+                  </span>
+                  <span>
+                    <span className="text-slate-800">{fmt.format(l.base)}</span>
+                    <span className="text-slate-400"> × </span>
+                    <span className="text-indigo-600">{pctFmt.format(l.rate * 100)}%</span>
+                    <span className="text-slate-400"> = </span>
+                    <span className="text-emerald-700">{fmt.format(l.amount)}</span>
+                  </span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between rounded-lg bg-slate-900 px-2.5 py-1.5 font-mono text-[11px] font-black text-white">
+                <span>ລວມຄ່າຄອມ</span>
+                <span>{fmt.format(row.commission)} {currencyLabel}</span>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 rounded-lg bg-white px-2 py-2.5 text-center font-mono text-[13px] font-black ring-1 ring-inset ring-indigo-100">
+                <span className="text-slate-400">ຖານ</span>
+                <span className="text-slate-800">{fmt.format(commissionBase)}</span>
+                <span className="text-slate-400">×</span>
+                <span className="text-indigo-600">{pctFmt.format(row.commissionRate * 100)}%</span>
+                <span className="text-slate-400">=</span>
+                <span className="text-emerald-700">{fmt.format(row.commission)}</span>
+                <span className="text-[9px] font-bold text-slate-400">{currencyLabel}</span>
+              </div>
+              <div className="mt-1.5 text-center text-[10px] font-bold text-slate-500">
+                ເລກ {pctFmt.format(row.commissionRate * 100)}% ມາຈາກ ຍอดขาย{" "}
+                <b className="text-indigo-700">{pctFmt.format(row.achievementPct * 100)}%</b> ຂອງເປົ້າ
+              </div>
+            </>
+          )}
+          <div className="mt-2.5 divide-y divide-indigo-100 overflow-hidden rounded-lg border border-indigo-100 bg-white/70 text-[10px]">
+            <CommissionCondition range="ຕ່ຳກວ່າ 80%" description="ບໍ່ໄດ້ຄ່າຄອມ" tone="muted" />
+            <CommissionCondition range="80–99%" description="ປັດ​ລົງ​ຫາ 5% ໃກ້ຄຽງ (ເຊັ່ນ 87% ໄດ້ເລກ 85%)" tone="indigo" />
+            <CommissionCondition range="100% ຂຶ້ນໄປ" description="ປັດ​ຂຶ້ນ​ຫາ 5% ໃກ້ຄຽງ (ເຊັ່ນ 103% ໄດ້ເລກ 105%)" tone="emerald" />
+          </div>
+        </div>
+
       </div>
     </section>
   );
