@@ -68,8 +68,8 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
   }
 
   return (
-    <section className="odoo-card p-4">
-      <div className="mb-3 flex flex-wrap items-end justify-between gap-3">
+    <section className="odoo-card incentive-editor incentive-editor--rewards p-4">
+      <div className="incentive-editor-head mb-3 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-sm font-black uppercase tracking-wide text-odoo-text-strong">ເງິນພິເສດ (Special Rewards)</h2>
           <p className="text-xs text-odoo-text-muted">ລາງວັນລວມພະແນກ · ຈ່າຍເມື່ອຍອດຂາຍລວມ ≥ ເປົ້າ · ຄໍລຳ ② ໃນລາຍງານ</p>
@@ -79,8 +79,13 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
 
       {error ? <div className="mb-3 rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-semibold text-odoo-danger">{error}</div> : null}
 
-      <div className="overflow-x-auto">
-        <table className="odoo-table min-w-[760px]">
+      <div className="incentive-stats incentive-stats--compact">
+        <div><span>ລາງວັນທັງໝົດ</span><strong>{rewards.length}</strong><small>ລາຍການ</small></div>
+        <div className="is-accent"><span>ກຳລັງໃຊ້ງານ</span><strong>{rewards.filter((reward) => reward.isActive).length}</strong><small>ລາຍການ</small></div>
+      </div>
+
+      <div className="incentive-table-wrap overflow-x-auto">
+        <table className="odoo-table incentive-data-table min-w-[760px]">
           <thead>
             <tr>
               <th className="px-3 py-2">ລາງວັນ</th>

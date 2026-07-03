@@ -26,6 +26,24 @@ type RewardMemberRow = {
   amount: string | number | null;
 };
 
+// One row per (unit reward, roster member): the member's qualifying unit
+// count. Workbook ④/⑤ — per-unit tiered spiffs on each person's OWN count.
+type UnitRewardMemberRow = {
+  reward_code: string;
+  description: string;
+  group_code: string;
+  brand_code: string | null;
+  item_match: string | null;
+  low_min_qty: string | number;
+  low_reward: string | number;
+  high_min_qty: string | number | null;
+  high_reward: string | number | null;
+  is_active: boolean;
+  emp_code: string | null;
+  emp_name: string | null;
+  units: string | number | null;
+};
+
 const number = (value: string | number | bigint | null | undefined) =>
   Number(value ?? 0) || 0;
 
@@ -59,7 +77,8 @@ export async function GET(request: NextRequest) {
   const month = Number.isInteger(mo) && mo >= 1 && mo <= 12 ? mo : current.month;
 
   try {
-    const rows = await prisma.$queryRaw<RewardMemberRow[]>`
+    const [rows, unitRows] = await Promise.all([
+      prisma.$queryRaw<RewardMemberRow[]>`
       WITH roster AS (
         -- This month's target roster, one row per person, grouped the same way
         -- as the incentives report (product_group AC -> AIR, everything else
@@ -117,7 +136,75 @@ export async function GET(request: NextRequest) {
           )
       ) s ON true
       ORDER BY rw.reward_code, amount DESC
-    `;
+    `,
+      // Unit-count spiffs (workbook ④/⑤) — per person, tiered per-unit pay.
+      // Best-effort: table ships in sql/add-incentive-unit-reward.sql.
+      prisma.$queryRaw<UnitRewardMemberRow[]>`
+      WITH roster AS (
+        SELECT DISTINCT ON (t.emp_code)
+          t.emp_code,
+          CASE WHEN t.product_group = 'AC' THEN 'AIR' ELSE 'CE_SDA' END AS group_code
+        FROM odg_retail_target_employee t
+        WHERE t.year = ${year.toString()}
+          AND LPAD(t.month, 2, '0') = LPAD(${month.toString()}, 2, '0')
+        ORDER BY t.emp_code, t.roworder DESC
+      ),
+      names AS (
+        SELECT r.emp_code, e.fullname_lo AS salename
+        FROM roster r
+        JOIN odg_employee e ON e.employee_code = r.emp_code
+        WHERE COALESCE(e.fullname_lo, '') <> ''
+        UNION
+        SELECT r.emp_code, a.salename
+        FROM roster r
+        JOIN app_incentive_sale_alias a ON a.employee_code = r.emp_code
+      )
+      SELECT
+        ur.reward_code,
+        ur.description,
+        ur.group_code,
+        ur.brand_code,
+        ur.item_match,
+        ur.low_min_qty,
+        ur.low_reward,
+        ur.high_min_qty,
+        ur.high_reward,
+        ur.is_active,
+        r.emp_code,
+        COALESCE(NULLIF(e.fullname_lo, ''), NULLIF(e.nickname, ''), r.emp_code) AS emp_name,
+        COALESCE(s.units, 0) AS units
+      FROM app_incentive_unit_reward ur
+      LEFT JOIN roster r ON r.group_code = ur.group_code
+      LEFT JOIN odg_employee e ON e.employee_code = r.emp_code
+      LEFT JOIN LATERAL (
+        -- This member's qualifying SETS. A split-type AC is two lines —
+        -- "… [C]" indoor + "… [H]" outdoor — so the outdoor [H] line is
+        -- excluded to count each set once. brand_code scopes to the AIR
+        -- point-map category of that brand; item_match matches a pushed
+        -- model by item_code or item_name.
+        SELECT SUM(sd.qty) AS units
+        FROM odg_sale_detail sd
+        JOIN names n ON n.salename = sd.salename
+        LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
+        WHERE n.emp_code = r.emp_code
+          AND sd.branch_code = '01'
+          AND sd.argroup_main = '101'
+          AND sd.doc_date >= make_date(${year}, ${month}, 1)
+          AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+          AND sd.item_name !~ '\\[H\\]\\s*$'
+          AND (
+            CASE
+              WHEN COALESCE(ur.item_match, '') <> '' THEN
+                sd.item_code = ur.item_match OR sd.item_name ILIKE '%' || ur.item_match || '%'
+              ELSE
+                COALESCE(cat.pointmap_category, '') = 'Air'
+                AND UPPER(COALESCE(sd.item_brand, '')) = UPPER(COALESCE(ur.brand_code, ''))
+            END
+          )
+      ) s ON true
+      ORDER BY ur.reward_code, units DESC
+    `.catch(() => [] as UnitRewardMemberRow[]),
+    ]);
 
     // Assemble per-reward aggregates from the member rows.
     const byReward = new Map<string, RewardMemberRow[]>();
@@ -166,10 +253,57 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json({ year, month, rewards });
+    // Unit-count spiffs — resolve each member's tier from their OWN count.
+    const unitByReward = new Map<string, UnitRewardMemberRow[]>();
+    for (const row of unitRows) {
+      const list = unitByReward.get(row.reward_code);
+      if (list) list.push(row);
+      else unitByReward.set(row.reward_code, [row]);
+    }
+
+    const unitRewards = Array.from(unitByReward.values()).map((memberRows) => {
+      const meta = memberRows[0];
+      const lowMin = number(meta.low_min_qty);
+      const lowReward = number(meta.low_reward);
+      const highMin = meta.high_min_qty === null ? 0 : number(meta.high_min_qty);
+      const highReward = number(meta.high_reward);
+      // Reach the high threshold → EVERY unit pays the high rate; otherwise
+      // the low threshold → every unit pays the low rate; below it → nothing.
+      const payFor = (units: number) => {
+        if (highMin > 0 && units >= highMin) return { tier: "high" as const, pay: units * highReward };
+        if (lowMin > 0 && units >= lowMin) return { tier: "low" as const, pay: units * lowReward };
+        return { tier: "none" as const, pay: 0 };
+      };
+      const members = memberRows
+        .filter((row) => row.emp_code !== null)
+        .map((row) => {
+          const units = number(row.units);
+          return { code: row.emp_code!, name: row.emp_name ?? row.emp_code!, units, ...payFor(units) };
+        });
+      const mine = members.find((m) => m.code === myCode);
+      return {
+        code: meta.reward_code,
+        description: meta.description,
+        brandCode: meta.brand_code || null,
+        itemMatch: meta.item_match || null,
+        lowMinQty: lowMin,
+        lowReward,
+        highMinQty: highMin,
+        highReward,
+        totalUnits: members.reduce((sum, m) => sum + m.units, 0),
+        people: members.length,
+        mine: mine?.units ?? 0,
+        myTier: mine?.tier ?? "none",
+        myReward: mine?.pay ?? 0,
+        // Full per-person breakdown — managers / unit heads only.
+        breakdown: seesEveryone ? members : undefined,
+      };
+    });
+
+    return NextResponse.json({ year, month, rewards, unitRewards });
   } catch (error) {
     console.error("GET /api/reports/special-rewards failed", error);
     // Table not installed — the home card simply hides.
-    return NextResponse.json({ rewards: [] });
+    return NextResponse.json({ rewards: [], unitRewards: [] });
   }
 }

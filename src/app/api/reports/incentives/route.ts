@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     : current.month;
 
   try {
-    const [configRows, rewardRows, roleCommRows, roleEmpRows, rows] = await Promise.all([
+    const [configRows, rewardRows, roleCommRows, roleEmpRows, rows, unitRewardRows] = await Promise.all([
       prisma.$queryRaw<ConfigRow[]>`
         SELECT currency_code, low_max_pct, standard_max_pct,
                low_multiplier, standard_multiplier, high_multiplier, commission_base
@@ -100,6 +100,7 @@ export async function GET(request: NextRequest) {
       prisma.$queryRaw<IncentiveRow[]>`
         WITH lines AS (
           SELECT
+            s.doc_date,
             s.salename,
             s.group_code,
             s.pcat,
@@ -141,7 +142,7 @@ export async function GET(request: NextRequest) {
             -- not explicitly mapped defaults to SDA/OTH (the workbook's catch-all bucket);
             -- brand gating in the point map keeps non-bonus items at zero.
             SELECT
-              sd.salename, sd.qty, sd.sum_amount AS sales_amount, sd.price, sd.item_name,
+              sd.doc_date, sd.salename, sd.qty, sd.sum_amount AS sales_amount, sd.price, sd.item_name,
               sd.item_category, sd.design_name, sd.size_name, sd.item_code,
               UPPER(COALESCE(sd.item_brand, '')) AS brand,
               COALESCE(cat.pointmap_category, 'SDA') AS pcat,
@@ -173,11 +174,21 @@ export async function GET(request: NextRequest) {
               * l.qty AS line_bonus
           FROM lines l
           CROSS JOIN app_incentive_config cfg
-          LEFT JOIN app_incentive_point_map pm
-            ON pm.category_code = l.pcat
-           AND pm.brand_code = l.brand
-           AND pm.design_token = l.design_token
-           AND pm.size_token = l.size_token
+          -- Point map is defined per month with carry-forward: the newest
+          -- effect_month <= the report month wins per combination.
+          LEFT JOIN LATERAL (
+            SELECT pm0.points
+            FROM app_incentive_point_rule pm0
+            WHERE pm0.category_code = l.pcat
+              AND pm0.brand_code = l.brand
+              AND pm0.design_token = l.design_token
+              AND pm0.size_token = l.size_token
+              AND l.doc_date::date BETWEEN pm0.effective_from AND pm0.effective_to
+            ORDER BY pm0.is_special DESC,
+                     (pm0.effective_to - pm0.effective_from) ASC,
+                     pm0.updated_at DESC, pm0.id DESC
+            LIMIT 1
+          ) pm ON true
           LEFT JOIN app_incentive_status_multiplier sm ON sm.status_code = l.status_code
         ),
         by_emp AS (
@@ -241,6 +252,67 @@ export async function GET(request: NextRequest) {
         LEFT JOIN odg_employee emp ON emp.employee_code = roster.employee_code
         ORDER BY sales_amount DESC
       `,
+      // Unit-count spiffs (workbook ④/⑤): active rewards with each roster
+      // member's qualifying set count. A split AC = "… [C]" indoor + "… [H]"
+      // outdoor lines, so [H] is excluded to count each set once.
+      // Best-effort — table ships in sql/add-incentive-unit-reward.sql.
+      prisma.$queryRaw<Array<{
+        reward_code: string;
+        low_min_qty: string | number;
+        low_reward: string | number;
+        high_min_qty: string | number | null;
+        high_reward: string | number | null;
+        emp_code: string;
+        units: string | number | null;
+      }>>`
+        WITH roster AS (
+          SELECT DISTINCT ON (t.emp_code)
+            t.emp_code,
+            CASE WHEN t.product_group = 'AC' THEN 'AIR' ELSE 'CE_SDA' END AS group_code
+          FROM odg_retail_target_employee t
+          WHERE t.year = ${year.toString()}
+            AND LPAD(t.month, 2, '0') = LPAD(${month.toString()}, 2, '0')
+          ORDER BY t.emp_code, t.roworder DESC
+        ),
+        names AS (
+          SELECT r.emp_code, e.fullname_lo AS salename
+          FROM roster r
+          JOIN odg_employee e ON e.employee_code = r.emp_code
+          WHERE COALESCE(e.fullname_lo, '') <> ''
+          UNION
+          SELECT r.emp_code, a.salename
+          FROM roster r
+          JOIN app_incentive_sale_alias a ON a.employee_code = r.emp_code
+        )
+        SELECT
+          ur.reward_code, ur.low_min_qty, ur.low_reward, ur.high_min_qty, ur.high_reward,
+          r.emp_code,
+          COALESCE(s.units, 0) AS units
+        FROM app_incentive_unit_reward ur
+        JOIN roster r ON r.group_code = ur.group_code
+        LEFT JOIN LATERAL (
+          SELECT SUM(sd.qty) AS units
+          FROM odg_sale_detail sd
+          JOIN names n ON n.salename = sd.salename
+          LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
+          WHERE n.emp_code = r.emp_code
+            AND sd.branch_code = '01'
+            AND sd.argroup_main = '101'
+            AND sd.doc_date >= make_date(${year}, ${month}, 1)
+            AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+            AND sd.item_name !~ '\\[H\\]\\s*$'
+            AND (
+              CASE
+                WHEN COALESCE(ur.item_match, '') <> '' THEN
+                  sd.item_code = ur.item_match OR sd.item_name ILIKE '%' || ur.item_match || '%'
+                ELSE
+                  COALESCE(cat.pointmap_category, '') = 'Air'
+                  AND UPPER(COALESCE(sd.item_brand, '')) = UPPER(COALESCE(ur.brand_code, ''))
+              END
+            )
+        ) s ON true
+        WHERE ur.is_active
+      `.catch(() => []),
     ]);
 
     const config = configRows[0] ?? {
@@ -323,6 +395,27 @@ export async function GET(request: NextRequest) {
         row.specialReward += pay;
         row.totalPay += pay;
       }
+    }
+
+    // Unit-count spiffs (workbook ④/⑤): the person's OWN monthly set count
+    // picks the tier — reach high_min_qty and EVERY set pays high_reward,
+    // else reach low_min_qty and every set pays low_reward.
+    for (const line of unitRewardRows) {
+      const units = number(line.units);
+      if (units <= 0) continue;
+      const highMin = number(line.high_min_qty);
+      const lowMin = number(line.low_min_qty);
+      const pay =
+        highMin > 0 && units >= highMin
+          ? units * number(line.high_reward)
+          : lowMin > 0 && units >= lowMin
+            ? units * number(line.low_reward)
+            : 0;
+      if (pay <= 0) continue;
+      const row = mapped.find((r) => r.employeeCode === line.emp_code);
+      if (!row) continue;
+      row.specialReward += pay;
+      row.totalPay += pay;
     }
 
     // Manager (pos 11) / unit head (pos 12) commission: per product group,

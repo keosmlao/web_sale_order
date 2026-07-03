@@ -12,6 +12,16 @@ const POSITIONS = ["11", "12", "13"] as const;
 const GROUPS = ["CE_SDA", "AIR", "ALL", "ONLINE"] as const;
 
 type Line = { positionCode: string; groupCode: string; baseAmount: number };
+type AuditRow = {
+  id: bigint;
+  position_code: string;
+  group_code: string;
+  old_amount: string | number;
+  new_amount: string | number;
+  changed_by: string | null;
+  changed_by_name: string | null;
+  changed_at: Date;
+};
 
 export async function GET(request: NextRequest) {
   const employee = await getEmployeeFromRequest(request);
@@ -25,11 +35,38 @@ export async function GET(request: NextRequest) {
       SELECT position_code, group_code, base_amount
       FROM app_incentive_role_commission
     `;
+    let history: AuditRow[] = [];
+    let auditAvailable = true;
+    try {
+      history = await prisma.$queryRaw<AuditRow[]>`
+        SELECT audit.id, audit.position_code, audit.group_code,
+               audit.old_amount, audit.new_amount, audit.changed_by,
+               COALESCE(NULLIF(employee.fullname_lo, ''), NULLIF(employee.nickname, ''), audit.changed_by) AS changed_by_name,
+               audit.changed_at
+        FROM app_incentive_role_commission_audit audit
+        LEFT JOIN odg_employee employee ON employee.employee_code = audit.changed_by
+        ORDER BY audit.changed_at DESC, audit.id DESC
+        LIMIT 100
+      `;
+    } catch {
+      auditAvailable = false;
+    }
     return NextResponse.json({
       lines: rows.map((r) => ({
         positionCode: r.position_code,
         groupCode: r.group_code,
         baseAmount: Number(r.base_amount ?? 0),
+      })),
+      auditAvailable,
+      history: history.map((row) => ({
+        id: row.id.toString(),
+        positionCode: row.position_code,
+        groupCode: row.group_code,
+        oldAmount: Number(row.old_amount),
+        newAmount: Number(row.new_amount),
+        changedBy: row.changed_by,
+        changedByName: row.changed_by_name,
+        changedAt: row.changed_at.toISOString(),
       })),
     });
   } catch {
@@ -59,18 +96,35 @@ export async function PUT(request: NextRequest) {
   }
 
   try {
-    for (const l of lines) {
-      await prisma.$executeRaw`
-        INSERT INTO app_incentive_role_commission (position_code, group_code, base_amount)
-        VALUES (${l.positionCode}, ${l.groupCode}, ${Number(l.baseAmount)})
-        ON CONFLICT (position_code, group_code)
-        DO UPDATE SET base_amount = EXCLUDED.base_amount
-      `;
-    }
+    const changedBy = employee.employeeCode?.trim() || null;
+    await prisma.$transaction(async (tx) => {
+      for (const line of lines) {
+        const current = await tx.$queryRaw<Array<{ base_amount: string | number }>>`
+          SELECT base_amount FROM app_incentive_role_commission
+          WHERE position_code = ${line.positionCode} AND group_code = ${line.groupCode}
+          FOR UPDATE
+        `;
+        const oldAmount = Number(current[0]?.base_amount ?? 0);
+        const newAmount = Number(line.baseAmount);
+        if (oldAmount === newAmount) continue;
+
+        await tx.$executeRaw`
+          INSERT INTO app_incentive_role_commission_audit
+            (position_code, group_code, old_amount, new_amount, changed_by)
+          VALUES (${line.positionCode}, ${line.groupCode}, ${oldAmount}, ${newAmount}, ${changedBy})
+        `;
+        await tx.$executeRaw`
+          INSERT INTO app_incentive_role_commission (position_code, group_code, base_amount)
+          VALUES (${line.positionCode}, ${line.groupCode}, ${newAmount})
+          ON CONFLICT (position_code, group_code)
+          DO UPDATE SET base_amount = EXCLUDED.base_amount
+        `;
+      }
+    });
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json(
-      { error: "ຕາຕະລາງຍັງບໍ່ຖືກສ້າງ — ຮັນ sql/add-incentive-role-commission.sql ກ່ອນ" },
+      { error: "ຕາຕະລາງປະຫວັດຍັງບໍ່ຖືກສ້າງ — ຮັນ sql/add-incentive-role-commission-audit.sql ກ່ອນ" },
       { status: 503 },
     );
   }

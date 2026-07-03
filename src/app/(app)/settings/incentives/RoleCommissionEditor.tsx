@@ -22,6 +22,18 @@ const GROUPS = [
 const NA = new Set(["13|ALL", "11|ONLINE", "12|ONLINE"]);
 
 type Line = { positionCode: string; groupCode: string; baseAmount: number };
+type HistoryEntry = {
+  id: string;
+  positionCode: string;
+  groupCode: string;
+  oldAmount: number;
+  newAmount: number;
+  changedBy: string | null;
+  changedByName: string | null;
+  changedAt: string;
+};
+
+const amountFormat = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 
 export default function RoleCommissionEditor({ canManage }: { canManage: boolean }) {
   // value map "pos|group" → amount string (inputs stay strings while editing)
@@ -30,11 +42,14 @@ export default function RoleCommissionEditor({ canManage }: { canManage: boolean
   const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [auditAvailable, setAuditAvailable] = useState(true);
+  const [historyOpen, setHistoryOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/incentives/role-commission", { cache: "no-store" });
-      const data = (await res.json()) as { lines: Line[] | null };
+      const data = (await res.json()) as { lines: Line[] | null; history?: HistoryEntry[]; auditAvailable?: boolean };
       if (data.lines === null) {
         setMissing(true);
       } else {
@@ -42,6 +57,8 @@ export default function RoleCommissionEditor({ canManage }: { canManage: boolean
         for (const l of data.lines) next[`${l.positionCode}|${l.groupCode}`] = String(l.baseAmount);
         setValues(next);
         setMissing(false);
+        setHistory(data.history ?? []);
+        setAuditAvailable(data.auditAvailable !== false);
       }
     } catch {
       setMissing(true);
@@ -76,6 +93,7 @@ export default function RoleCommissionEditor({ canManage }: { canManage: boolean
           ? { ok: true, text: "ບັນທຶກແລ້ວ — ມີຜົນກັບ report ທັນທີ" }
           : { ok: false, text: data.error ?? "ບັນທຶກບໍ່ສຳເລັດ" },
       );
+      if (res.ok) await load();
     } catch {
       setNotice({ ok: false, text: "ບັນທຶກບໍ່ສຳເລັດ" });
     } finally {
@@ -84,14 +102,19 @@ export default function RoleCommissionEditor({ canManage }: { canManage: boolean
   }
 
   return (
-    <section className="odoo-card mt-4 p-5">
-      <h2 className="text-sm font-black text-odoo-text-strong">④ ຖານຄ່າຄອມ ຕາມຕຳແໜ່ງ × ກຸ່ມສິນຄ້າ</h2>
-      <p className="mt-1 text-xs text-odoo-text-muted">
-        ເກນດຽວກັນທຸກຕຳແໜ່ງ (&lt;80%=0 · 80–99% ປັດລົງ 5% · ≥100% ປັດຂຶ້ນ 5%).
-        ພະນັກງານຂາຍ = ຖານກຸ່ມຕົນເອງ × % ບັນລຸ<b>ສ່ວນຕົວ</b> ·
-        ຜູ້ຈັດການ/ຫົວໜ້າ = ຜົນບວກທຸກກຸ່ມ × % ບັນລຸ<b>ຂອງທີມ</b> ·
-        ອອນລາຍຍັງບໍ່ໃຊ້ (ບໍ່ມີ channel ອອນລາຍໃນ app)
-      </p>
+    <section className="odoo-card incentive-editor incentive-editor--matrix mt-4 p-5">
+      <div className="commission-heading">
+        <div>
+          <span className="commission-kicker">03 / COMMISSION MATRIX</span>
+          <h2 className="text-sm font-black text-odoo-text-strong">ກຳນົດຖານຄ່າຄອມ</h2>
+          <p className="mt-1 text-xs text-odoo-text-muted">ເລືອກອັດຕາຕາມຕຳແໜ່ງ ແລະ ປະເພດຍອດຂາຍ</p>
+        </div>
+        <div className="commission-rules" aria-label="ເກນການຄຳນວນ">
+          <span><b>&lt;80%</b> ບໍ່ໄດ້ຄ່າຄອມ</span>
+          <span><b>80–99%</b> ປັດລົງ 5%</span>
+          <span><b>≥100%</b> ປັດຂຶ້ນ 5%</span>
+        </div>
+      </div>
 
       {!loaded ? (
         <div className="mt-4 text-xs text-odoo-text-muted">ກຳລັງໂຫລດ…</div>
@@ -101,47 +124,58 @@ export default function RoleCommissionEditor({ canManage }: { canManage: boolean
         </div>
       ) : (
         <>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[420px] text-sm">
+          <div className="commission-table-wrap mt-4 overflow-x-auto">
+            <table className="commission-table">
               <thead>
-                <tr className="text-[10px] font-bold uppercase tracking-wide text-odoo-text-muted">
-                  <th className="px-2 py-2 text-left">ຕຳແໜ່ງ</th>
-                  {GROUPS.map((g) => (
-                    <th key={g.code} className="px-2 py-2 text-right">{g.label}</th>
-                  ))}
+                <tr>
+                  <th>ຕຳແໜ່ງ</th>
+                  {GROUPS.map((group) => <th key={group.code}>{group.label}</th>)}
                 </tr>
               </thead>
-              <tbody className="divide-y divide-odoo-border">
-                {POSITIONS.map((p) => (
-                  <tr key={p.code}>
-                    <td className="px-2 py-2 font-bold text-odoo-text-strong">
-                      {p.label} <span className="font-mono text-[10px] text-odoo-text-muted">(pos {p.code})</span>
+              <tbody>
+                {POSITIONS.map((position) => (
+                  <tr key={position.code}>
+                    <td>
+                      <div className="commission-position">
+                        <span className="commission-role-number">{position.label.slice(0, 1)}</span>
+                        <div>
+                          <strong>{position.label}</strong>
+                          <small>POS {position.code} · {position.code === "13" ? "ຜົນງານສ່ວນຕົວ" : "ຜົນງານຂອງທີມ"}</small>
+                        </div>
+                      </div>
                     </td>
-                    {GROUPS.map((g) =>
-                      NA.has(`${p.code}|${g.code}`) ? (
-                        <td key={g.code} className="px-2 py-2 text-right text-odoo-text-muted">—</td>
-                      ) : (
-                        <td key={g.code} className="px-2 py-2 text-right">
-                          <input
-                            type="number"
-                            min={0}
-                            value={values[`${p.code}|${g.code}`] ?? ""}
-                            disabled={!canManage}
-                            onChange={(e) =>
-                              setValues((v) => ({ ...v, [`${p.code}|${g.code}`]: e.target.value }))
-                            }
-                            className="odoo-input w-28 text-right font-mono"
-                          />
+                    {GROUPS.map((group) => {
+                      const key = `${position.code}|${group.code}`;
+                      return (
+                        <td key={group.code}>
+                          {NA.has(key) ? (
+                            <span className="commission-na">ບໍ່ນຳໃຊ້</span>
+                          ) : (
+                            <label className="commission-table-input">
+                              <input
+                                type="number"
+                                min={0}
+                                value={values[key] ?? ""}
+                                disabled={!canManage}
+                                onChange={(event) => setValues((current) => ({ ...current, [key]: event.target.value }))}
+                                aria-label={`${position.label} ${group.label}`}
+                              />
+                              <span>฿</span>
+                            </label>
+                          )}
                         </td>
-                      ),
-                    )}
+                      );
+                    })}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
           {canManage ? (
-            <div className="mt-3 flex items-center gap-3">
+            <div className="incentive-actions mt-3 flex items-center gap-3">
+              <button type="button" onClick={() => setHistoryOpen((open) => !open)} className="odoo-btn">
+                {historyOpen ? "ປິດປະຫວັດ" : `ເບິ່ງປະຫວັດ (${history.length})`}
+              </button>
               <button
                 type="button"
                 onClick={() => void save()}
@@ -155,6 +189,35 @@ export default function RoleCommissionEditor({ canManage }: { canManage: boolean
                   {notice.text}
                 </span>
               ) : null}
+            </div>
+          ) : null}
+          {historyOpen ? (
+            <div className="commission-history">
+              <div className="commission-history-head">
+                <div><strong>ປະຫວັດການແກ້ໄຂ</strong><span>ສະແດງ 100 ລາຍການຫຼ້າສຸດ</span></div>
+                <span className={auditAvailable ? "is-ready" : "is-missing"}>{auditAvailable ? "ກຳລັງບັນທຶກ" : "ຍັງບໍ່ເປີດໃຊ້"}</span>
+              </div>
+              {!auditAvailable ? (
+                <p className="commission-history-empty">ກະລຸນາຮັນ sql/add-incentive-role-commission-audit.sql</p>
+              ) : history.length === 0 ? (
+                <p className="commission-history-empty">ຍັງບໍ່ມີການແກ້ໄຂ</p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table>
+                    <thead><tr><th>ວັນທີ/ເວລາ</th><th>ຜູ້ແກ້</th><th>ຕຳແໜ່ງ</th><th>ກຸ່ມ</th><th>ຄ່າເກົ່າ</th><th>ຄ່າໃໝ່</th></tr></thead>
+                    <tbody>{history.map((entry) => (
+                      <tr key={entry.id}>
+                        <td>{new Intl.DateTimeFormat("lo-LA", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Vientiane" }).format(new Date(entry.changedAt))}</td>
+                        <td><strong>{entry.changedByName || entry.changedBy || "—"}</strong><small>{entry.changedBy}</small></td>
+                        <td>{POSITIONS.find((position) => position.code === entry.positionCode)?.label ?? entry.positionCode}</td>
+                        <td>{GROUPS.find((group) => group.code === entry.groupCode)?.label ?? entry.groupCode}</td>
+                        <td className="history-amount">{amountFormat.format(entry.oldAmount)} ฿</td>
+                        <td className="history-amount is-new">{amountFormat.format(entry.newAmount)} ฿</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </div>
+              )}
             </div>
           ) : null}
         </>

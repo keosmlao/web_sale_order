@@ -1,7 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { RewardList, LAO_MONTHS, type Reward } from "../../SpecialRewardCard";
+import {
+  RewardList,
+  LAO_MONTHS,
+  visibleRewards,
+  visibleUnitRewards,
+  type Reward,
+  type UnitReward,
+} from "../../SpecialRewardCard";
 
 // ລາງວັນພິເສດ report — the same reward cards as the home page, but browsable
 // month by month (ເບິ່ງຍ້ອນຫຼັງ). Uses the roster + sales of the SELECTED
@@ -20,6 +27,7 @@ function currentPeriod(): string {
 export default function SpecialRewardsClient() {
   const [period, setPeriod] = useState(currentPeriod);
   const [rewards, setRewards] = useState<Reward[] | null>(null);
+  const [unitRewards, setUnitRewards] = useState<UnitReward[]>([]);
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async (p: string) => {
@@ -29,10 +37,12 @@ export default function SpecialRewardsClient() {
       const params = new URLSearchParams({ year, month: String(Number(month)) });
       const res = await fetch(`/api/reports/special-rewards?${params}`, { cache: "no-store" });
       if (!res.ok) throw new Error(String(res.status));
-      const data = (await res.json()) as { rewards: Reward[] };
-      setRewards(Array.isArray(data.rewards) ? data.rewards : []);
+      const data = (await res.json()) as { rewards: Reward[]; unitRewards?: UnitReward[] };
+      setRewards(visibleRewards(Array.isArray(data.rewards) ? data.rewards : []));
+      setUnitRewards(visibleUnitRewards(Array.isArray(data.unitRewards) ? data.unitRewards : []));
     } catch {
       setRewards([]);
+      setUnitRewards([]);
     } finally {
       setLoading(false);
     }
@@ -111,12 +121,12 @@ export default function SpecialRewardsClient() {
         </div>
         {loading ? (
           <div className="py-10 text-center text-sm font-semibold text-slate-400">ກຳລັງໂຫລດ…</div>
-        ) : !rewards || rewards.length === 0 ? (
+        ) : !rewards || (rewards.length === 0 && unitRewards.length === 0) ? (
           <div className="py-10 text-center text-sm font-semibold text-slate-400">
             ບໍ່ມີໂຄງການລາງວັນພິເສດໃນເດືອນນີ້
           </div>
         ) : (
-          <RewardList rewards={rewards} />
+          <RewardList rewards={rewards} unitRewards={unitRewards} />
         )}
       </section>
 

@@ -88,16 +88,16 @@ export default function TargetPivotEditor({ canManage }: { canManage: boolean })
   }, [employees, values]);
 
   return (
-    <section className="odoo-card p-5">
-      <div className="flex flex-wrap items-end justify-between gap-3">
+    <section className="odoo-card incentive-editor incentive-editor--targets p-5">
+      <div className="incentive-editor-head flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-sm font-black text-odoo-text-strong">ເປົ້າຂາຍລາຍເດືອນ (ຕໍ່ຄົນ)</h2>
+          <span className="target-kicker">MONTHLY SALES TARGET</span>
+          <h2 className="text-sm font-black text-odoo-text-strong">ເປົ້າຂາຍລາຍບຸກຄົນ</h2>
           <p className="mt-1 text-xs text-odoo-text-muted">
-            ພະນັກງານຂາຍ (pos 13) ໜ້າຮ້ານທຸກຄົນ · CE = ເຄື່ອງໃຊ້ໄຟຟ້າ, AC = ແອ ·
-            ປ່ອຍຫວ່າງ/0 = ບໍ່ຕັ້ງເປົ້າ
+            ກຳນົດເປົ້າ CE ແລະ AC ໃຫ້ພະນັກງານຂາຍແຕ່ລະຄົນ
           </p>
         </div>
-        <div className="flex items-end gap-2">
+        <div className="incentive-filters flex items-end gap-2">
           <div>
             <label className="odoo-label">ເດືອນ</label>
             <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="odoo-input">
@@ -117,18 +117,22 @@ export default function TargetPivotEditor({ canManage }: { canManage: boolean })
         </div>
       </div>
 
+      <div className="incentive-stats">
+        <div><span>ພະນັກງານ</span><strong>{employees.length}</strong><small>ຄົນ</small></div>
+        <div><span>ເປົ້າ CE</span><strong>{fmt.format(totals.ce)}</strong><small>ບາດ</small></div>
+        <div><span>ເປົ້າ AC</span><strong>{fmt.format(totals.ac)}</strong><small>ບາດ</small></div>
+        <div className="is-accent"><span>ເປົ້າລວມ</span><strong>{fmt.format(totals.all)}</strong><small>ບາດ</small></div>
+      </div>
+
       {loading ? (
         <div className="mt-6 text-center text-xs text-odoo-text-muted">ກຳລັງໂຫລດ…</div>
       ) : (
         <>
-          <div className="mt-4 overflow-x-auto">
-            <table className="w-full min-w-[560px] text-sm">
+          <div className="target-table-wrap mt-4 overflow-x-auto">
+            <table className="target-table w-full min-w-[680px] text-sm">
               <thead>
                 <tr className="text-[10px] font-bold uppercase tracking-wide text-odoo-text-muted">
-                  <th className="px-2 py-2 text-left">ພະນັກງານ</th>
-                  <th className="px-2 py-2 text-right">ເປົ້າ CE</th>
-                  <th className="px-2 py-2 text-right">ເປົ້າ AC (ແອ)</th>
-                  <th className="px-2 py-2 text-right">ລວມ</th>
+                  <th>ພະນັກງານ</th><th>ເປົ້າ CE</th><th>ເປົ້າ AC (ແອ)</th><th>ລວມ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-odoo-border">
@@ -137,46 +141,38 @@ export default function TargetPivotEditor({ canManage }: { canManage: boolean })
                   const ac = Number(values[`${e.code}|AC`] || 0);
                   return (
                     <tr key={e.code}>
-                      <td className="px-2 py-2">
-                        <div className="font-bold text-odoo-text-strong">{e.name}</div>
-                        <div className="font-mono text-[10px] text-odoo-text-muted">
-                          {e.code} · ພະແນກ {e.dept}
+                      <td>
+                        <div className="target-employee">
+                          <span>{e.name.slice(0, 1)}</span>
+                          <div><strong>{e.name}</strong><small>{e.code} · ພະແນກ {e.dept}</small></div>
                         </div>
                       </td>
                       {(["CE", "AC"] as const).map((g) => (
-                        <td key={g} className="px-2 py-2 text-right">
-                          <input
-                            type="number"
-                            min={0}
-                            placeholder="0"
-                            value={values[`${e.code}|${g}`] ?? ""}
-                            disabled={!canManage}
-                            onChange={(ev) =>
-                              setValues((v) => ({ ...v, [`${e.code}|${g}`]: ev.target.value }))
-                            }
-                            className="odoo-input w-32 text-right font-mono"
-                          />
+                        <td key={g}>
+                          <label className="target-cell-input">
+                            <input type="number" min={0} placeholder="0" value={values[`${e.code}|${g}`] ?? ""} disabled={!canManage}
+                              onChange={(ev) => setValues((v) => ({ ...v, [`${e.code}|${g}`]: ev.target.value }))} />
+                            <span>฿</span>
+                          </label>
                         </td>
                       ))}
-                      <td className="px-2 py-2 text-right font-mono font-bold text-odoo-text-strong">
-                        {ce + ac > 0 ? fmt.format(ce + ac) : "—"}
+                      <td className="target-total">
+                        {ce + ac > 0 ? <><strong>{fmt.format(ce + ac)}</strong><span>฿</span></> : <span>—</span>}
                       </td>
                     </tr>
                   );
                 })}
               </tbody>
-              <tfoot className="border-t-2 border-odoo-border bg-odoo-surface-muted font-bold">
+              <tfoot>
                 <tr>
-                  <td className="px-2 py-2">ລວມທັງໝົດ ({employees.length} ຄົນ)</td>
-                  <td className="px-2 py-2 text-right font-mono">{fmt.format(totals.ce)}</td>
-                  <td className="px-2 py-2 text-right font-mono">{fmt.format(totals.ac)}</td>
-                  <td className="px-2 py-2 text-right font-mono">{fmt.format(totals.all)}</td>
+                  <td>ລວມທັງໝົດ <small>{employees.length} ຄົນ</small></td>
+                  <td>{fmt.format(totals.ce)} ฿</td><td>{fmt.format(totals.ac)} ฿</td><td>{fmt.format(totals.all)} ฿</td>
                 </tr>
               </tfoot>
             </table>
           </div>
           {canManage ? (
-            <div className="mt-3 flex items-center gap-3">
+            <div className="incentive-actions mt-3 flex items-center gap-3">
               <button
                 type="button"
                 onClick={() => void save()}

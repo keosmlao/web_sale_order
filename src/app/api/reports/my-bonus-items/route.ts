@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
       ),
       lines AS (
         SELECT
-          sd.item_name, UPPER(COALESCE(sd.item_brand, '')) AS brand, sd.item_category_name AS category,
+          sd.doc_date, sd.item_name, UPPER(COALESCE(sd.item_brand, '')) AS brand, sd.item_category_name AS category,
           sd.qty, sd.price, sd.item_name AS iname, ps.status_code,
           COALESCE(cat.pointmap_category, 'SDA') AS pcat,
           CASE COALESCE(cat.pointmap_category, 'SDA')
@@ -86,9 +86,18 @@ export async function GET(request: NextRequest) {
         SELECT l.item_name, l.brand, l.category, l.qty,
                COALESCE(pm.points, 0) * COALESCE(sm.multiplier, 1) * l.qty AS pts
         FROM lines l
-        LEFT JOIN app_incentive_point_map pm
-          ON pm.category_code = l.pcat AND pm.brand_code = l.brand
-         AND pm.design_token = l.design_token AND pm.size_token = l.size_token
+        -- Monthly point map with carry-forward (newest effect_month <= report month).
+        LEFT JOIN LATERAL (
+          SELECT pm0.points
+          FROM app_incentive_point_rule pm0
+          WHERE pm0.category_code = l.pcat AND pm0.brand_code = l.brand
+            AND pm0.design_token = l.design_token AND pm0.size_token = l.size_token
+            AND l.doc_date::date BETWEEN pm0.effective_from AND pm0.effective_to
+          ORDER BY pm0.is_special DESC,
+                   (pm0.effective_to - pm0.effective_from) ASC,
+                   pm0.updated_at DESC, pm0.id DESC
+          LIMIT 1
+        ) pm ON true
         LEFT JOIN app_incentive_status_multiplier sm ON sm.status_code = l.status_code
       )
       SELECT MAX(item_name) AS item_name, MAX(brand) AS brand, MAX(category) AS category,

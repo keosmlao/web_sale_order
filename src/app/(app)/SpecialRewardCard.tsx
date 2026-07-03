@@ -33,6 +33,45 @@ export type Reward = {
   breakdown?: RewardMember[];
 };
 
+export type UnitRewardMember = {
+  code: string;
+  name: string;
+  units: number;
+  tier: "high" | "low" | "none";
+  pay: number;
+};
+
+// Workbook ④/⑤ — per-unit tiered spiffs (sets of a brand / a pushed model),
+// paid on each person's OWN monthly count.
+export type UnitReward = {
+  code: string;
+  description: string;
+  brandCode: string | null;
+  itemMatch: string | null;
+  lowMinQty: number;
+  lowReward: number;
+  highMinQty: number;
+  highReward: number;
+  totalUnits: number;
+  people: number;
+  mine: number;
+  myTier: "high" | "low" | "none";
+  myReward: number;
+  breakdown?: UnitRewardMember[];
+};
+
+// Programs whose reward amounts are still 0 in the workbook are parked —
+// keep them out of the announcement display (settings still lists them).
+export const visibleRewards = (rewards: Reward[]) => rewards.filter((r) => r.reward > 0);
+export const visibleUnitRewards = (rewards: UnitReward[]) =>
+  rewards.filter((r) => r.lowReward > 0 || r.highReward > 0);
+
+const TIER_LABEL: Record<UnitRewardMember["tier"], string> = {
+  high: "ເປົ້າສູງ",
+  low: "ເປົ້າຕ່ຳ",
+  none: "—",
+};
+
 const moneyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 // Intl "lo-LA" month names fall back to English on some devices — spell them out.
 export const LAO_MONTHS = [
@@ -49,7 +88,13 @@ const currentLaoMonth = () => {
 
 // The reward rows themselves — shared between the home card and the
 // /reports/special-rewards history page.
-export function RewardList({ rewards }: { rewards: Reward[] }) {
+export function RewardList({
+  rewards,
+  unitRewards = [],
+}: {
+  rewards: Reward[];
+  unitRewards?: UnitReward[];
+}) {
   const hasSplit = rewards.some((r) => r.splitByShare);
   return (
     <>
@@ -184,6 +229,115 @@ export function RewardList({ rewards }: { rewards: Reward[] }) {
             </li>
           );
         })}
+
+        {/* Unit-count spiffs (workbook ④/⑤): each seller's OWN set count picks
+            the tier; every set pays that tier's per-unit rate. */}
+        {unitRewards.map((r) => {
+          const tierChip = (active: boolean) =>
+            `rounded-lg px-2 py-1 text-center ring-1 ring-inset ${
+              active
+                ? "bg-emerald-50 font-black text-emerald-700 ring-emerald-200"
+                : "bg-slate-50 font-bold text-slate-500 ring-slate-100"
+            }`;
+          return (
+            <li key={r.code} className="px-4 py-3">
+              <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="min-w-0 truncate text-sm font-black text-slate-800">
+                    {r.description}
+                  </span>
+                  {r.brandCode ? (
+                    <span className="shrink-0 rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] font-black uppercase tracking-wide text-white">
+                      {r.brandCode}
+                    </span>
+                  ) : null}
+                  {r.itemMatch ? (
+                    <span className="shrink-0 rounded-md bg-indigo-600 px-1.5 py-0.5 font-mono text-[10px] font-black text-white">
+                      ຮຸ່ນ {r.itemMatch}
+                    </span>
+                  ) : null}
+                </div>
+                <span className="shrink-0 text-xs font-bold text-slate-400">
+                  ທີມຂາຍແລ້ວ{" "}
+                  <b className="font-mono text-slate-700">{moneyFmt.format(r.totalUnits)}</b> ຊຸດ
+                </span>
+              </div>
+
+              {/* Tier ladder */}
+              <div className="mt-2 grid grid-cols-2 gap-1.5 text-xs">
+                <div className={tierChip(r.myTier === "low")}>
+                  ≥ {moneyFmt.format(r.lowMinQty)} ຊຸດ →{" "}
+                  <span className="font-mono">{moneyFmt.format(r.lowReward)}</span> ບາດ/ຊຸດ
+                </div>
+                <div className={tierChip(r.myTier === "high")}>
+                  ≥ {moneyFmt.format(r.highMinQty)} ຊຸດ →{" "}
+                  <span className="font-mono">{moneyFmt.format(r.highReward)}</span> ບາດ/ຊຸດ
+                </div>
+              </div>
+
+              {/* Managers / unit heads: everyone's count, tier and pay. */}
+              {r.breakdown && r.breakdown.length > 0 ? (
+                <div className="mt-2 overflow-hidden rounded-xl ring-1 ring-inset ring-slate-100">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                        <th className="px-2.5 py-1.5 text-left">ພະນັກງານ</th>
+                        <th className="px-2.5 py-1.5 text-right">ຊຸດ</th>
+                        <th className="px-2.5 py-1.5 text-right">ຂັ້ນ</th>
+                        <th className="px-2.5 py-1.5 text-right">ຈະໄດ້ຮັບ</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {r.breakdown.map((m) => (
+                        <tr key={m.code} className={m.units > 0 ? "" : "text-slate-400"}>
+                          <td className="max-w-32 truncate px-2.5 py-1.5 font-bold text-slate-700">
+                            {m.name}
+                          </td>
+                          <td className="px-2.5 py-1.5 text-right font-mono font-bold">
+                            {moneyFmt.format(m.units)}
+                          </td>
+                          <td className={`px-2.5 py-1.5 text-right font-black ${m.tier === "high" ? "text-emerald-600" : m.tier === "low" ? "text-amber-600" : "text-slate-300"}`}>
+                            {TIER_LABEL[m.tier]}
+                          </td>
+                          <td className="px-2.5 py-1.5 text-right font-mono font-black text-emerald-700">
+                            {moneyFmt.format(Math.round(m.pay))}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="mt-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 rounded-xl bg-amber-50/70 px-3 py-2 ring-1 ring-inset ring-amber-100">
+                  <span className="text-xs font-bold text-slate-600">
+                    ຂ້ອຍຂາຍໄດ້{" "}
+                    <b className="font-mono text-slate-900">{moneyFmt.format(r.mine)}</b> ຊຸດ
+                    {r.myTier !== "none" ? (
+                      <span className="text-slate-400"> · ຂັ້ນ{TIER_LABEL[r.myTier]}</span>
+                    ) : null}
+                  </span>
+                  <span className="text-xs font-black">
+                    {r.myReward > 0 ? (
+                      <span className="text-emerald-700">
+                        ຈະໄດ້ຮັບ ≈ {moneyFmt.format(Math.round(r.myReward))} ບາດ
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">
+                        ຂາຍອີກ{" "}
+                        <b className="font-mono text-slate-600">
+                          {moneyFmt.format(
+                            Math.max(0, (r.lowReward > 0 ? r.lowMinQty : r.highMinQty) - r.mine),
+                          )}
+                        </b>{" "}
+                        ຊຸດ → ເລີ່ມໄດ້ລາງວັນ
+                      </span>
+                    )}
+                  </span>
+                </div>
+              )}
+            </li>
+          );
+        })}
       </ul>
 
       {hasSplit ? (
@@ -197,6 +351,7 @@ export function RewardList({ rewards }: { rewards: Reward[] }) {
 
 export default function SpecialRewardCard() {
   const [rewards, setRewards] = useState<Reward[] | null>(null);
+  const [unitRewards, setUnitRewards] = useState<UnitReward[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -204,8 +359,11 @@ export default function SpecialRewardCard() {
       try {
         const res = await fetch("/api/reports/special-rewards", { cache: "no-store" });
         if (!res.ok) throw new Error(String(res.status));
-        const data = (await res.json()) as { rewards: Reward[] };
-        if (!cancelled) setRewards(Array.isArray(data.rewards) ? data.rewards : []);
+        const data = (await res.json()) as { rewards: Reward[]; unitRewards?: UnitReward[] };
+        if (!cancelled) {
+          setRewards(visibleRewards(Array.isArray(data.rewards) ? data.rewards : []));
+          setUnitRewards(visibleUnitRewards(Array.isArray(data.unitRewards) ? data.unitRewards : []));
+        }
       } catch {
         if (!cancelled) setRewards([]);
       }
@@ -215,7 +373,7 @@ export default function SpecialRewardCard() {
     };
   }, []);
 
-  if (!rewards || rewards.length === 0) return null;
+  if (!rewards || (rewards.length === 0 && unitRewards.length === 0)) return null;
 
   return (
     <section className="overflow-hidden rounded-2xl border border-amber-200/70 bg-white shadow-[0_10px_35px_-18px_rgba(217,119,6,0.45)]">
@@ -243,7 +401,7 @@ export default function SpecialRewardCard() {
           </Link>
         </div>
       </div>
-      <RewardList rewards={rewards} />
+      <RewardList rewards={rewards} unitRewards={unitRewards} />
     </section>
   );
 }

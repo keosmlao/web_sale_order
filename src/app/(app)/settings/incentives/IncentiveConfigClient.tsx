@@ -61,7 +61,10 @@ export default function IncentiveConfigClient({ canManage, embedded = false }: {
       const response = await fetch("/api/incentives/config", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(data),
+        // Monthly targets are managed by TargetPivotEditor. Sending the legacy
+        // target list here can make an otherwise valid config save fail when
+        // old rows do not satisfy the newer target validation rules.
+        body: JSON.stringify({ config: data.config }),
       });
       const json = await response.json();
       if (!response.ok) throw new Error(json.error || `Error ${response.status}`);
@@ -92,9 +95,9 @@ export default function IncentiveConfigClient({ canManage, embedded = false }: {
   );
 
   return (
-    <div className={embedded ? "" : "odoo-page"}>
+    <div className={embedded ? "incentive-config" : "odoo-page incentive-config"}>
       {embedded ? (
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="incentive-toolbar mb-4 flex flex-wrap items-center justify-between gap-3">
           <p className="text-xs text-odoo-text-muted">ກຳນົດໂບນັດຕໍ່ຊິ້ນ, ເກນຜົນງານ, ຄ່າຄອມ ແລະເປົ້າຂາຍລາຍເດືອນ.</p>
           {saveButton}
         </div>
@@ -115,7 +118,8 @@ export default function IncentiveConfigClient({ canManage, embedded = false }: {
 
       {data ? (
         <>
-          <section className="odoo-card p-4">
+          <div className="incentive-config-grid">
+          <section className="odoo-card incentive-editor incentive-editor--formula p-4">
             <h2 className="text-sm font-black text-odoo-text-strong">① ໂບນັດ</h2>
             <p className="mb-4 text-xs text-odoo-text-muted">ໂບນັດ/ຊິ້ນ = ຄະແນນ × ໂບນັດພື້ນຖານ × ຕົວຄູນຜົນງານ × ສະຖານະສິນຄ້າ</p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -124,7 +128,7 @@ export default function IncentiveConfigClient({ canManage, embedded = false }: {
             </div>
           </section>
 
-          <section className="odoo-card mt-4 p-4">
+          <section className="odoo-card incentive-editor incentive-editor--performance p-4">
             <h2 className="text-sm font-black text-odoo-text-strong">ເກນຜົນງານ (ຕົວຄູນ)</h2>
             <p className="mb-4 text-xs text-odoo-text-muted">ຍອດຂາຍ ÷ ເປົ້າ/ຄົນ → ຕົວຄູນ ໃສ່ ① ໂບນັດ</p>
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
@@ -136,18 +140,11 @@ export default function IncentiveConfigClient({ canManage, embedded = false }: {
             </div>
           </section>
 
-          <section className="odoo-card mt-4 p-4">
-            <h2 className="text-sm font-black text-odoo-text-strong">③ ຄ່າຄອມ</h2>
-            <p className="mb-4 text-xs text-odoo-text-muted">ຄ່າຄອມ = ຄ່າຄອມພື້ນຖານ × ເລດ (ຜົນງານ &lt;80%=0 · 80–100% ປັດລົງ 5% · ≥100% ປັດຂຶ້ນ 5%)</p>
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-              <Field label="ຄ່າຄອມພື້ນຖານ/ຄົນ (฿)" value={data.config.commissionBase} onChange={(v) => configField("commissionBase", v)} disabled={!canManage} step="100" />
-            </div>
-          </section>
-
           {/* Target editing moved to its own tab (🎯 ເປົ້າຂາຍ) — one pivot
               covering every seller per month, replacing the old per-row
               year grid so targets are edited in exactly one place. */}
-          <section className="odoo-card mt-4 flex items-center gap-3 p-4">
+          </div>
+          <section className="odoo-card incentive-editor incentive-editor--tip mt-4 flex items-center gap-3 p-4">
             <span aria-hidden className="text-xl">🎯</span>
             <div className="text-xs text-odoo-text-muted">
               <b className="text-odoo-text-strong">ເປົ້າຂາຍລາຍເດືອນ</b> ຍ້າຍໄປ tab
@@ -162,5 +159,5 @@ export default function IncentiveConfigClient({ canManage, embedded = false }: {
 }
 
 function Field({ label, value, onChange, disabled, text = false, step }: { label: string; value: string | number; onChange: (value: string) => void; disabled: boolean; text?: boolean; step?: string }) {
-  return <label className="grid gap-1"><span className="odoo-label">{label}</span><input type={text ? "text" : "number"} step={step} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} className="odoo-input" /></label>;
+  return <label className="incentive-field grid gap-1"><span className="odoo-label">{label}</span><input type={text ? "text" : "number"} step={step} value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} className="odoo-input" /></label>;
 }
