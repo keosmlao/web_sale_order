@@ -51,19 +51,19 @@ export default function ActivePromosCard() {
             </svg>
           </span>
           <span className="text-sm font-black text-slate-900">ໂປຣທີ່ກຳລັງແລ່ນ</span>
-          <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-[10px] font-black text-violet-700">
+          <span className="rounded-full bg-violet-100 px-1.5 py-0.5 text-xs font-black text-violet-700">
             {promos.length}
           </span>
         </div>
-        <Link href="/promotions" className="text-[11px] font-bold text-violet-600 hover:underline">
+        <Link href="/promotions" className="text-[13px] font-bold text-violet-600 hover:underline">
           ທັງໝົດ ›
         </Link>
       </div>
       <ul className="divide-y divide-slate-100">
         {promos.slice(0, 3).map((p, i) => (
           <li key={p.id ?? i} className="flex items-center justify-between gap-3 px-4 py-2">
-            <span className="min-w-0 truncate text-xs font-bold text-slate-800">{p.name}</span>
-            <span className="shrink-0 text-[10px] font-bold text-slate-400">
+            <span className="min-w-0 truncate text-sm font-bold text-slate-800">{p.name}</span>
+            <span className="shrink-0 text-xs font-bold text-slate-400">
               {p.endAt ? `ຮອດ ${endFmt.format(new Date(p.endAt))}` : "ບໍ່ກຳນົດໝົດອາຍຸ"}
             </span>
           </li>

@@ -655,7 +655,7 @@ export default async function HomePage() {
         
         <div className="relative flex flex-col justify-between gap-4 md:flex-row md:items-center">
           <div className="space-y-2">
-            <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-wider text-indigo-300">
+            <div className="flex flex-wrap items-center gap-2 text-sm font-bold uppercase tracking-wider text-indigo-300">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/20 px-2.5 py-1 text-emerald-300 backdrop-blur-sm">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                 Online
@@ -667,11 +667,11 @@ export default async function HomePage() {
               <h1 className="text-xl font-extrabold tracking-tight text-white sm:text-2xl md:text-3xl">
                 {timeOfDay}, {greeting}
               </h1>
-              <span className="rounded-full bg-white/15 px-2.5 py-1 text-[11px] font-bold text-white ring-1 ring-inset ring-white/20">
+              <span className="rounded-full bg-white/15 px-2.5 py-1 text-[13px] font-bold text-white ring-1 ring-inset ring-white/20">
                 {roleLabel}
               </span>
             </div>
-            <p className="max-w-xl text-xs text-slate-300">
+            <p className="max-w-xl text-sm text-slate-300">
               Dashboard ສ່ວນຕົວ · ຍອດຂາຍ, ເປົ້າ ແລະ ໂບນັດ ຂອງທ່ານມື້ນີ້
             </p>
           </div>
@@ -689,15 +689,15 @@ export default async function HomePage() {
                 : "from-slate-600 to-slate-700 text-slate-300";
               return (
                 <div key={p.label} className="flex items-center justify-center gap-1.5">
-                  <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br font-mono text-[11px] font-black ${disc}`}>
+                  <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-gradient-to-br font-mono text-[13px] font-black ${disc}`}>
                     {p.rnk > 0 ? p.rnk : "–"}
                   </span>
                   <div className="min-w-0 text-left leading-tight">
-                    <div className="text-[8px] font-bold uppercase tracking-wide text-slate-400">
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
                       {p.label} · /{myTeamSize}
                     </div>
-                    <div className="truncate font-mono text-[11px] font-black text-slate-100">
-                      {compactMoneyFmt.format(p.amount)} <span className="text-[8px] font-bold text-slate-400">ບາດ</span>
+                    <div className="truncate font-mono text-[13px] font-black text-slate-100">
+                      {compactMoneyFmt.format(p.amount)} <span className="text-[10px] font-bold text-slate-400">ບາດ</span>
                     </div>
                   </div>
                 </div>
@@ -715,10 +715,10 @@ export default async function HomePage() {
       </section>
 
       {/* Bonus card first — its "ລວມທີ່ຕ້ອງຮັບ" headline must be visible the
-          moment the home page opens. Phones stack; desktop puts bonus and
-          target side by side so the page stops reading like a stretched
-          phone layout. */}
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
+          moment the home page opens. Phones stack; desktop splits bonus and
+          commission into two separate cards (MyBonusCard spans 2 columns)
+          with the target card in the third. */}
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-3">
         <MyBonusCard />
         <MyTargetCard initialData={initialTargetData} />
       </div>
@@ -765,15 +765,15 @@ export default async function HomePage() {
           {/* Team KPI: team sales vs target this month. */}
           <div className="grid grid-cols-3 divide-x divide-indigo-100 rounded-xl border border-indigo-100 bg-indigo-50/50 py-3 lg:col-span-2">
             <div className="px-3 text-center">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">ຍອດທີມ/ເດືອນ</div>
+              <div className="text-xs font-bold uppercase tracking-wide text-slate-400">ຍອດທີມ/ເດືອນ</div>
               <div className="mt-1 font-mono text-sm font-black text-indigo-700 sm:text-base">{moneyFmt.format(homeTargetSales)}</div>
             </div>
             <div className="px-3 text-center">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">ເປົ້າທີມ</div>
+              <div className="text-xs font-bold uppercase tracking-wide text-slate-400">ເປົ້າທີມ</div>
               <div className="mt-1 font-mono text-sm font-black text-slate-700 sm:text-base">{moneyFmt.format(homeTargetAmount)}</div>
             </div>
             <div className="px-3 text-center">
-              <div className="text-[10px] font-bold uppercase tracking-wide text-slate-400">ບັນລຸ</div>
+              <div className="text-xs font-bold uppercase tracking-wide text-slate-400">ບັນລຸ</div>
               <div className={`mt-1 font-mono text-sm font-black sm:text-base ${homeTargetAmount > 0 && homeTargetSales / homeTargetAmount >= 1 ? "text-emerald-600" : homeTargetAmount > 0 && homeTargetSales / homeTargetAmount >= 0.8 ? "text-amber-600" : "text-slate-500"}`}>
                 {homeTargetAmount > 0 ? `${((homeTargetSales / homeTargetAmount) * 100).toFixed(0)}%` : "—"}
               </div>
@@ -782,14 +782,14 @@ export default async function HomePage() {
           {/* Month direction: this month vs the same days of last month. */}
           {mtdPrev > 0 || mtdCur > 0 ? (
             <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-2.5">
-              <div className="text-[11px] font-bold text-slate-500">
+              <div className="text-[13px] font-bold text-slate-500">
                 ທຽບເດືອນກ່ອນ <span className="text-slate-400">(ວັນທີ 1–{new Date().getDate()})</span>
               </div>
               <div className="flex items-center gap-2">
                 <span className="font-mono text-sm font-black text-slate-800">{compactMoneyFmt.format(mtdCur)}</span>
-                <span className="text-[10px] text-slate-400">vs {compactMoneyFmt.format(mtdPrev)}</span>
+                <span className="text-xs text-slate-400">vs {compactMoneyFmt.format(mtdPrev)}</span>
                 {mtdDeltaPct !== null ? (
-                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-black ${mtdDeltaPct >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+                  <span className={`rounded-full px-2 py-0.5 text-xs font-black ${mtdDeltaPct >= 0 ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
                     {mtdDeltaPct >= 0 ? "+" : ""}{mtdDeltaPct.toFixed(1)}%
                   </span>
                 ) : null}
@@ -813,7 +813,7 @@ export default async function HomePage() {
                   <div className="text-sm font-black text-rose-900">
                     ບິນຍົກເລີກມື້ນີ້ {numFmt.format(today.cancelledCount)} ບິນ
                   </div>
-                  <div className="text-[11px] font-semibold text-rose-700">
+                  <div className="text-[13px] font-semibold text-rose-700">
                     ລວມ {moneyFmt.format(today.cancelledAmount)} ກີບ · ກົດເພື່ອກວດ
                   </div>
                 </div>
@@ -855,7 +855,7 @@ export default async function HomePage() {
                   <div className="text-sm font-black text-amber-900">
                     ບິນຄ້າງຊຳລະ {numFmt.format(pendingBillsCount)} ບິນ
                   </div>
-                  <div className="text-[11px] font-semibold text-amber-700">
+                  <div className="text-[13px] font-semibold text-amber-700">
                     ລວມ {moneyFmt.format(pendingBillsAmount)} ກີບ · ກົດໄປຮັບເງິນ
                   </div>
                 </div>
@@ -881,7 +881,7 @@ export default async function HomePage() {
                   <div className="text-sm font-black text-sky-900">
                     ຄຳຂໍເຕີມ stock {numFmt.format(refillPendingCount)} ລາຍການ
                   </div>
-                  <div className="text-[11px] font-semibold text-sky-700">
+                  <div className="text-[13px] font-semibold text-sky-700">
                     ລໍຖ້າອະນຸມັດ · ກົດເພື່ອກວດ
                   </div>
                 </div>
@@ -902,7 +902,7 @@ export default async function HomePage() {
             action={
               <Link
                 href="/reports/salespeople"
-                className="text-xs font-semibold text-odoo-primary hover:underline"
+                className="text-sm font-semibold text-odoo-primary hover:underline"
               >
                 ທັງໝົດ
               </Link>
@@ -921,9 +921,9 @@ export default async function HomePage() {
                     : "bg-rose-50 text-rose-600";
               return (
                 <div className="-mx-2 overflow-x-auto">
-                  <table className="w-full min-w-[560px] text-xs">
+                  <table className="w-full min-w-[560px] text-sm">
                     <thead>
-                      <tr className="text-[10px] font-bold uppercase tracking-wide text-slate-400">
+                      <tr className="text-xs font-bold uppercase tracking-wide text-slate-400">
                         <th className="px-2 py-1.5 text-left">ພະນັກງານ</th>
                         <th className="px-2 py-1.5 text-right">ເປົ້າ</th>
                         <th className="px-2 py-1.5 text-right">ຍອດຂາຍ</th>
@@ -952,7 +952,7 @@ export default async function HomePage() {
                             <td className="px-2 py-2 text-right font-mono text-slate-500">{moneyFmt.format(target)}</td>
                             <td className="px-2 py-2 text-right font-mono font-black text-slate-800">{moneyFmt.format(total)}</td>
                             <td className="px-2 py-2 text-center">
-                              <span className={`inline-block rounded-full px-2 py-0.5 font-mono text-[10px] font-black ${achPill(ach)}`}>
+                              <span className={`inline-block rounded-full px-2 py-0.5 font-mono text-xs font-black ${achPill(ach)}`}>
                                 {ach.toFixed(1)}%
                               </span>
                               <div className="mx-auto mt-1 h-1 w-16 overflow-hidden rounded-full bg-slate-100">
@@ -999,7 +999,7 @@ export default async function HomePage() {
                 const pct = catMax > 0 ? (amt / catMax) * 100 : 0;
                 return (
                   <li key={i}>
-                    <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center justify-between text-sm">
                       <span className="min-w-0 truncate font-semibold text-slate-700">{c.category}</span>
                       <span className="shrink-0 font-mono font-bold text-slate-800">{compactMoneyFmt.format(amt)}</span>
                     </div>
@@ -1022,10 +1022,10 @@ export default async function HomePage() {
                 <li key={i} className="flex items-center gap-2">
                   <span className={rankBadgeClass(i)}>{i + 1}</span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-bold text-slate-800">{it.item_name ?? "—"}</span>
-                    <span className="text-[10px] text-slate-400">x{numFmt.format(Number(it.qty ?? 0))}</span>
+                    <span className="block truncate text-sm font-bold text-slate-800">{it.item_name ?? "—"}</span>
+                    <span className="text-xs text-slate-400">x{numFmt.format(Number(it.qty ?? 0))}</span>
                   </span>
-                  <span className="shrink-0 font-mono text-xs font-black text-indigo-600">{compactMoneyFmt.format(Number(it.amount ?? 0))}</span>
+                  <span className="shrink-0 font-mono text-sm font-black text-indigo-600">{compactMoneyFmt.format(Number(it.amount ?? 0))}</span>
                 </li>
               ))}
             </ul>
@@ -1038,7 +1038,7 @@ export default async function HomePage() {
           ) : (
             <ul className="divide-y divide-slate-100">
               {recentMineRows.map((b, i) => (
-                <li key={i} className="flex items-center justify-between py-2 text-xs">
+                <li key={i} className="flex items-center justify-between py-2 text-sm">
                   <span className="text-slate-500">
                     <span className="font-mono font-bold text-slate-700">#{b.doc_no.slice(-5)}</span>{" "}
                     <span className="text-slate-400">{b.day.slice(8, 10)}/{b.day.slice(5, 7)}</span>{" "}
@@ -1061,7 +1061,7 @@ export default async function HomePage() {
             action={
               <Link
                 href="/reports/daily-sales"
-                className="text-xs font-semibold text-odoo-primary hover:underline"
+                className="text-sm font-semibold text-odoo-primary hover:underline"
               >
                 ເບິ່ງລາຍງານ
               </Link>
@@ -1083,7 +1083,7 @@ export default async function HomePage() {
             <Panel title="ມື້ນີ້ ທຽບກັບ ມື້ວານ" eyebrow="Comparison">
               <div className="space-y-4">
                 <div>
-                  <div className="mb-2 flex items-center justify-between text-xs">
+                  <div className="mb-2 flex items-center justify-between text-sm">
                     <span className="font-bold text-slate-800">
                       ສັດສ່ວນຍອດຂາຍ
                     </span>
@@ -1165,17 +1165,17 @@ export default async function HomePage() {
                       <div className="min-w-0 flex-1">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <div className="truncate text-xs font-bold text-slate-800">
+                            <div className="truncate text-sm font-bold text-slate-800">
                               {r.customer_name ?? "—"}
                             </div>
-                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] text-slate-400 font-semibold">
+                            <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-400 font-semibold">
                               <span>{r.salesperson_name ?? "—"}</span>
                               <span>#{r.cart_number}</span>
                               <span>{timeFmt.format(new Date(r.create_date_time_now))}</span>
                             </div>
                           </div>
                           <div className="shrink-0 text-right">
-                            <div className="text-xs font-black text-slate-800">
+                            <div className="text-sm font-black text-slate-800">
                               {compactMoneyFmt.format(Number(r.amount ?? 0))}
                             </div>
                             <StatusPill status={r.status} />
@@ -1301,7 +1301,7 @@ function Panel({
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           {eyebrow ? (
-            <div className="mb-1 text-[9px] font-bold uppercase tracking-wide text-odoo-text-soft">
+            <div className="mb-1 text-[11px] font-bold uppercase tracking-wide text-odoo-text-soft">
               {eyebrow}
             </div>
           ) : null}
@@ -1342,16 +1342,16 @@ function MetricCard({
         </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-1">
-            <span className="truncate text-[10px] font-semibold text-odoo-text-muted">{title}</span>
+            <span className="truncate text-xs font-semibold text-odoo-text-muted">{title}</span>
             {delta !== undefined && delta !== null ? <DeltaPill value={delta} /> : null}
           </div>
           <div className="flex min-w-0 flex-wrap items-baseline gap-x-1">
             <span className="break-all text-base font-bold leading-tight text-odoo-text-strong sm:text-lg">
               {value}
             </span>
-            {unit ? <span className="text-[9px] font-semibold text-odoo-text-muted">{unit}</span> : null}
+            {unit ? <span className="text-[11px] font-semibold text-odoo-text-muted">{unit}</span> : null}
           </div>
-          {sub ? <div className="truncate text-[9px] text-odoo-text-muted">{sub}</div> : null}
+          {sub ? <div className="truncate text-[11px] text-odoo-text-muted">{sub}</div> : null}
         </div>
       </div>
     </article>
@@ -1363,7 +1363,7 @@ function DeltaPill({ value }: { value: number }) {
   return (
     <span
       className={
-        "inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold " +
+        "inline-flex items-center rounded-full px-2 py-0.5 text-xs font-bold " +
         (positive
           ? "bg-odoo-success-bg text-odoo-success-text"
           : "bg-odoo-danger-bg text-odoo-danger-text")
@@ -1379,7 +1379,7 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle?: string 
   return (
     <div className="flex items-baseline justify-between gap-2 pt-1">
       <h2 className="text-sm font-black text-odoo-text-strong">{title}</h2>
-      {subtitle ? <span className="text-[11px] font-semibold text-odoo-text-muted">{subtitle}</span> : null}
+      {subtitle ? <span className="text-[13px] font-semibold text-odoo-text-muted">{subtitle}</span> : null}
     </div>
   );
 }
@@ -1387,8 +1387,8 @@ function SectionHeading({ title, subtitle }: { title: string; subtitle?: string 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-md border border-odoo-border bg-odoo-surface-muted px-3 py-2">
-      <div className="text-[9px] font-semibold text-odoo-text-muted">{label}</div>
-      <div className="mt-1 truncate text-xs font-bold text-odoo-text-strong">{value}</div>
+      <div className="text-[11px] font-semibold text-odoo-text-muted">{label}</div>
+      <div className="mt-1 truncate text-sm font-bold text-odoo-text-strong">{value}</div>
     </div>
   );
 }
@@ -1407,10 +1407,10 @@ function SplitStat({
   return (
     <div className="rounded-md border border-odoo-border bg-odoo-surface-muted p-3">
       <div className="flex items-center justify-between gap-2">
-        <span className="text-[10px] font-semibold text-odoo-text-muted">{label}</span>
+        <span className="text-xs font-semibold text-odoo-text-muted">{label}</span>
         <span
           className={
-            "rounded-full px-2 py-0.5 text-[10px] font-bold " +
+            "rounded-full px-2 py-0.5 text-xs font-bold " +
             (tone === "primary"
               ? "bg-odoo-primary-50 text-odoo-primary"
               : "bg-slate-200 text-slate-700")
@@ -1419,7 +1419,7 @@ function SplitStat({
           {meta}
         </span>
       </div>
-      <div className="mt-2 text-xs font-bold text-odoo-text-strong">{value}</div>
+      <div className="mt-2 text-sm font-bold text-odoo-text-strong">{value}</div>
     </div>
   );
 }
@@ -1458,7 +1458,7 @@ function PriceRequestPanel({
           <div className="text-sm font-bold text-odoo-text-strong">
             ອະນຸມັດລາຄາພິເສດ
           </div>
-          <p className="mt-1 text-[10px] text-odoo-text-muted">
+          <p className="mt-1 text-xs text-odoo-text-muted">
             {hasPending
               ? `ມີ ${pendingPriceRequests} ລາຍການລໍຖ້າການອະນຸມັດ`
               : "ບໍ່ມີຄຳຂໍລາຄາພິເສດໃນຂະນະນີ້"}
@@ -1470,7 +1470,7 @@ function PriceRequestPanel({
         <Link
           href="/cashier"
           className={
-            "inline-flex h-9 w-full items-center justify-center rounded-md px-3 text-xs font-semibold transition " +
+            "inline-flex h-9 w-full items-center justify-center rounded-md px-3 text-sm font-semibold transition " +
             (hasPending
               ? "bg-odoo-danger text-white hover:bg-odoo-danger-dark"
               : "border border-odoo-border bg-white text-odoo-text-strong hover:bg-odoo-surface-muted")
@@ -1479,7 +1479,7 @@ function PriceRequestPanel({
           {hasPending ? "ໄປອະນຸມັດ" : "ເບິ່ງປະຫວັດ"}
         </Link>
       ) : (
-        <div className="rounded-md border border-odoo-border bg-white px-3 py-2 text-[10px] font-semibold text-odoo-text-muted">
+        <div className="rounded-md border border-odoo-border bg-white px-3 py-2 text-xs font-semibold text-odoo-text-muted">
           ອະນຸມັດແລ້ວມື້ນີ້:{" "}
           <span className="text-odoo-text-strong">{approvedPricesToday}</span>
         </div>
@@ -1508,7 +1508,7 @@ function LauncherButton({
       <span className={`flex h-9 w-9 items-center justify-center rounded-md ${c.soft}`}>
         {icon}
       </span>
-      <span className="mt-3 text-xs font-semibold text-odoo-text-strong group-hover:text-odoo-primary">
+      <span className="mt-3 text-sm font-semibold text-odoo-text-strong group-hover:text-odoo-primary">
         {label}
       </span>
     </Link>
@@ -1536,7 +1536,7 @@ function MobileLauncher({
       <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg ${c.soft} [&_svg]:h-4 [&_svg]:w-4`}>
         {icon}
       </span>
-      <span className="truncate text-[11px] font-bold text-odoo-text-strong">{label}</span>
+      <span className="truncate text-[13px] font-bold text-odoo-text-strong">{label}</span>
     </Link>
   );
 }
@@ -1674,7 +1674,7 @@ function AreaChart({
 
 function EmptyHint({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-md border border-dashed border-odoo-border bg-odoo-surface-muted py-8 text-center text-[11px] font-semibold text-odoo-text-muted">
+    <div className="rounded-md border border-dashed border-odoo-border bg-odoo-surface-muted py-8 text-center text-[13px] font-semibold text-odoo-text-muted">
       {children}
     </div>
   );
@@ -1683,20 +1683,20 @@ function EmptyHint({ children }: { children: ReactNode }) {
 function StatusPill({ status }: { status: number | null }) {
   if (status === 1) {
     return (
-      <span className="mt-1 inline-flex rounded-full bg-odoo-success-bg px-2 py-0.5 text-[9px] font-bold text-odoo-success-text">
+      <span className="mt-1 inline-flex rounded-full bg-odoo-success-bg px-2 py-0.5 text-[11px] font-bold text-odoo-success-text">
         ສຳເລັດ
       </span>
     );
   }
   if (status === 2) {
     return (
-      <span className="mt-1 inline-flex rounded-full bg-odoo-danger-bg px-2 py-0.5 text-[9px] font-bold text-odoo-danger-text">
+      <span className="mt-1 inline-flex rounded-full bg-odoo-danger-bg px-2 py-0.5 text-[11px] font-bold text-odoo-danger-text">
         ຍົກເລີກ
       </span>
     );
   }
   return (
-    <span className="mt-1 inline-flex rounded-full bg-odoo-warning-bg px-2 py-0.5 text-[9px] font-bold text-odoo-warning-text">
+    <span className="mt-1 inline-flex rounded-full bg-odoo-warning-bg px-2 py-0.5 text-[11px] font-bold text-odoo-warning-text">
       ລໍຖ້າ
     </span>
   );
@@ -1711,10 +1711,10 @@ function statusDotBg(status: number | null) {
 }
 
 function rankBadgeClass(i: number) {
-  if (i === 0) return "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 text-xs font-bold text-white shadow-md shadow-amber-500/20";
-  if (i === 1) return "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-300 to-slate-400 text-xs font-bold text-white shadow-md shadow-slate-400/20";
-  if (i === 2) return "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-amber-600 text-xs font-bold text-white shadow-md shadow-orange-500/20";
-  return "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-xs font-bold text-slate-600 border border-slate-200";
+  if (i === 0) return "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-400 to-yellow-500 text-sm font-bold text-white shadow-md shadow-amber-500/20";
+  if (i === 1) return "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-slate-300 to-slate-400 text-sm font-bold text-white shadow-md shadow-slate-400/20";
+  if (i === 2) return "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-orange-400 to-amber-600 text-sm font-bold text-white shadow-md shadow-orange-500/20";
+  return "flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-slate-50 text-sm font-bold text-slate-600 border border-slate-200";
 }
 
 function rankBarClass(i: number) {

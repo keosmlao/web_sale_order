@@ -81,37 +81,37 @@ export default function MyTargetCard({ initialData = null }: { initialData?: Tar
           <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white shadow-sm shadow-indigo-300">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/><path d="M12 2v3M22 12h-3"/></svg>
           </span>
-          <div><div className="text-sm font-black text-slate-900">{data.scope === "team" ? "ເປົ້າຂອງທີມ" : "ເປົ້າຂອງຂ້ອຍ"}</div><div className="text-[10px] font-semibold text-slate-500">ຜົນງານເດືອນນີ້</div></div>
+          <div><div className="text-sm font-black text-slate-900">{data.scope === "team" ? "ເປົ້າຂອງທີມ" : "ເປົ້າຂອງຂ້ອຍ"}</div><div className="text-xs font-semibold text-slate-500">ຜົນງານເດືອນນີ້</div></div>
         </div>
         <div className="flex items-center gap-1.5">
-          {data.rank > 0 ? <span className="rounded-full bg-amber-100 px-2 py-1 text-[10px] font-black text-amber-700">🏆 #{data.rank}</span> : null}
-          <span className="rounded-full bg-white px-2 py-1 text-[10px] font-bold text-slate-600 ring-1 ring-slate-200">{remainingDays} ວັນ</span>
+          {data.rank > 0 ? <span className="rounded-full bg-amber-100 px-2 py-1 text-xs font-black text-amber-700">🏆 #{data.rank}</span> : null}
+          <span className="rounded-full bg-white px-2 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">{remainingDays} ວັນ</span>
         </div>
       </div>
 
       <div className="p-4">
         <div className="grid grid-cols-2 gap-2.5">
           <div className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3">
-            <div className="flex items-center gap-1.5 text-[10px] font-black text-slate-600"><span className="h-2 w-2 rounded-full bg-slate-400" />ເປົ້າປະຈຳເດືອນ</div>
+            <div className="flex items-center gap-1.5 text-xs font-black text-slate-600"><span className="h-2 w-2 rounded-full bg-slate-400" />ເປົ້າປະຈຳເດືອນ</div>
             <div className="mt-2 truncate font-mono text-xl font-black tracking-tight text-slate-800 sm:text-2xl">{fmt.format(data.target)}</div>
-            <div className="mt-0.5 text-[9px] font-bold text-slate-400">ບາດ · ຕໍ່ຄົນ</div>
+            <div className="mt-0.5 text-[11px] font-bold text-slate-400">ບາດ · ຕໍ່ຄົນ</div>
           </div>
           <div className="min-w-0 rounded-xl border border-indigo-100 bg-indigo-50/70 p-3">
-            <div className="flex items-center gap-1.5 text-[10px] font-black text-indigo-600"><span className="h-2 w-2 rounded-full bg-indigo-500" />ຍອດຂາຍແລ້ວ</div>
+            <div className="flex items-center gap-1.5 text-xs font-black text-indigo-600"><span className="h-2 w-2 rounded-full bg-indigo-500" />ຍອດຂາຍແລ້ວ</div>
             <div className="mt-2 truncate font-mono text-xl font-black tracking-tight text-indigo-700 sm:text-2xl">{fmt.format(data.totalSales)}</div>
-            <div className="mt-0.5 text-[9px] font-bold text-indigo-400">ບາດ · ເດືອນນີ້</div>
+            <div className="mt-0.5 text-[11px] font-bold text-indigo-400">ບາດ · ເດືອນນີ້</div>
           </div>
         </div>
 
         <div className="mt-4">
           <div className="mb-2 flex items-end justify-between gap-3">
             <div>
-              <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">ຄວາມຄືບໜ້າ</div>
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">ຄວາມຄືບໜ້າ</div>
               <div className="mt-0.5 flex items-center gap-1.5">
                 <span className={`font-mono text-xl font-black ${onTrack ? "text-emerald-600" : "text-indigo-600"}`}>{(ach * 100).toFixed(1)}%</span>
                 <span
                   className={
-                    "rounded-full px-1.5 py-0.5 text-[9px] font-black " +
+                    "rounded-full px-1.5 py-0.5 text-[11px] font-black " +
                     (pace === "ahead"
                       ? "bg-emerald-100 text-emerald-700"
                       : pace === "behind"
@@ -128,7 +128,7 @@ export default function MyTargetCard({ initialData = null }: { initialData?: Tar
                 </span>
               </div>
             </div>
-            <div className="text-right"><div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">{onTrack ? "ເກີນເປົ້າ" : "ຍັງຂາດ"}</div><div className={`mt-0.5 font-mono text-base font-black ${onTrack ? "text-emerald-600" : "text-amber-600"}`}>{fmt.format(onTrack ? data.totalSales - data.target : remainingAmount)} ບາດ</div></div>
+            <div className="text-right"><div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">{onTrack ? "ເກີນເປົ້າ" : "ຍັງຂາດ"}</div><div className={`mt-0.5 font-mono text-base font-black ${onTrack ? "text-emerald-600" : "text-amber-600"}`}>{fmt.format(onTrack ? data.totalSales - data.target : remainingAmount)} ບາດ</div></div>
           </div>
           <div className="h-3 overflow-hidden rounded-full bg-slate-100 ring-1 ring-inset ring-slate-200/70">
             <div className={`h-full rounded-full transition-all duration-700 ${onTrack ? "bg-gradient-to-r from-emerald-400 to-emerald-600" : "bg-gradient-to-r from-indigo-500 to-violet-500"}`} style={{ width: `${Math.max(2, pct * 100)}%` }} />
@@ -146,7 +146,7 @@ export default function MyTargetCard({ initialData = null }: { initialData?: Tar
         </div>
 
         <div className="mt-4">
-          <div className="mb-2 flex items-center justify-between text-[10px] font-bold text-slate-400"><span>ຍອດຂາຍລາຍວັນ</span><span>01–{daysInMonth}</span></div>
+          <div className="mb-2 flex items-center justify-between text-xs font-bold text-slate-400"><span>ຍອດຂາຍລາຍວັນ</span><span>01–{daysInMonth}</span></div>
           <div className="flex h-10 items-end gap-px rounded-lg bg-slate-50 px-1.5 pt-1.5 ring-1 ring-inset ring-slate-100">
           {monthDays.map((d) => (
             <div
@@ -170,7 +170,7 @@ function TargetCardState({ message, pulse = false }: { message: string; pulse?: 
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-600 text-white">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3"/></svg>
         </span>
-        <div><div className="text-sm font-black text-slate-900">ຍອດຂາຍ vs ເປົ້າ</div><div className="text-[10px] font-semibold text-slate-500">ຜົນງານເດືອນນີ້</div></div>
+        <div><div className="text-sm font-black text-slate-900">ຍອດຂາຍ vs ເປົ້າ</div><div className="text-xs font-semibold text-slate-500">ຜົນງານເດືອນນີ້</div></div>
       </div>
       <div className={`flex min-h-28 items-center justify-center px-4 py-6 text-center text-sm font-bold text-slate-500 ${pulse ? "animate-pulse" : ""}`}>{message}</div>
     </section>
@@ -182,7 +182,7 @@ function Metric({ label, value, tone }: { label: string; value: string; tone?: "
     tone === "good" ? "text-emerald-600" : tone === "warn" ? "text-amber-600" : tone === "bad" ? "text-rose-600" : "text-slate-800";
   return (
     <div className="min-w-0 bg-slate-50 px-2 py-3 text-center sm:px-3">
-      <div className="truncate text-[9px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="truncate text-[11px] font-bold uppercase tracking-wide text-slate-400">{label}</div>
       <div className={`mt-1 truncate font-mono text-sm font-black leading-tight sm:text-base ${valueColor}`}>{value}</div>
     </div>
   );
