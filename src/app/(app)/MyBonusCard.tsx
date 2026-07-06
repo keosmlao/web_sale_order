@@ -20,6 +20,7 @@ type Row = {
   multiplier: number;
   achievementPct: number;
   targetPerPerson: number;
+  position?: string | null;
   commissionLines?: CommissionLine[] | null;
 };
 
@@ -35,11 +36,23 @@ type Tiers = {
   lowMultiplier: number;
   standardMultiplier: number;
   highMultiplier: number;
+  commissionMinPct?: number;
+  commissionRoundStep?: number;
+  commissionPivotPct?: number;
 };
+
+// Fallbacks reproduce the original hard-coded rule when the API predates the
+// configurable commission fields.
+const COMMISSION_MIN_PCT = 0.8;
+const COMMISSION_ROUND_STEP = 0.05;
+
+// One tier of the per-position commission rule (mirrors the server model).
+type CommissionTier = { fromPct: number; mode: "zero" | "round_down" | "round_up" | "exact"; roundStep: number };
+type TiersByPosition = Record<string, CommissionTier[]>;
 
 const pointFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 });
 const pctFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
-type Report = { currencyCode: string; rows: Row[]; tiers?: Tiers; commissionBase?: number };
+type Report = { currencyCode: string; rows: Row[]; tiers?: Tiers; commissionBase?: number; commissionTiersByPosition?: TiersByPosition };
 type Item = { itemName: string; brand: string; category: string; qty: number; points: number; isReturn?: boolean };
 type DailyPoint = { day: string; points: number };
 
@@ -49,6 +62,7 @@ const REFRESH_MS = 45000;
 export default function MyBonusCard() {
   const [row, setRow] = useState<Row | null>(null);
   const [tiers, setTiers] = useState<Tiers | null>(null);
+  const [tiersByPosition, setTiersByPosition] = useState<TiersByPosition>({});
   const [currency, setCurrency] = useState("THB");
   const [commissionBase, setCommissionBase] = useState(0);
   const [open, setOpen] = useState(false);
@@ -101,6 +115,7 @@ export default function MyBonusCard() {
       setCurrency(data.currencyCode || "THB");
       setRow(data.rows?.[0] ?? null);
       setTiers(data.tiers ?? null);
+      setTiersByPosition(data.commissionTiersByPosition ?? {});
       setCommissionBase(data.commissionBase ?? 0);
       try {
         const dRes = await fetch("/api/reports/my-bonus-daily", { cache: "no-store" });
@@ -204,6 +219,57 @@ export default function MyBonusCard() {
   // "rounded up/down to 5%" is obvious. Managers / unit heads get a
   // per-product-group breakdown driven by the TEAM's achievement instead of
   // the single personal formula.
+  // Commission-rate rule for THIS viewer's position (sellers = "13"). Per-position
+  // tiers come from Settings; falls back to the scalar 80% / 5% / 100% rule when
+  // no tiers are configured yet.
+  const myTiers = (row.position && tiersByPosition[row.position]) || [];
+  const hasTiers = myTiers.length > 0;
+  const commRule = {
+    minPct: tiers?.commissionMinPct ?? COMMISSION_MIN_PCT,
+    step: (tiers?.commissionRoundStep ?? COMMISSION_ROUND_STEP) || COMMISSION_ROUND_STEP,
+    pivotPct: tiers?.commissionPivotPct ?? 1,
+  };
+  const minLabel = pctFmt.format(commRule.minPct * 100);
+  const pivotLabel = pctFmt.format(commRule.pivotPct * 100);
+  const stepLabel = pointFmt.format(commRule.step * 100);
+
+  const tierDesc = (t: CommissionTier): { desc: string; tone: "muted" | "indigo" | "emerald" } => {
+    switch (t.mode) {
+      case "zero": return { desc: "ບໍ່ໄດ້ຄ່າຄອມ", tone: "muted" };
+      case "round_up": return { desc: `ປັດຂຶ້ນ ${pointFmt.format(t.roundStep * 100)}%`, tone: "emerald" };
+      case "exact": return { desc: "ໃຊ້ % ຈິງ", tone: "indigo" };
+      default: return { desc: `ປັດລົງ ${pointFmt.format(t.roundStep * 100)}%`, tone: "indigo" };
+    }
+  };
+  const legendRows: { range: string; desc: string; tone: "muted" | "indigo" | "emerald" }[] = hasTiers
+    ? myTiers.map((t, i) => {
+        const next = myTiers[i + 1];
+        const range = next
+          ? `${pctFmt.format(t.fromPct * 100)}% ຫາ ຕ່ຳກວ່າ ${pctFmt.format(next.fromPct * 100)}%`
+          : `${pctFmt.format(t.fromPct * 100)}% ຂຶ້ນໄປ`;
+        return { range, ...tierDesc(t) };
+      })
+    : [
+        { range: `ຕ່ຳກວ່າ ${minLabel}%`, desc: "ບໍ່ໄດ້ຄ່າຄອມ", tone: "muted" },
+        { range: `${minLabel}% ຫາ ຕ່ຳກວ່າ ${pivotLabel}%`, desc: `ປັດລົງ ${stepLabel}%`, tone: "indigo" },
+        { range: `${pivotLabel}% ຂຶ້ນໄປ`, desc: `ປັດຂຶ້ນ ${stepLabel}%`, tone: "emerald" },
+      ];
+
+  // Next achievement % that raises the pay rate (tier boundary or next rounding
+  // step within the active rounding tier). Null when tiers aren't in use.
+  const nextCommissionGoal = (ach: number): number | null => {
+    if (!hasTiers) return null;
+    const cands: number[] = [];
+    for (const t of myTiers) if (t.fromPct > ach + 1e-9) cands.push(t.fromPct);
+    let active: CommissionTier | null = null;
+    for (const t of myTiers) { if (ach >= t.fromPct) active = t; else break; }
+    if (active && (active.mode === "round_up" || active.mode === "round_down")) {
+      const s = active.roundStep > 0 ? active.roundStep : 0.05;
+      cands.push((Math.floor(Math.round((ach / s) * 1e6) / 1e6) + 1) * s);
+    }
+    const goal = cands.filter((c) => c > ach + 1e-9).sort((a, b) => a - b)[0];
+    return goal ?? null;
+  };
   const commissionCalc = (
     <div className="mt-3 rounded-xl border border-indigo-100 bg-indigo-50/40 p-3">
       <div className="text-[13px] font-black text-slate-700">ວິທີຄິດຄ່າຄອມ</div>
@@ -247,9 +313,9 @@ export default function MyBonusCard() {
         </>
       )}
       <div className="mt-2.5 divide-y divide-indigo-100 overflow-hidden rounded-lg border border-indigo-100 bg-white/70 text-xs">
-        <CommissionCondition range="ຕ່ຳກວ່າ 80%" description="ບໍ່ໄດ້ຄ່າຄອມ" tone="muted" />
-        <CommissionCondition range="80–99%" description="ປັດ​ລົງ​ຫາ 5% ໃກ້ຄຽງ (ເຊັ່ນ 87% ໄດ້ເລກ 85%)" tone="indigo" />
-        <CommissionCondition range="100% ຂຶ້ນໄປ" description="ປັດ​ຂຶ້ນ​ຫາ 5% ໃກ້ຄຽງ (ເຊັ່ນ 103% ໄດ້ເລກ 105%)" tone="emerald" />
+        {legendRows.map((r, i) => (
+          <CommissionCondition key={i} range={r.range} description={r.desc} tone={r.tone} />
+        ))}
       </div>
     </div>
   );
@@ -305,13 +371,22 @@ export default function MyBonusCard() {
               label: `ຕົວຄູນ ×${pointFmt.format(tiers.highMultiplier)}`,
             });
           }
-          if (row.achievementPct < 0.8) {
+          if (hasTiers) {
+            const goal = nextCommissionGoal(row.achievementPct);
+            if (goal != null) {
+              gaps.push({
+                amount: goal * target - sales,
+                label: `ຄ່າຄອມຂຶ້ນ (ຮອດ ${pctFmt.format(goal * 100)}%)`,
+              });
+            }
+          } else if (row.achievementPct < commRule.minPct) {
             gaps.push({
-              amount: 0.8 * target - sales,
-              label: "ເລີ່ມໄດ້ຄ່າຄອມ (80%)",
+              amount: commRule.minPct * target - sales,
+              label: `ເລີ່ມໄດ້ຄ່າຄອມ (${minLabel}%)`,
             });
           } else {
-            const nextStep = (Math.floor(row.achievementPct * 20) + 1) / 20;
+            const units = Math.round((row.achievementPct / commRule.step) * 1e6) / 1e6;
+            const nextStep = (Math.floor(units) + 1) * commRule.step;
             gaps.push({
               amount: nextStep * target - sales,
               label: `ຄ່າຄອມຂຶ້ນເປັນ ${pctFmt.format(nextStep * 100)}%`,

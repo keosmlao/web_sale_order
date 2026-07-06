@@ -3,6 +3,7 @@
 import { useState, type ReactNode } from "react";
 import IncentiveConfigClient from "./IncentiveConfigClient";
 import RoleCommissionEditor from "./RoleCommissionEditor";
+import CommissionTierEditor from "./CommissionTierEditor";
 import TargetPivotEditor from "./TargetPivotEditor";
 import RewardsEditor from "./RewardsEditor";
 import UnitRewardsEditor from "./UnitRewardsEditor";
@@ -81,6 +82,7 @@ export default function IncentiveSettingsClient({ canManage }: { canManage: bool
           <div className={tab === "config" ? styles.panelActive : styles.panelHidden}>
             <IncentiveConfigClient canManage={canManage} embedded />
             <RoleCommissionEditor canManage={canManage} />
+            <CommissionTierEditor canManage={canManage} />
           </div>
           <div className={tab === "targets" ? styles.panelActive : styles.panelHidden}><TargetPivotEditor canManage={canManage} /></div>
           <div className={tab === "rewards" ? `${styles.panelActive} ${styles.stack}` : styles.panelHidden}><RewardsEditor canManage={canManage} /><UnitRewardsEditor canManage={canManage} /></div>

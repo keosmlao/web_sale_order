@@ -35,12 +35,50 @@ type ConfigRow = {
   commission_base: string | number;
 };
 
-// Commission pay-rate (workbook "ຄ່າຄອມ ປະຈຳເດືອນ"): 0 below 80% achievement, the
-// achievement rounded DOWN to 5% between 80-100%, and rounded UP to 5% at/above 100%.
-function commissionRateFor(achievementPct: number): number {
-  if (achievementPct < 0.8) return 0;
-  if (achievementPct < 1) return Math.floor(achievementPct * 20) / 20;
-  return Math.ceil(achievementPct * 20) / 20;
+// Commission pay-rate (workbook "ຄ່າຄອມ ປະຈຳເດືອນ"): 0 below the minimum achievement,
+// the achievement rounded DOWN to the step below the pivot, and rounded UP to the step
+// at/above the pivot. Defaults (0.80 / 0.05 / 1.00) reproduce the original hard-coded
+// rule; all three are configurable via app_incentive_config.
+type CommissionRule = { minPct: number; step: number; pivotPct: number };
+const DEFAULT_COMMISSION_RULE: CommissionRule = { minPct: 0.8, step: 0.05, pivotPct: 1 };
+
+function commissionRateFor(achievementPct: number, rule: CommissionRule = DEFAULT_COMMISSION_RULE): number {
+  if (achievementPct < rule.minPct) return 0;
+  const step = rule.step > 0 ? rule.step : 0.05;
+  // Snap tiny binary-float error (e.g. 1/0.05 = 19.999…) before floor/ceil so
+  // exact multiples land on the intended bracket.
+  const units = Math.round((achievementPct / step) * 1e6) / 1e6;
+  return (achievementPct < rule.pivotPct ? Math.floor(units) : Math.ceil(units)) * step;
+}
+
+// Per-position tier model (app_incentive_commission_tier). A tier list is sorted
+// ascending by fromPct; the active tier is the last one whose fromPct ≤ the
+// achievement. Below the lowest tier → 0.
+type CommissionTier = { fromPct: number; mode: "zero" | "round_down" | "round_up" | "exact"; roundStep: number };
+
+function roundToStep(pct: number, step: number, up: boolean): number {
+  const s = step > 0 ? step : 0.05;
+  const units = Math.round((pct / s) * 1e6) / 1e6;
+  return (up ? Math.ceil(units) : Math.floor(units)) * s;
+}
+
+// Resolve a pay rate from a position's tiers; falls back to the scalar rule when
+// that position has no tiers configured (table missing / not yet migrated).
+function rateFromTiers(achievementPct: number, tiers: CommissionTier[] | undefined, fallback: CommissionRule): number {
+  if (!tiers || tiers.length === 0) return commissionRateFor(achievementPct, fallback);
+  let active: CommissionTier | null = null;
+  for (const t of tiers) {
+    if (achievementPct >= t.fromPct) active = t;
+    else break;
+  }
+  if (!active) return 0;
+  switch (active.mode) {
+    case "zero": return 0;
+    case "exact": return achievementPct;
+    case "round_up": return roundToStep(achievementPct, active.roundStep, true);
+    case "round_down": return roundToStep(achievementPct, active.roundStep, false);
+    default: return 0;
+  }
 }
 
 const number = (value: string | number | null | undefined) => Number(value ?? 0) || 0;
@@ -73,12 +111,27 @@ export async function GET(request: NextRequest) {
     : current.month;
 
   try {
-    const [configRows, rewardRows, roleCommRows, roleEmpRows, rows, unitRewardRows] = await Promise.all([
+    const [configRows, ruleRows, tierRows, rewardRows, roleCommRows, roleEmpRows, rows, unitRewardRows] = await Promise.all([
       prisma.$queryRaw<ConfigRow[]>`
         SELECT currency_code, low_max_pct, standard_max_pct,
                low_multiplier, standard_multiplier, high_multiplier, commission_base
         FROM app_incentive_config WHERE id = 1
       `,
+      // Configurable commission-rate rule. Best-effort — columns ship in
+      // sql/add-incentive-commission-rule.sql; falls back to the defaults
+      // (0.80 / 0.05 / 1.00) until the migration is applied.
+      prisma.$queryRaw<Array<{ commission_min_pct: string | number; commission_round_step: string | number; commission_pivot_pct: string | number }>>`
+        SELECT commission_min_pct, commission_round_step, commission_pivot_pct
+        FROM app_incentive_config WHERE id = 1
+      `.catch(() => []),
+      // Per-position commission tiers. Best-effort — ships in
+      // sql/add-incentive-commission-tier.sql; empty array falls back to the
+      // scalar min/step/pivot rule above.
+      prisma.$queryRaw<Array<{ position_code: string; from_pct: string | number; mode: string; round_step: string | number }>>`
+        SELECT position_code, from_pct, mode, round_step
+        FROM app_incentive_commission_tier
+        ORDER BY position_code, from_pct
+      `.catch(() => []),
       prisma.$queryRaw<RewardRow[]>`
         SELECT reward_code, group_code, brand_code, target_amount, reward_amount, split_by_share
         FROM app_incentive_special_reward WHERE is_active
@@ -327,6 +380,27 @@ export async function GET(request: NextRequest) {
     const lowMax = number(config.low_max_pct);
     const standardMax = number(config.standard_max_pct);
     const commissionBase = number(config.commission_base);
+    const ruleRow = ruleRows[0];
+    const commissionRule: CommissionRule = {
+      minPct: ruleRow?.commission_min_pct != null ? number(ruleRow.commission_min_pct) : DEFAULT_COMMISSION_RULE.minPct,
+      step: ruleRow?.commission_round_step != null ? number(ruleRow.commission_round_step) : DEFAULT_COMMISSION_RULE.step,
+      pivotPct: ruleRow?.commission_pivot_pct != null ? number(ruleRow.commission_pivot_pct) : DEFAULT_COMMISSION_RULE.pivotPct,
+    };
+    // Per-position tier lists (sorted ascending by fromPct). Empty → the scalar
+    // commissionRule fallback kicks in inside rateFromTiers.
+    const tiersByPosition = new Map<string, CommissionTier[]>();
+    for (const t of tierRows) {
+      const list = tiersByPosition.get(t.position_code) ?? [];
+      list.push({
+        fromPct: number(t.from_pct),
+        mode: (["zero", "round_down", "round_up", "exact"].includes(t.mode) ? t.mode : "zero") as CommissionTier["mode"],
+        roundStep: number(t.round_step),
+      });
+      tiersByPosition.set(t.position_code, list);
+    }
+    for (const list of tiersByPosition.values()) list.sort((a, b) => a.fromPct - b.fromPct);
+    const rateForPosition = (positionCode: string, achievementPct: number) =>
+      rateFromTiers(achievementPct, tiersByPosition.get(positionCode), commissionRule);
     // Workbook matrix: base per (position, product group). Sellers (pos 13)
     // use the base of THEIR group on personal achievement; the single
     // app_incentive_config.commission_base stays as fallback.
@@ -345,7 +419,8 @@ export async function GET(request: NextRequest) {
           : number(config.high_multiplier);
       const normalBonus = number(row.normal_bonus);
       const netBonus = normalBonus * multiplier;
-      const commissionRate = commissionRateFor(achievementPct);
+      // Sellers are position 13.
+      const commissionRate = rateForPosition("13", achievementPct);
       const sellerBase = roleBase.get(`13|${row.group_code}`) ?? commissionBase;
       const commission = sellerBase * commissionRate;
       return {
@@ -445,7 +520,7 @@ export async function GET(request: NextRequest) {
               | "CE_SDA"
               | "ALL";
             const ach = achByGroup[g];
-            const rate = commissionRateFor(ach);
+            const rate = rateForPosition(boss.position_code, ach);
             return {
               groupCode: l.group_code,
               base: number(l.base_amount),
@@ -472,7 +547,7 @@ export async function GET(request: NextRequest) {
           multiplier: 1,
           netBonus: 0,
           specialReward: 0,
-          commissionRate: commissionRateFor(achByGroup.ALL),
+          commissionRate: rateForPosition(boss.position_code, achByGroup.ALL),
           commission,
           commissionBase: 0,
           totalPay: commission,
@@ -534,7 +609,15 @@ export async function GET(request: NextRequest) {
         lowMultiplier: number(config.low_multiplier),
         standardMultiplier: number(config.standard_multiplier),
         highMultiplier: number(config.high_multiplier),
+        commissionMinPct: commissionRule.minPct,
+        commissionRoundStep: commissionRule.step,
+        commissionPivotPct: commissionRule.pivotPct,
       },
+      // Per-position tier lists so the client can render the exact rule the
+      // viewer is paid under. Empty object → client uses the scalar rule above.
+      commissionTiersByPosition: Object.fromEntries(
+        [...tiersByPosition.entries()].map(([pos, list]) => [pos, list.map((t) => ({ fromPct: t.fromPct, mode: t.mode, roundStep: t.roundStep }))]),
+      ),
       commissionBase,
       rows: visible,
       totalSales: visible.reduce((sum, row) => sum + row.salesAmount, 0),

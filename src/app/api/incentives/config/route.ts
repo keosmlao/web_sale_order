@@ -16,6 +16,15 @@ type ConfigRow = {
   updated_at: Date;
 };
 
+// Configurable commission-rate rule. Read separately (best-effort) so the
+// settings page keeps working before sql/add-incentive-commission-rule.sql runs.
+type RuleRow = {
+  commission_min_pct: string | number;
+  commission_round_step: string | number;
+  commission_pivot_pct: string | number;
+};
+const DEFAULT_RULE = { commissionMinPct: 0.8, commissionRoundStep: 0.05, commissionPivotPct: 1 };
+
 type TargetRow = {
   roworder: number;
   emp_code: string;
@@ -26,7 +35,7 @@ type TargetRow = {
   target: string | number;
 };
 
-function output(config: ConfigRow, targets: TargetRow[]) {
+function output(config: ConfigRow, targets: TargetRow[], rule: RuleRow | undefined) {
   return {
     config: {
       baseAmount: Number(config.base_amount),
@@ -37,6 +46,9 @@ function output(config: ConfigRow, targets: TargetRow[]) {
       standardMultiplier: Number(config.standard_multiplier),
       highMultiplier: Number(config.high_multiplier),
       commissionBase: Number(config.commission_base),
+      commissionMinPct: rule?.commission_min_pct != null ? Number(rule.commission_min_pct) : DEFAULT_RULE.commissionMinPct,
+      commissionRoundStep: rule?.commission_round_step != null ? Number(rule.commission_round_step) : DEFAULT_RULE.commissionRoundStep,
+      commissionPivotPct: rule?.commission_pivot_pct != null ? Number(rule.commission_pivot_pct) : DEFAULT_RULE.commissionPivotPct,
       updatedAt: config.updated_at.toISOString(),
     },
     targets: targets.map((row) => ({
@@ -52,12 +64,16 @@ function output(config: ConfigRow, targets: TargetRow[]) {
 }
 
 async function readConfig() {
-  const [configs, targets] = await Promise.all([
+  const [configs, rules, targets] = await Promise.all([
     prisma.$queryRaw<ConfigRow[]>`
       SELECT base_amount, currency_code, low_max_pct, standard_max_pct,
              low_multiplier, standard_multiplier, high_multiplier, commission_base, updated_at
       FROM app_incentive_config WHERE id = 1
     `,
+    prisma.$queryRaw<RuleRow[]>`
+      SELECT commission_min_pct, commission_round_step, commission_pivot_pct
+      FROM app_incentive_config WHERE id = 1
+    `.catch(() => [] as RuleRow[]),
     prisma.$queryRaw<TargetRow[]>`
       SELECT target.roworder, target.emp_code,
              COALESCE(NULLIF(employee.fullname_lo, ''), NULLIF(employee.nickname, ''), target.emp_code) AS display_name,
@@ -67,7 +83,7 @@ async function readConfig() {
       ORDER BY target.year DESC, target.month DESC, target.product_group, display_name
     `,
   ]);
-  return output(configs[0], targets);
+  return output(configs[0], targets, rules[0]);
 }
 
 export async function GET(request: NextRequest) {
@@ -96,6 +112,9 @@ export async function PUT(request: NextRequest) {
   const standardMultiplier = Number(config.standardMultiplier);
   const highMultiplier = Number(config.highMultiplier);
   const commissionBase = Number(config.commissionBase);
+  const commissionMinPct = Number(config.commissionMinPct);
+  const commissionRoundStep = Number(config.commissionRoundStep);
+  const commissionPivotPct = Number(config.commissionPivotPct);
   const currency = typeof config.currencyCode === "string"
     ? config.currencyCode.trim().toUpperCase().slice(0, 10)
     : "THB";
@@ -104,6 +123,14 @@ export async function PUT(request: NextRequest) {
       base < 0 || lowMax <= 0 || standardMax < lowMax ||
       lowMultiplier < 0 || standardMultiplier < 0 || highMultiplier < 0 || commissionBase < 0 || !currency) {
     return NextResponse.json({ error: "ຄ່າ Config ບໍ່ຖືກຕ້ອງ" }, { status: 400 });
+  }
+
+  // Commission-rate rule: minimum ≥ 0, step in (0, 1], pivot ≥ minimum.
+  if (![commissionMinPct, commissionRoundStep, commissionPivotPct].every(Number.isFinite) ||
+      commissionMinPct < 0 || commissionMinPct > 5 ||
+      commissionRoundStep <= 0 || commissionRoundStep > 1 ||
+      commissionPivotPct < commissionMinPct || commissionPivotPct > 5) {
+    return NextResponse.json({ error: "ຄ່າເກນຄ່າຄອມບໍ່ຖືກຕ້ອງ (ຕ່ຳສຸດ ≥ 0, ຂັ້ນປັດ 0–1, ຈຸດປັດ ≥ ຕ່ຳສຸດ)" }, { status: 400 });
   }
 
   const targets = (body?.targets ?? []).map((row) => ({
@@ -129,7 +156,9 @@ export async function PUT(request: NextRequest) {
         base_amount = ${base}, currency_code = ${currency},
         low_max_pct = ${lowMax}, standard_max_pct = ${standardMax},
         low_multiplier = ${lowMultiplier}, standard_multiplier = ${standardMultiplier},
-        high_multiplier = ${highMultiplier}, commission_base = ${commissionBase}, updated_at = now()
+        high_multiplier = ${highMultiplier}, commission_base = ${commissionBase},
+        commission_min_pct = ${commissionMinPct}, commission_round_step = ${commissionRoundStep},
+        commission_pivot_pct = ${commissionPivotPct}, updated_at = now()
       WHERE id = 1
     `;
     for (const row of targets) {

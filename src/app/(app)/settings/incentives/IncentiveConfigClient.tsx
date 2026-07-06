@@ -11,6 +11,9 @@ type Config = {
   standardMultiplier: number;
   highMultiplier: number;
   commissionBase: number;
+  commissionMinPct: number;
+  commissionRoundStep: number;
+  commissionPivotPct: number;
   updatedAt: string;
 };
 
@@ -139,6 +142,9 @@ export default function IncentiveConfigClient({ canManage, embedded = false }: {
               <Field label="ຕົວຄູນຜົນງານສູງ" value={data.config.highMultiplier} onChange={(v) => configField("highMultiplier", v)} disabled={!canManage} step="0.01" />
             </div>
           </section>
+
+          {/* Commission-rate rule moved to its own per-position tier editor
+              (04 / COMMISSION TIERS) below — add/remove tiers per position. */}
 
           {/* Target editing moved to its own tab (🎯 ເປົ້າຂາຍ) — one pivot
               covering every seller per month, replacing the old per-row

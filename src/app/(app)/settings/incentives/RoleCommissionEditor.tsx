@@ -110,9 +110,8 @@ export default function RoleCommissionEditor({ canManage }: { canManage: boolean
           <p className="mt-1 text-xs text-odoo-text-muted">ເລືອກອັດຕາຕາມຕຳແໜ່ງ ແລະ ປະເພດຍອດຂາຍ</p>
         </div>
         <div className="commission-rules" aria-label="ເກນການຄຳນວນ">
-          <span><b>&lt;80%</b> ບໍ່ໄດ້ຄ່າຄອມ</span>
-          <span><b>80–99%</b> ປັດລົງ 5%</span>
-          <span><b>≥100%</b> ປັດຂຶ້ນ 5%</span>
+          <span>ຖານ × ອັດຕາ (ຕາມ<b>ຂັ້ນຄ່າຄອມ</b>)</span>
+          <span>ອັດຕາປັດ ຕັ້ງຢູ່ <b>04 ຂັ້ນຄ່າຄອມ</b> ຂ້າງລຸ່ມ</span>
         </div>
       </div>
 
