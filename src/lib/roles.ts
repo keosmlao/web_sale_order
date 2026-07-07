@@ -113,3 +113,43 @@ export function canCreateRefillRequests(role: AppRole): boolean {
 export function canMonitorDevices(role: AppRole): boolean {
   return role === "head" || role === "manager";
 }
+
+// Heads and managers run the floor and see everything (team + company-wide
+// reports, management, settings). Everyone else (salesperson / pc) is confined
+// to their own screens — see SELF_SERVE_HREFS / isSelfServePath below.
+export function isPrivilegedRole(role: AppRole): boolean {
+  return role === "head" || role === "manager";
+}
+
+// The only navigation targets a regular salesperson / PC is allowed to SEE and
+// OPEN. Everything else under (app) is company-wide or management and is both
+// hidden from their menu (Sidebar / BottomNav) and blocked at the route level
+// (AppLayout redirects them back to Home). Heads / managers bypass this list.
+//   /                    — personal dashboard (already self-scoped per role)
+//   /orders/new          — POS, create their own bills
+//   /cashier[/history]   — receive money at the register
+//   /profile             — their own profile
+//   /reports/my-sales    — their own sales
+//   /reports/incentives  — their own bonus
+export const SELF_SERVE_HREFS: readonly string[] = [
+  "/",
+  "/orders/new",
+  "/cashier",
+  "/cashier/history",
+  "/profile",
+  "/reports/my-sales",
+  "/reports/incentives",
+] as const;
+
+// Path-level counterpart of SELF_SERVE_HREFS — tolerant of sub-paths
+// (/cashier/receipts/123, /profile/edit, /orders/new/…). Used by AppLayout to
+// gate direct-URL access for non-privileged roles.
+export function isSelfServePath(pathname: string): boolean {
+  if (pathname === "/") return true;
+  if (pathname === "/orders/new" || pathname.startsWith("/orders/new/")) return true;
+  if (pathname === "/cashier" || pathname.startsWith("/cashier/")) return true;
+  if (pathname === "/profile" || pathname.startsWith("/profile/")) return true;
+  if (pathname.startsWith("/reports/my-")) return true;
+  if (pathname === "/reports/incentives") return true;
+  return false;
+}

@@ -9,6 +9,8 @@ import RewardsEditor from "./RewardsEditor";
 import UnitRewardsEditor from "./UnitRewardsEditor";
 import PointMapEditor from "./PointMapEditor";
 import NoBonusItemsEditor from "./NoBonusItemsEditor";
+import CategoryEditor from "./CategoryEditor";
+import PointmapCategoryEditor from "./PointmapCategoryEditor";
 import styles from "./incentives.module.css";
 
 type TabKey = "config" | "targets" | "rewards" | "points";
@@ -36,7 +38,8 @@ function Icon({ name }: { name: IconName }) {
 
 export default function IncentiveSettingsClient({ canManage }: { canManage: boolean }) {
   const [tab, setTab] = useState<TabKey>("config");
-  const [pointsTab, setPointsTab] = useState<"map" | "exclusions">("map");
+  const [pointsTab, setPointsTab] = useState<"map" | "exclusions" | "categories">("map");
+  const [pmVersion, setPmVersion] = useState(0);
   const active = TABS.find((item) => item.key === tab) ?? TABS[0];
 
   return (
@@ -94,9 +97,16 @@ export default function IncentiveSettingsClient({ canManage }: { canManage: bool
               <button type="button" role="tab" aria-selected={pointsTab === "exclusions"} onClick={() => setPointsTab("exclusions")} className={pointsTab === "exclusions" ? styles.subTabActive : styles.subTab}>
                 <Icon name="ban" /> ສິນຄ້າຍົກເວັ້ນຄະແນນ (ບໍ່ນັບໂບນັດ)
               </button>
+              <button type="button" role="tab" aria-selected={pointsTab === "categories"} onClick={() => setPointsTab("categories")} className={pointsTab === "categories" ? styles.subTabActive : styles.subTab}>
+                <Icon name="sliders" /> ໝວດສິນຄ້າ (Category Map)
+              </button>
             </div>
             <div className={pointsTab === "map" ? "" : "hidden"}><PointMapEditor canManage={canManage} /></div>
             <div className={pointsTab === "exclusions" ? "" : "hidden"}><NoBonusItemsEditor canManage={canManage} /></div>
+            <div className={pointsTab === "categories" ? `${styles.stack}` : "hidden"}>
+              <PointmapCategoryEditor canManage={canManage} onChange={() => setPmVersion((v) => v + 1)} />
+              <CategoryEditor canManage={canManage} pointmapVersion={pmVersion} />
+            </div>
           </div>
         </div>
       </section>

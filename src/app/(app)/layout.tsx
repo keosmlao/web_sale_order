@@ -1,7 +1,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireEmployee } from "@/lib/auth";
-import { roleFromEmployee } from "@/lib/roles";
+import { roleFromEmployee, isPrivilegedRole, isSelfServePath } from "@/lib/roles";
 import { getHiddenMenuKeys } from "@/lib/menu-visibility";
 import Sidebar from "@/components/Sidebar";
 import BottomNav from "@/components/BottomNav";
@@ -35,6 +35,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     pathname === "/reports/incentives";
   if (posOnly && pathname && !posAllowed) {
     redirect("/orders/new");
+  }
+  // Regular salespeople (position-derived, not the POS-locked cashier users
+  // handled above) keep the normal layout + Home dashboard, but may only reach
+  // their own screens — the sidebar hides management links and this guard
+  // blocks anyone who types a restricted URL directly. Heads / managers see
+  // everything. As with posOnly, skip the redirect when x-pathname is empty
+  // (proxy didn't run) so we never loop the page into a blank render.
+  const privileged = isPrivilegedRole(role);
+  if (!privileged && !posOnly && pathname && !isSelfServePath(pathname)) {
+    redirect("/");
   }
   const displayName = employee.fullnameLo || employee.fullnameEn || employee.employeeCode || "—";
   const subtitle = employee.nickname && employee.nickname !== "0" ? employee.nickname : undefined;
@@ -91,7 +101,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         />
       </div>
       <main className="min-w-0 flex-1 pb-20 md:h-screen md:overflow-y-auto md:pb-0">{children}</main>
-      <BottomNav />
+      <BottomNav role={role} />
       <OrderNotifier selfEmployeeCode={employee.employeeCode ?? null} />
     </div>
   );

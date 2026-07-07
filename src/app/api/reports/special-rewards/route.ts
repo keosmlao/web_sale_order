@@ -223,6 +223,11 @@ export async function GET(request: NextRequest) {
         .map((row) => ({ code: row.emp_code!, name: row.emp_name ?? row.emp_code!, amount: number(row.amount) }));
       const current = members.reduce((sum, m) => sum + m.amount, 0);
       const mine = members.find((m) => m.code === myCode)?.amount ?? 0;
+      // Whether the caller belongs to this reward's target roster — i.e. they
+      // received the matching monthly target (AC target → AIR rewards like
+      // MITSUBISHI; CE/FZ target → CE_SDA rewards). Non-privileged staff only
+      // see rewards they're eligible for; managers / heads see them all.
+      const mineEligible = members.some((m) => m.code === myCode);
       // A member's slice of the department total — for split_by_share rewards
       // this is exactly the share of the pot they would be paid.
       const shareOf = (amount: number) => (current > 0 ? amount / current : 0);
@@ -235,6 +240,7 @@ export async function GET(request: NextRequest) {
         splitByShare: meta.split_by_share,
         current,
         mine,
+        mineEligible,
         myShare: shareOf(mine),
         myReward: meta.split_by_share ? reward * shareOf(mine) : reward,
         people: members.length,
@@ -295,12 +301,26 @@ export async function GET(request: NextRequest) {
         mine: mine?.units ?? 0,
         myTier: mine?.tier ?? "none",
         myReward: mine?.pay ?? 0,
+        // Caller is on this reward's target roster (received the AC / CE·FZ
+        // target). Non-privileged staff only see rewards they're eligible for.
+        mineEligible: mine !== undefined,
         // Full per-person breakdown — managers / unit heads only.
         breakdown: seesEveryone ? members : undefined,
       };
     });
 
-    return NextResponse.json({ year, month, rewards, unitRewards });
+    // Managers / heads see every announced program; a regular salesperson only
+    // sees rewards for the target group they were assigned this month — so an
+    // AC-brand spiff (MITSUBISHI) no longer shows to staff without an AC target.
+    const visibleForCaller = <T extends { mineEligible: boolean }>(list: T[]) =>
+      seesEveryone ? list : list.filter((r) => r.mineEligible);
+
+    return NextResponse.json({
+      year,
+      month,
+      rewards: visibleForCaller(rewards),
+      unitRewards: visibleForCaller(unitRewards),
+    });
   } catch (error) {
     console.error("GET /api/reports/special-rewards failed", error);
     // Table not installed — the home card simply hides.

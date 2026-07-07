@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import MobileReloadButton from "@/components/MobileReloadButton";
+import { type AppRole, isPrivilegedRole } from "@/lib/roles";
 
 type Tab = { href: string; label: string; icon: ReactNode; match: (p: string) => boolean };
 
@@ -11,18 +12,24 @@ const icon = (path: ReactNode) => (
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" className="h-6 w-6">{path}</svg>
 );
 
-const TABS: Tab[] = [
-  { href: "/", label: "ໜ້າຫຼັກ", match: (p) => p === "/", icon: icon(<><path d="M3 9.5 12 3l9 6.5" /><path d="M5 10v10h14V10" /></>) },
-  { href: "/orders/new", label: "ຂາຍ", match: (p) => p.startsWith("/orders"), icon: icon(<><circle cx="9" cy="20" r="1.5" /><circle cx="18" cy="20" r="1.5" /><path d="M2 3h3l2.4 12.3a1 1 0 0 0 1 .7h9.2a1 1 0 0 0 1-.8L21 7H6" /></>) },
-  { href: "/inventory", label: "ສະຕັອກ", match: (p) => p.startsWith("/inventory"), icon: icon(<><path d="m21 8-9-5-9 5 9 5 9-5Z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></>) },
-  { href: "/profile", label: "ໂປຣໄຟລ໌", match: (p) => p.startsWith("/profile"), icon: icon(<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>) },
-];
+const HOME_TAB: Tab = { href: "/", label: "ໜ້າຫຼັກ", match: (p) => p === "/", icon: icon(<><path d="M3 9.5 12 3l9 6.5" /><path d="M5 10v10h14V10" /></>) };
+const SELL_TAB: Tab = { href: "/orders/new", label: "ຂາຍ", match: (p) => p.startsWith("/orders"), icon: icon(<><circle cx="9" cy="20" r="1.5" /><circle cx="18" cy="20" r="1.5" /><path d="M2 3h3l2.4 12.3a1 1 0 0 0 1 .7h9.2a1 1 0 0 0 1-.8L21 7H6" /></>) };
+// Stock lookup is management-only; regular staff get the register tab instead.
+const INVENTORY_TAB: Tab = { href: "/inventory", label: "ສະຕັອກ", match: (p) => p.startsWith("/inventory"), icon: icon(<><path d="m21 8-9-5-9 5 9 5 9-5Z" /><path d="M3 8v8l9 5 9-5V8" /><path d="M12 13v8" /></>) };
+const CASHIER_TAB: Tab = { href: "/cashier", label: "ຮັບເງິນ", match: (p) => p.startsWith("/cashier"), icon: icon(<><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path d="M6 10v.01M18 14v.01" /></>) };
+const PROFILE_TAB: Tab = { href: "/profile", label: "ໂປຣໄຟລ໌", match: (p) => p.startsWith("/profile"), icon: icon(<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>) };
 
-export default function BottomNav() {
+export default function BottomNav({ role }: { role: AppRole }) {
   const pathname = usePathname() ?? "/";
+  const tabs: Tab[] = [
+    HOME_TAB,
+    SELL_TAB,
+    isPrivilegedRole(role) ? INVENTORY_TAB : CASHIER_TAB,
+    PROFILE_TAB,
+  ];
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-odoo-border bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_10px_rgba(0,0,0,0.06)] md:hidden">
-      {TABS.map((t) => {
+      {tabs.map((t) => {
         const active = t.match(pathname);
         return (
           <Link

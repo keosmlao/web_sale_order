@@ -1,8 +1,13 @@
+import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
+
+// Only AIR / CE_SDA rosters exist (product_group AC -> AIR, CE/FZ -> CE_SDA);
+// a reward on any other group would match nobody.
+const REWARD_GROUPS: readonly string[] = ["AIR", "CE_SDA"];
 
 // Unit-count spiff settings (workbook ④ brand / ⑤ pushed model) —
 // app_incentive_unit_reward, sql/add-incentive-unit-reward.sql.
@@ -103,5 +108,60 @@ export async function PUT(request: NextRequest) {
   if (updated === 0) {
     return NextResponse.json({ error: "ບໍ່ພົບ reward" }, { status: 404 });
   }
+  return NextResponse.json(await listRewards());
+}
+
+// Create a new unit-count spiff. reward_code auto-generated; needs a brand OR a
+// pushed model, and a group in AIR / CE_SDA.
+export async function POST(request: NextRequest) {
+  const employee = await getEmployeeFromRequest(request);
+  if (!canManage(employee)) {
+    return NextResponse.json({ error: "ບໍ່ມີສິດແກ້ເງິນພິເສດ" }, { status: 403 });
+  }
+  const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
+  const description = String(body?.description ?? "").trim();
+  const groupCode = String(body?.groupCode ?? "").trim().toUpperCase();
+  const brandCode = String(body?.brandCode ?? "").trim().toUpperCase() || null;
+  const itemMatch = String(body?.itemMatch ?? "").trim() || null;
+  const lowMinQty = Number(body?.lowMinQty);
+  const lowReward = Number(body?.lowReward);
+  const highMinQty = Number(body?.highMinQty);
+  const highReward = Number(body?.highReward);
+  const isActive = body?.isActive === undefined ? true : Boolean(body?.isActive);
+  const validNum = (n: number) => Number.isFinite(n) && n >= 0;
+  if (
+    !description ||
+    !REWARD_GROUPS.includes(groupCode) ||
+    !validNum(lowMinQty) || !validNum(lowReward) ||
+    !validNum(highMinQty) || !validNum(highReward) ||
+    (!brandCode && !itemMatch)
+  ) {
+    return NextResponse.json(
+      { error: "ຂໍ້ມູນບໍ່ຖືກຕ້ອງ — ຕ້ອງມີຄຳອະທິບາຍ, group ແລະ ແບຮນດ໌ ຫຼື ຮຸ່ນ" },
+      { status: 400 },
+    );
+  }
+  const rewardCode = `UNR_${randomUUID().slice(0, 8).toUpperCase()}`;
+  await prisma.$executeRaw`
+    INSERT INTO app_incentive_unit_reward
+      (reward_code, description, group_code, brand_code, item_match,
+       low_min_qty, low_reward, high_min_qty, high_reward, is_active)
+    VALUES (${rewardCode}, ${description}, ${groupCode}, ${brandCode}, ${itemMatch},
+            ${lowMinQty}, ${lowReward}, ${highMinQty}, ${highReward}, ${isActive})
+  `;
+  return NextResponse.json(await listRewards());
+}
+
+export async function DELETE(request: NextRequest) {
+  const employee = await getEmployeeFromRequest(request);
+  if (!canManage(employee)) {
+    return NextResponse.json({ error: "ບໍ່ມີສິດແກ້ເງິນພິເສດ" }, { status: 403 });
+  }
+  const code = new URL(request.url).searchParams.get("code")?.trim();
+  if (!code) return NextResponse.json({ error: "ບໍ່ໄດ້ລະບຸ reward" }, { status: 400 });
+  const removed = await prisma.$executeRaw`
+    DELETE FROM app_incentive_unit_reward WHERE reward_code = ${code}
+  `;
+  if (removed === 0) return NextResponse.json({ error: "ບໍ່ພົບ reward" }, { status: 404 });
   return NextResponse.json(await listRewards());
 }

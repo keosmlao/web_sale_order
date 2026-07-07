@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import BrandSelect from "./BrandSelect";
 
 type Reward = {
   rewardCode: string;
@@ -15,11 +16,22 @@ type Reward = {
 
 const numberFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 
+const emptyDraft = {
+  description: "",
+  groupCode: "AIR",
+  brandCode: "",
+  targetAmount: "",
+  rewardAmount: "",
+  splitByShare: false,
+};
+
 export default function RewardsEditor({ canManage }: { canManage: boolean }) {
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [draft, setDraft] = useState(emptyDraft);
+  const [brandData, setBrandData] = useState<{ air: string[]; other: string[] }>({ air: [], other: [] });
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -39,6 +51,14 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    fetch("/api/incentives/brands", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : { air: [], other: [] }))
+      .then((body: { air?: string[]; other?: string[] }) =>
+        setBrandData({ air: body.air ?? [], other: body.other ?? [] }))
+      .catch(() => setBrandData({ air: [], other: [] }));
+  }, []);
 
   const patch = (code: string, changes: Partial<Reward>) =>
     setRewards((prev) => prev.map((r) => (r.rewardCode === code ? { ...r, ...changes } : r)));
@@ -62,6 +82,51 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
       setRewards(body.rewards);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Save failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function create() {
+    setBusy("__new__");
+    setError(null);
+    try {
+      const res = await fetch("/api/incentives/rewards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: draft.description,
+          groupCode: draft.groupCode,
+          brandCode: draft.brandCode,
+          targetAmount: Number(draft.targetAmount) || 0,
+          rewardAmount: Number(draft.rewardAmount) || 0,
+          splitByShare: draft.splitByShare,
+        }),
+      });
+      const body = (await res.json()) as { rewards: Reward[]; error?: string };
+      if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
+      setRewards(body.rewards);
+      setDraft(emptyDraft);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Create failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function remove(code: string) {
+    if (!window.confirm("ລຶບໂຄງການລາງວັນນີ້?")) return;
+    setBusy(code);
+    setError(null);
+    try {
+      const res = await fetch(`/api/incentives/rewards?code=${encodeURIComponent(code)}`, {
+        method: "DELETE",
+      });
+      const body = (await res.json()) as { rewards: Reward[]; error?: string };
+      if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
+      setRewards(body.rewards);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Delete failed");
     } finally {
       setBusy(null);
     }
@@ -132,9 +197,14 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
                 </td>
                 {canManage ? (
                   <td className="px-3 py-2 text-right">
-                    <button type="button" disabled={busy === reward.rewardCode}
-                      onClick={() => void save(reward)}
-                      className="odoo-btn odoo-btn-primary disabled:opacity-40">ບັນທຶກ</button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button type="button" disabled={busy === reward.rewardCode}
+                        onClick={() => void save(reward)}
+                        className="odoo-btn odoo-btn-primary disabled:opacity-40">ບັນທຶກ</button>
+                      <button type="button" disabled={busy === reward.rewardCode}
+                        onClick={() => void remove(reward.rewardCode)}
+                        className="odoo-btn text-rose-600 disabled:opacity-40">ລຶບ</button>
+                    </div>
                   </td>
                 ) : null}
               </tr>
@@ -142,6 +212,42 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
           </tbody>
         </table>
       </div>
+      {canManage ? (
+        <div className="mt-3 rounded-lg border border-odoo-border bg-odoo-surface-muted p-3">
+          <div className="mb-2 text-xs font-black uppercase tracking-wide text-odoo-text-strong">
+            ເພີ່ມໂຄງການໃໝ່
+          </div>
+          <div className="flex flex-wrap items-end gap-2">
+            <input placeholder="ຄຳອະທິບາຍ" value={draft.description}
+              onChange={(e) => setDraft({ ...draft, description: e.target.value })}
+              className="odoo-input min-w-[160px] flex-1" />
+            <select value={draft.groupCode}
+              onChange={(e) => setDraft({ ...draft, groupCode: e.target.value })}
+              className="odoo-input w-32">
+              <option value="AIR">AIR (ແອ)</option>
+              <option value="CE_SDA">CE_SDA</option>
+            </select>
+            <BrandSelect value={draft.brandCode} placeholder="ແບຮນດ໌ (ທາງເລືອກ)"
+              options={draft.groupCode === "AIR" ? brandData.air : brandData.other}
+              onChange={(v) => setDraft({ ...draft, brandCode: v })} wrapClassName="w-32" />
+            <input type="number" min="0" step="1000" placeholder="ເປົ້າ ฿" value={draft.targetAmount}
+              onChange={(e) => setDraft({ ...draft, targetAmount: e.target.value })}
+              className="odoo-input w-28 text-right" />
+            <input type="number" min="0" step="100" placeholder="ລາງວັນ ฿" value={draft.rewardAmount}
+              onChange={(e) => setDraft({ ...draft, rewardAmount: e.target.value })}
+              className="odoo-input w-28 text-right" />
+            <label className="flex items-center gap-1 text-xs font-semibold text-odoo-text-muted">
+              <input type="checkbox" checked={draft.splitByShare}
+                onChange={(e) => setDraft({ ...draft, splitByShare: e.target.checked })}
+                className="h-4 w-4 accent-odoo-primary" />
+              ແບ່ງຕາມ %
+            </label>
+            <button type="button" disabled={busy === "__new__" || !draft.description.trim()}
+              onClick={() => void create()}
+              className="odoo-btn odoo-btn-primary disabled:opacity-40">ເພີ່ມ</button>
+          </div>
+        </div>
+      ) : null}
       <p className="mt-2 text-xs text-odoo-text-muted">
         ⚠️ ສູດການແບ່ງລາງວັນຍັງບໍ່ໄດ້ຢືນຢັນກັບ Excel — ເປີດໃຊ້ເມື່ອຢືນຢັນເງື່ອນໄຂແລ້ວ.
       </p>

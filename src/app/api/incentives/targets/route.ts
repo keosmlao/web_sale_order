@@ -5,10 +5,13 @@ import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
 
 // Monthly sales-target pivot (odg_retail_target_employee): every ACTIVE
-// front-store SELLER (position 13 — bonuses/targets apply to sellers only)
+// storefront SELLER (position 13 — bonuses/targets apply to sellers only)
 // gets an editable CE / AC target per month.
-
-const SELLER_DEPTS = ["204", "205", "207"];
+//
+// Scoped to the Khua Luang storefront only (205 · ພະແນກຂາຍໜ້າຮ້ານຂົວຫຼວງ).
+// Excluded: 204 (ຂາຍສົ່ງອາໄຫຼ່ — parts) and 207 (ອອນລາຍ — online) don't carry
+// these CE/AC storefront targets.
+const SELLER_DEPTS = ["205"];
 const GROUPS = ["CE", "AC"] as const;
 
 function parsePeriod(url: URL): { year: number; month: number } | null {

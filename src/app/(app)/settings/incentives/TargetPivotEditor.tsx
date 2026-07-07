@@ -18,6 +18,9 @@ export default function TargetPivotEditor({ canManage }: { canManage: boolean })
   const [employees, setEmployees] = useState<Emp[]>([]);
   // "code|GROUP" → input string
   const [values, setValues] = useState<Record<string, string>>({});
+  // Per-employee product line: which group(s) this seller carries a target for.
+  // Derived from existing targets on load; the manager can override it.
+  const [sells, setSells] = useState<Record<string, "AC" | "CE" | "BOTH">>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
@@ -35,9 +38,17 @@ export default function TargetPivotEditor({ canManage }: { canManage: boolean })
         if (t.target > 0) next[`${t.employeeCode}|${t.groupCode}`] = String(t.target);
       }
       setValues(next);
+      const nextSells: Record<string, "AC" | "CE" | "BOTH"> = {};
+      for (const e of data.employees ?? []) {
+        const ac = Number(next[`${e.code}|AC`] || 0) > 0;
+        const ce = Number(next[`${e.code}|CE`] || 0) > 0;
+        nextSells[e.code] = ac && ce ? "BOTH" : ac ? "AC" : ce ? "CE" : "BOTH";
+      }
+      setSells(nextSells);
     } catch {
       setEmployees([]);
       setValues({});
+      setSells({});
       setNotice({ ok: false, text: "ໂຫລດຂໍ້ມູນບໍ່ສຳເລັດ" });
     } finally {
       setLoading(false);
@@ -47,6 +58,18 @@ export default function TargetPivotEditor({ canManage }: { canManage: boolean })
   useEffect(() => {
     void load(year, month);
   }, [load, year, month]);
+
+  // Switching a seller's product line clears the target for the group they no
+  // longer sell, so saving removes that group's row (and its roster/reward slot).
+  function changeSells(code: string, val: "AC" | "CE" | "BOTH") {
+    setSells((s) => ({ ...s, [code]: val }));
+    setValues((v) => {
+      const nv = { ...v };
+      if (val === "AC") nv[`${code}|CE`] = "";
+      if (val === "CE") nv[`${code}|AC`] = "";
+      return nv;
+    });
+  }
 
   async function save() {
     setSaving(true);
@@ -132,7 +155,7 @@ export default function TargetPivotEditor({ canManage }: { canManage: boolean })
             <table className="target-table w-full min-w-[680px] text-sm">
               <thead>
                 <tr className="text-[10px] font-bold uppercase tracking-wide text-odoo-text-muted">
-                  <th>ພະນັກງານ</th><th>ເປົ້າ CE</th><th>ເປົ້າ AC (ແອ)</th><th>ລວມ</th>
+                  <th>ພະນັກງານ</th><th>ຂາຍ</th><th>ເປົ້າ CE</th><th>ເປົ້າ AC (ແອ)</th><th>ລວມ</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-odoo-border">
@@ -147,15 +170,34 @@ export default function TargetPivotEditor({ canManage }: { canManage: boolean })
                           <div><strong>{e.name}</strong><small>{e.code} · ພະແນກ {e.dept}</small></div>
                         </div>
                       </td>
-                      {(["CE", "AC"] as const).map((g) => (
-                        <td key={g}>
-                          <label className="target-cell-input">
-                            <input type="number" min={0} placeholder="0" value={values[`${e.code}|${g}`] ?? ""} disabled={!canManage}
-                              onChange={(ev) => setValues((v) => ({ ...v, [`${e.code}|${g}`]: ev.target.value }))} />
-                            <span>฿</span>
-                          </label>
-                        </td>
-                      ))}
+                      <td>
+                        <select
+                          value={sells[e.code] ?? "BOTH"}
+                          disabled={!canManage}
+                          onChange={(ev) => changeSells(e.code, ev.target.value as "AC" | "CE" | "BOTH")}
+                          className="rounded border border-odoo-border px-1.5 py-1 text-xs font-bold"
+                          aria-label={`ສິນຄ້າທີ່ ${e.name} ຂາຍ`}
+                        >
+                          <option value="CE">CE</option>
+                          <option value="AC">AC (ແອ)</option>
+                          <option value="BOTH">ທັງສອງ</option>
+                        </select>
+                      </td>
+                      {(["CE", "AC"] as const).map((g) => {
+                        const line = sells[e.code] ?? "BOTH";
+                        const off = (line === "AC" && g === "CE") || (line === "CE" && g === "AC");
+                        return (
+                          <td key={g}>
+                            <label className={`target-cell-input ${off ? "opacity-40" : ""}`}>
+                              <input type="number" min={0} placeholder={off ? "—" : "0"}
+                                value={off ? "" : values[`${e.code}|${g}`] ?? ""}
+                                disabled={!canManage || off}
+                                onChange={(ev) => setValues((v) => ({ ...v, [`${e.code}|${g}`]: ev.target.value }))} />
+                              <span>฿</span>
+                            </label>
+                          </td>
+                        );
+                      })}
                       <td className="target-total">
                         {ce + ac > 0 ? <><strong>{fmt.format(ce + ac)}</strong><span>฿</span></> : <span>—</span>}
                       </td>
@@ -166,6 +208,7 @@ export default function TargetPivotEditor({ canManage }: { canManage: boolean })
               <tfoot>
                 <tr>
                   <td>ລວມທັງໝົດ <small>{employees.length} ຄົນ</small></td>
+                  <td />
                   <td>{fmt.format(totals.ce)} ฿</td><td>{fmt.format(totals.ac)} ฿</td><td>{fmt.format(totals.all)} ฿</td>
                 </tr>
               </tfoot>

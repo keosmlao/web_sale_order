@@ -606,7 +606,6 @@ export default async function HomePage() {
     { label: "ອາທິດ", rnk: Number(myRank?.week_rnk ?? 0), amount: Number(myRank?.week_sales ?? 0) },
     { label: "ເດືອນ", rnk: Number(myRank?.month_rnk ?? 0), amount: Number(myRank?.month_sales ?? 0) },
   ];
-  const catMax = Math.max(1, ...categoryRows.map((c) => Number(c.amount ?? 0)));
   const refillPendingCount = Number(refillPendingRows[0]?.count ?? 0);
   // Month direction: this month-to-date vs the same day-span of last month.
   const monthCompare = monthCompareRows[0];
@@ -1006,23 +1005,7 @@ export default async function HomePage() {
           {categoryRows.length === 0 ? (
             <EmptyHint>ຍັງບໍ່ມີຍອດຂາຍ</EmptyHint>
           ) : (
-            <ul className="space-y-2.5">
-              {categoryRows.map((c, i) => {
-                const amt = Number(c.amount ?? 0);
-                const pct = catMax > 0 ? (amt / catMax) * 100 : 0;
-                return (
-                  <li key={i}>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="min-w-0 truncate font-semibold text-slate-700">{c.category}</span>
-                      <span className="shrink-0 font-mono font-bold text-slate-800">{compactMoneyFmt.format(amt)}</span>
-                    </div>
-                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-indigo-500" style={{ width: `${Math.max(3, pct)}%` }} />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+            <CategoryDonut rows={categoryRows} />
           )}
         </Panel>
 
@@ -1154,12 +1137,16 @@ export default async function HomePage() {
                   icon={<CashIcon />}
                   accent="warning"
                 />
-                <LauncherButton
-                  href="/employees"
-                  label="ຈັດການທີມ"
-                  icon={<UsersIcon />}
-                  accent="success"
-                />
+                {/* Team management is heads/managers only — salespeople get a
+                    dead link (the route redirects them home), so hide it. */}
+                {isManagerOrHead ? (
+                  <LauncherButton
+                    href="/employees"
+                    label="ຈັດການທີມ"
+                    icon={<UsersIcon />}
+                    accent="success"
+                  />
+                ) : null}
               </div>
             </Panel>
           </div>
@@ -1577,6 +1564,111 @@ function getAreaBezierPath(
   const linePath = getBezierPath(points);
   if (!linePath) return "";
   return `${linePath} L ${points[points.length - 1].x.toFixed(1)} ${height - padY} L ${points[0].x.toFixed(1)} ${height - padY} Z`;
+}
+
+// Fixed-order, CVD-validated categorical hues (dataviz reference palette,
+// light surface — worst adjacent ΔE 24.2). Identity always also carries a text
+// label in the legend below, so colour never stands alone (aqua/yellow are
+// sub-3:1 on white).
+const CATEGORY_COLORS: string[] = [
+  "#2a78d6", // blue
+  "#1baf7a", // aqua
+  "#eda100", // yellow
+  "#008300", // green
+  "#4a3aa7", // violet
+  "#e34948", // red
+];
+const OTHER_COLOR = "#898781";
+
+// Donut of month-to-date sales by product category. Top 6 categories get a hue;
+// the rest fold into "ອື່ນໆ" (past ~7 slices the hues stop being tellable apart
+// under CVD). Server-rendered SVG with a native <title> tooltip per slice.
+function CategoryDonut({ rows }: { rows: CategoryRow[] }) {
+  const sorted = rows
+    .map((r) => ({ name: r.category?.trim() || "ອື່ນໆ", amount: Number(r.amount ?? 0) }))
+    .filter((r) => r.amount > 0)
+    .sort((a, b) => b.amount - a.amount);
+  if (sorted.length === 0) return <EmptyHint>ຍັງບໍ່ມີຍອດຂາຍ</EmptyHint>;
+
+  const TOP = 6;
+  const slices = sorted
+    .slice(0, TOP)
+    .map((s, i) => ({ ...s, color: CATEGORY_COLORS[i] }));
+  const tail = sorted.slice(TOP);
+  if (tail.length > 0) {
+    slices.push({
+      name: "ອື່ນໆ",
+      amount: tail.reduce((sum, t) => sum + t.amount, 0),
+      color: OTHER_COLOR,
+    });
+  }
+  const total = slices.reduce((sum, s) => sum + s.amount, 0);
+
+  // Each slice is one dash arc on a stroked circle, rotated so slice 1 starts
+  // at 12 o'clock; a 3px gap between arcs is the required surface spacer.
+  const size = 200;
+  const cx = size / 2;
+  const cy = size / 2;
+  const radius = 70;
+  const thickness = 26;
+  const circumference = 2 * Math.PI * radius;
+  const gap = 3;
+  let cursor = 0;
+  const arcs = slices.map((s) => {
+    const frac = total > 0 ? s.amount / total : 0;
+    const dash = Math.max(0, frac * circumference - gap);
+    const arc = { ...s, frac, dash, offset: -cursor };
+    cursor += frac * circumference;
+    return arc;
+  });
+
+  return (
+    <div className="flex flex-col items-center gap-4">
+      <svg
+        viewBox={`0 0 ${size} ${size}`}
+        className="h-44 w-44"
+        role="img"
+        aria-label="ຍອດຂາຍຕາມໝວດ"
+      >
+        <g transform={`rotate(-90 ${cx} ${cy})`}>
+          {arcs.map((a) => (
+            <circle
+              key={a.name}
+              cx={cx}
+              cy={cy}
+              r={radius}
+              fill="none"
+              stroke={a.color}
+              strokeWidth={thickness}
+              strokeDasharray={`${a.dash} ${circumference - a.dash}`}
+              strokeDashoffset={a.offset}
+            >
+              <title>{`${a.name} · ${moneyFmt.format(a.amount)} ບາດ · ${(a.frac * 100).toFixed(1)}%`}</title>
+            </circle>
+          ))}
+        </g>
+        <text x={cx} y={cy - 5} textAnchor="middle" fontSize="12" fontWeight="700" fill="#94a3b8">
+          ລວມ
+        </text>
+        <text x={cx} y={cy + 16} textAnchor="middle" fontSize="20" fontWeight="800" fill="#0f172a">
+          {compactMoneyFmt.format(total)}
+        </text>
+      </svg>
+
+      <ul className="w-full space-y-1.5">
+        {arcs.map((a) => (
+          <li key={a.name} className="flex items-center gap-2 text-sm">
+            <span className="h-2.5 w-2.5 shrink-0 rounded-sm" style={{ backgroundColor: a.color }} />
+            <span className="min-w-0 flex-1 truncate font-semibold text-slate-700">{a.name}</span>
+            <span className="shrink-0 font-mono font-bold text-slate-800">{compactMoneyFmt.format(a.amount)}</span>
+            <span className="w-10 shrink-0 text-right font-mono text-xs font-bold text-slate-400">
+              {(a.frac * 100).toFixed(0)}%
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
 }
 
 function AreaChart({

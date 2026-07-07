@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { logoutAction } from "@/app/login/actions";
-import type { AppRole } from "@/lib/roles";
+import { type AppRole, isPrivilegedRole, SELF_SERVE_HREFS } from "@/lib/roles";
 
 type NavLeaf = {
   href: string;
@@ -409,8 +409,15 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
   // the menu-visibility settings, then drop any section left empty.
   const hiddenSet = useMemo(() => new Set(hiddenMenuKeys ?? []), [hiddenMenuKeys]);
   const visibleSections = useMemo(() => {
+    // Regular salespeople / PC only get their own screens; heads & managers
+    // keep the full menu. Everything outside SELF_SERVE_HREFS is management /
+    // company-wide and is hidden for non-privileged roles (and blocked at the
+    // route level by AppLayout).
+    const privileged = isPrivilegedRole(role);
     const allowed = (leaf: NavLeaf) =>
-      (!leaf.roles || leaf.roles.includes(role)) && !hiddenSet.has(leaf.href);
+      (!leaf.roles || leaf.roles.includes(role)) &&
+      !hiddenSet.has(leaf.href) &&
+      (privileged || SELF_SERVE_HREFS.includes(leaf.href));
     return sections
       .map((s) => ({
         ...s,
