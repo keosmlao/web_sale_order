@@ -147,7 +147,7 @@ export async function GET(request: NextRequest) {
         SELECT employee_code, fullname_lo, nickname, position_code
         FROM odg_employee
         WHERE position_code IN ('11', '12')
-          AND department_code IN ('204', '205', '207')
+          AND department_code = '205'
           AND COALESCE(employment_status, 'ACTIVE') = 'ACTIVE'
       `.catch(() => []),
       prisma.$queryRaw<IncentiveRow[]>`
@@ -208,6 +208,11 @@ export async function GET(request: NextRequest) {
               AND sd.doc_date >= make_date(${year}, ${month}, 1)
               AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
               AND COALESCE(cat.is_active, true)
+              -- Service/fee lines (item_code 97xxxx = ຄ່າບໍລິການ: installation, repair,
+              -- delivery, penalties) are NOT product sales, so they must not inflate a
+              -- seller's ຍອດຂາຍ or achievement — e.g. AC installation added to an AIR
+              -- seller's total. Excluded here so sales, qty, and achievement all drop them.
+              AND sd.item_code NOT LIKE '97%'
           ) s
           LEFT JOIN app_incentive_design_token dtok ON dtok.design_name = s.design_name
           LEFT JOIN app_incentive_size_token stok ON stok.size_name = s.size_name
@@ -287,6 +292,9 @@ export async function GET(request: NextRequest) {
             WHERE year = ${year.toString()}
               AND LPAD(month, 2, '0') = LPAD(${month.toString()}, 2, '0')
           ) t
+          -- Storefront only: individual retail targets belong to department 205.
+          JOIN odg_employee re ON re.employee_code = t.emp_code
+            AND re.department_code = '205'
           ORDER BY t.emp_code, t.roworder DESC
         )
         SELECT
@@ -323,6 +331,9 @@ export async function GET(request: NextRequest) {
             t.emp_code,
             CASE WHEN t.product_group = 'AC' THEN 'AIR' ELSE 'CE_SDA' END AS group_code
           FROM odg_retail_target_employee t
+          -- Storefront only: individual retail targets belong to department 205.
+          JOIN odg_employee re ON re.employee_code = t.emp_code
+            AND re.department_code = '205'
           WHERE t.year = ${year.toString()}
             AND LPAD(t.month, 2, '0') = LPAD(${month.toString()}, 2, '0')
           ORDER BY t.emp_code, t.roworder DESC
@@ -503,6 +514,15 @@ export async function GET(request: NextRequest) {
       const target = inGroup.reduce((s, r) => s + r.targetPerPerson, 0);
       return target > 0 ? sales / target : 0;
     };
+    // Team aggregates from the seller rows only — computed BEFORE any boss row is
+    // appended below. Manager/unit-head rows carry no personal target/sales, so
+    // their pay is team-based commission; we surface the team figures they are
+    // measured on in the sales/target columns instead of a bare 0. These are
+    // display-only and excluded from the sales-column total (totalSales) so the
+    // footer isn't double-counted.
+    const teamQty = mapped.reduce((s, r) => s + r.soldQty, 0);
+    const teamSales = mapped.reduce((s, r) => s + r.salesAmount, 0);
+    const teamTarget = mapped.reduce((s, r) => s + r.targetPerPerson, 0);
     if (roleCommRows.length > 0 && roleEmpRows.length > 0) {
       const achByGroup = {
         AIR: groupAch("AIR"),
@@ -537,11 +557,11 @@ export async function GET(request: NextRequest) {
             boss.fullname_lo?.trim() || boss.nickname?.trim() || boss.employee_code,
           position: boss.position_code,
           groupCode: "",
-          soldQty: 0,
-          salesAmount: 0,
+          soldQty: teamQty,
+          salesAmount: teamSales,
           hisenseSales: 0,
           bonusPoints: 0,
-          targetPerPerson: 0,
+          targetPerPerson: teamTarget,
           achievementPct: achByGroup.ALL,
           normalBonus: 0,
           multiplier: 1,
@@ -620,7 +640,12 @@ export async function GET(request: NextRequest) {
       ),
       commissionBase,
       rows: visible,
-      totalSales: visible.reduce((sum, row) => sum + row.salesAmount, 0),
+      // Boss rows (pos 11/12) re-display the team sales as their commission basis,
+      // so exclude them here to avoid double-counting the sales-column total.
+      totalSales: visible.reduce(
+        (sum, row) => sum + (row.position === "11" || row.position === "12" ? 0 : row.salesAmount),
+        0,
+      ),
       totalBonus: visible.reduce((sum, row) => sum + row.netBonus, 0),
       totalSpecial: visible.reduce((sum, row) => sum + row.specialReward, 0),
       totalCommission: visible.reduce((sum, row) => sum + row.commission, 0),
