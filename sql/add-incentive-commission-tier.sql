@@ -25,7 +25,11 @@ CREATE TABLE IF NOT EXISTS app_incentive_commission_tier (
 CREATE INDEX IF NOT EXISTS idx_incentive_commission_tier_pos
   ON app_incentive_commission_tier (position_code, from_pct);
 
--- Seed each position with the original hard-coded rule (0 / 80%↓5% / 100%↑5%),
+-- Seed each position with the current rule:
+--   <80% = 0
+--   80.0-99.9% = round down to the nearest 5%
+--   100.0-100.9% = exactly 100% (base amount, no up/down)
+--   >=101% = round up to the nearest 5%
 -- but only where that position has no tiers yet, so re-running never clobbers
 -- edits.
 INSERT INTO app_incentive_commission_tier (position_code, from_pct, mode, round_step)
@@ -34,7 +38,8 @@ FROM (VALUES ('13'), ('11'), ('12')) AS p(position_code)
 CROSS JOIN (VALUES
   (0.00, 'zero',       0.05),
   (0.80, 'round_down', 0.05),
-  (1.00, 'round_up',   0.05)
+  (1.00, 'round_down', 0.01),
+  (1.01, 'round_up',   0.05)
 ) AS t(from_pct, mode, round_step)
 WHERE NOT EXISTS (
   SELECT 1 FROM app_incentive_commission_tier x WHERE x.position_code = p.position_code

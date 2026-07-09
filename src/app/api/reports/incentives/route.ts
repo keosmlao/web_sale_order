@@ -208,10 +208,9 @@ export async function GET(request: NextRequest) {
               AND sd.doc_date >= make_date(${year}, ${month}, 1)
               AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
               AND COALESCE(cat.is_active, true)
-              -- Service/fee lines (item_code 97xxxx = ຄ່າບໍລິການ: installation, repair,
-              -- delivery, penalties) are NOT product sales, so they must not inflate a
-              -- seller's ຍອດຂາຍ or achievement — e.g. AC installation added to an AIR
-              -- seller's total. Excluded here so sales, qty, and achievement all drop them.
+              -- Service/fee lines (item_code 97xxxx = ຄ່າບໍລິການ: installation,
+              -- delivery, deposit/holding, etc.) are not part of the commission-tier
+              -- sales basis. Keep them out of sales, achievement, points, and bonus.
               AND sd.item_code NOT LIKE '97%'
           ) s
           LEFT JOIN app_incentive_design_token dtok ON dtok.design_name = s.design_name

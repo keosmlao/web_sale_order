@@ -11,6 +11,7 @@ type IncentiveRow = {
   salesAmount: number;
   targetPerPerson: number;
   achievementPct: number;
+  bonusPoints: number;
   normalBonus: number;
   multiplier: number;
   netBonus: number;
@@ -85,6 +86,11 @@ type Report = {
 const pct = (value: number) => `${Math.round(value * 100)}%`;
 
 const numberFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
+const exactPctFmt = new Intl.NumberFormat("en-US", {
+  minimumFractionDigits: 0,
+  maximumFractionDigits: 4,
+});
+const exactPct = (value: number) => `${exactPctFmt.format(value * 100)}%`;
 
 function currentPeriod(): string {
   const parts = new Intl.DateTimeFormat("en-CA", {
@@ -207,8 +213,10 @@ export default function IncentivesClient() {
 
   // A period change invalidates cached breakdowns.
   useEffect(() => {
-    setExpanded(new Set());
-    setBreakdowns({});
+    Promise.resolve().then(() => {
+      setExpanded(new Set());
+      setBreakdowns({});
+    });
   }, [period]);
   const currency = report?.currencyCode ?? "THB";
   const tiers = report?.tiers;
@@ -274,7 +282,7 @@ export default function IncentivesClient() {
                 <th className="px-3 py-3 text-right">ຍອດຂາຍ</th>
                 <th className="px-3 py-3 text-right">ເປົ້າ/ຄົນ</th>
                 <th className="px-3 py-3 text-right">ຜົນງານ</th>
-                <th className="px-3 py-3 text-right">ໂບນັດປົກກະຕິ</th>
+                <th className="px-3 py-3 text-right">ຄະແນນສະສົມ</th>
                 <th className="px-3 py-3 text-right">ຕົວຄູນ</th>
                 <th className="px-3 py-3 text-right">① ໂບນັດ</th>
                 {hasSpecial ? <th className="px-3 py-3 text-right">② ເງິນພິເສດ</th> : null}
@@ -319,7 +327,7 @@ export default function IncentivesClient() {
                   <td className="px-3 py-3 text-right font-mono">{numberFmt.format(row.salesAmount)}</td>
                   <td className="px-3 py-3 text-right font-mono">{numberFmt.format(row.targetPerPerson)}</td>
                   <td className="px-3 py-3 text-right"><Achievement value={row.achievementPct} tiers={tiers} /></td>
-                  <td className="px-3 py-3 text-right font-mono">{numberFmt.format(row.normalBonus)}</td>
+                  <td className="px-3 py-3 text-right font-mono">{numberFmt.format(row.bonusPoints)}</td>
                   <td className="px-3 py-3 text-right font-mono font-bold">×{row.multiplier.toFixed(1)}</td>
                   <td className="px-3 py-3 text-right font-mono font-bold text-odoo-text-strong">{numberFmt.format(row.netBonus)}</td>
                   {hasSpecial ? <td className="px-3 py-3 text-right font-mono">{row.specialReward > 0 ? numberFmt.format(row.specialReward) : "—"}</td> : null}
@@ -512,7 +520,7 @@ function BossCard({ row, currency, tiers }: { row: IncentiveRow; currency: strin
                   <td className="px-2 py-1">{groupLabel(l.groupCode)}</td>
                   <td className="px-2 py-1 text-right font-mono">{numberFmt.format(l.base)}</td>
                   <td className="px-2 py-1 text-right"><Achievement value={l.achievementPct} tiers={tiers} /></td>
-                  <td className="px-2 py-1 text-right font-mono">{l.rate.toFixed(2)}</td>
+                  <td className="px-2 py-1 text-right font-mono">{exactPct(l.rate)}</td>
                   <td className="px-2 py-1 text-right font-mono font-bold">{numberFmt.format(l.amount)}</td>
                 </tr>
               ))}
@@ -544,7 +552,7 @@ function SelfHero({ row, loading, currency, tiers }: { row: IncentiveRow | null;
         <Metric label="③ ຄ່າຄອມ" value={row.commission > 0 ? `${numberFmt.format(row.commission)} ${currency}` : "—"} />
         <Metric label="ຍອດຂາຍ" value={`${numberFmt.format(row.salesAmount)}`} />
         <Metric label="ເປົ້າ/ຄົນ" value={`${numberFmt.format(row.targetPerPerson)}`} />
-        <Metric label="ຜົນງານ" value={`${(row.achievementPct * 100).toFixed(1)}%`} valueClass={achColor} />
+        <Metric label="ຜົນງານ" value={exactPct(row.achievementPct)} valueClass={achColor} />
         <Metric label="ຈຳນວນຂາຍ" value={numberFmt.format(row.soldQty)} />
         <Metric label="ຕົວຄູນໂບນັດ" value={`×${row.multiplier.toFixed(1)}`} />
       </div>
@@ -564,5 +572,5 @@ function Achievement({ value, tiers }: { value: number; tiers?: Tiers }) {
   const standardMax = tiers?.standardMaxPct ?? 1;
   const lowMax = tiers?.lowMaxPct ?? 0.5;
   const color = value > standardMax ? "text-emerald-700" : value > lowMax ? "text-odoo-primary" : "text-amber-700";
-  return <span className={`font-mono font-bold ${color}`}>{(value * 100).toFixed(1)}%</span>;
+  return <span className={`font-mono font-bold ${color}`}>{exactPct(value)}</span>;
 }
