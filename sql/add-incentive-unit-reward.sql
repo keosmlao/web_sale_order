@@ -26,8 +26,15 @@ CREATE TABLE IF NOT EXISTS app_incentive_unit_reward (
   low_reward   numeric(18, 4) NOT NULL DEFAULT 0,
   high_min_qty numeric(10, 2),
   high_reward  numeric(18, 4),
-  is_active    boolean NOT NULL DEFAULT false
+  is_active    boolean NOT NULL DEFAULT false,
+  effective_from date NOT NULL DEFAULT DATE '2026-01-01',
+  effective_to   date NOT NULL DEFAULT DATE '2099-12-31',
+  CHECK (effective_to >= effective_from)
 );
+
+ALTER TABLE app_incentive_unit_reward
+  ADD COLUMN IF NOT EXISTS effective_from date NOT NULL DEFAULT DATE '2026-01-01',
+  ADD COLUMN IF NOT EXISTS effective_to date NOT NULL DEFAULT DATE '2099-12-31';
 
 -- Workbook ④: MITSUBISHI air — ≥1 set pays 100/set, ≥10 sets pays 200/set.
 -- Workbook ⑤: pushed model 110301-0716 — thresholds 10/20, amounts still 0

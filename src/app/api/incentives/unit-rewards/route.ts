@@ -8,6 +8,7 @@ import { roleFromEmployee } from "@/lib/roles";
 // Only AIR / CE_SDA rosters exist (product_group AC -> AIR, CE/FZ -> CE_SDA);
 // a reward on any other group would match nobody.
 const REWARD_GROUPS: readonly string[] = ["AIR", "CE_SDA"];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 // Unit-count spiff settings (workbook ④ brand / ⑤ pushed model) —
 // app_incentive_unit_reward, sql/add-incentive-unit-reward.sql.
@@ -22,6 +23,8 @@ type UnitRewardRow = {
   high_min_qty: string | number | null;
   high_reward: string | number | null;
   is_active: boolean;
+  effective_from: string;
+  effective_to: string;
 };
 
 const canManage = (employee: Awaited<ReturnType<typeof getEmployeeFromRequest>>) => {
@@ -30,11 +33,15 @@ const canManage = (employee: Awaited<ReturnType<typeof getEmployeeFromRequest>>)
   return role === "manager" || role === "head";
 };
 
-async function listRewards() {
+async function listRewards(year = 0, month = 0) {
   const rows = await prisma.$queryRaw<UnitRewardRow[]>`
     SELECT reward_code, description, group_code, brand_code, item_match,
-           low_min_qty, low_reward, high_min_qty, high_reward, is_active
+           low_min_qty, low_reward, high_min_qty, high_reward, is_active,
+           effective_from::text, effective_to::text
     FROM app_incentive_unit_reward
+    WHERE (${year} = 0 OR ${month} = 0 OR
+      (effective_from < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+       AND effective_to >= make_date(${year}, ${month}, 1)))
     ORDER BY reward_code
   `;
   return {
@@ -49,6 +56,8 @@ async function listRewards() {
       highMinQty: Number(r.high_min_qty ?? 0),
       highReward: Number(r.high_reward ?? 0),
       isActive: r.is_active,
+      effectiveFrom: r.effective_from,
+      effectiveTo: r.effective_to,
     })),
   };
 }
@@ -57,7 +66,8 @@ export async function GET(request: NextRequest) {
   const employee = await getEmployeeFromRequest(request);
   if (!employee) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    return NextResponse.json(await listRewards());
+    const url = new URL(request.url);
+    return NextResponse.json(await listRewards(Number(url.searchParams.get("year")), Number(url.searchParams.get("month"))));
   } catch {
     return NextResponse.json(
       { error: "Unit-reward table missing. Run sql/add-incentive-unit-reward.sql first." },
@@ -75,17 +85,22 @@ export async function PUT(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const rewardCode = String(body?.rewardCode ?? "").trim();
   const isActive = Boolean(body?.isActive);
+  const groupCode = String(body?.groupCode ?? "").trim().toUpperCase();
   const brandCode = String(body?.brandCode ?? "").trim().toUpperCase() || null;
   const itemMatch = String(body?.itemMatch ?? "").trim() || null;
   const lowMinQty = Number(body?.lowMinQty);
   const lowReward = Number(body?.lowReward);
   const highMinQty = Number(body?.highMinQty);
   const highReward = Number(body?.highReward);
+  const effectiveFrom = String(body?.effectiveFrom ?? "");
+  const effectiveTo = String(body?.effectiveTo ?? "");
   const validNum = (n: number) => Number.isFinite(n) && n >= 0;
   if (
     !rewardCode ||
+    !REWARD_GROUPS.includes(groupCode) ||
     !validNum(lowMinQty) || !validNum(lowReward) ||
     !validNum(highMinQty) || !validNum(highReward) ||
+    !DATE_RE.test(effectiveFrom) || !DATE_RE.test(effectiveTo) || effectiveTo < effectiveFrom ||
     // Exactly one qualifying scope: a brand OR a pushed model.
     (!brandCode && !itemMatch)
   ) {
@@ -97,12 +112,15 @@ export async function PUT(request: NextRequest) {
   const updated = await prisma.$executeRaw`
     UPDATE app_incentive_unit_reward
     SET is_active = ${isActive},
+        group_code = ${groupCode},
         brand_code = ${brandCode},
         item_match = ${itemMatch},
         low_min_qty = ${lowMinQty},
         low_reward = ${lowReward},
         high_min_qty = ${highMinQty},
-        high_reward = ${highReward}
+        high_reward = ${highReward},
+        effective_from = ${effectiveFrom}::date,
+        effective_to = ${effectiveTo}::date
     WHERE reward_code = ${rewardCode}
   `;
   if (updated === 0) {
@@ -128,12 +146,15 @@ export async function POST(request: NextRequest) {
   const highMinQty = Number(body?.highMinQty);
   const highReward = Number(body?.highReward);
   const isActive = body?.isActive === undefined ? true : Boolean(body?.isActive);
+  const effectiveFrom = String(body?.effectiveFrom ?? "");
+  const effectiveTo = String(body?.effectiveTo ?? "");
   const validNum = (n: number) => Number.isFinite(n) && n >= 0;
   if (
     !description ||
     !REWARD_GROUPS.includes(groupCode) ||
     !validNum(lowMinQty) || !validNum(lowReward) ||
     !validNum(highMinQty) || !validNum(highReward) ||
+    !DATE_RE.test(effectiveFrom) || !DATE_RE.test(effectiveTo) || effectiveTo < effectiveFrom ||
     (!brandCode && !itemMatch)
   ) {
     return NextResponse.json(
@@ -145,9 +166,11 @@ export async function POST(request: NextRequest) {
   await prisma.$executeRaw`
     INSERT INTO app_incentive_unit_reward
       (reward_code, description, group_code, brand_code, item_match,
-       low_min_qty, low_reward, high_min_qty, high_reward, is_active)
+       low_min_qty, low_reward, high_min_qty, high_reward, is_active,
+       effective_from, effective_to)
     VALUES (${rewardCode}, ${description}, ${groupCode}, ${brandCode}, ${itemMatch},
-            ${lowMinQty}, ${lowReward}, ${highMinQty}, ${highReward}, ${isActive})
+            ${lowMinQty}, ${lowReward}, ${highMinQty}, ${highReward}, ${isActive},
+            ${effectiveFrom}::date, ${effectiveTo}::date)
   `;
   return NextResponse.json(await listRewards());
 }

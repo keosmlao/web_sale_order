@@ -25,6 +25,10 @@ type RewardRow = {
   split_by_share: boolean;
 };
 
+type DepartmentTotalRow = {
+  sales_amount: string | number | null;
+};
+
 type ConfigRow = {
   currency_code: string;
   low_max_pct: string | number;
@@ -111,7 +115,7 @@ export async function GET(request: NextRequest) {
     : current.month;
 
   try {
-    const [configRows, ruleRows, tierRows, rewardRows, roleCommRows, roleEmpRows, rows, unitRewardRows] = await Promise.all([
+    const [configRows, ruleRows, tierRows, rewardRows, roleCommRows, roleEmpRows, rows, unitRewardRows, departmentTotalRows] = await Promise.all([
       prisma.$queryRaw<ConfigRow[]>`
         SELECT currency_code, low_max_pct, standard_max_pct,
                low_multiplier, standard_multiplier, high_multiplier, commission_base
@@ -134,7 +138,10 @@ export async function GET(request: NextRequest) {
       `.catch(() => []),
       prisma.$queryRaw<RewardRow[]>`
         SELECT reward_code, group_code, brand_code, target_amount, reward_amount, split_by_share
-        FROM app_incentive_special_reward WHERE is_active
+        FROM app_incentive_special_reward
+        WHERE is_active
+          AND effective_from < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+          AND effective_to >= make_date(${year}, ${month}, 1)
       `,
       // Manager / unit-head commission lines (workbook: per product group,
       // paid on the TEAM's achievement of that group). Best-effort — table
@@ -160,6 +167,10 @@ export async function GET(request: NextRequest) {
             s.qty,
             s.sales_amount,
             s.brand,
+            CASE
+              WHEN s.pcat = 'Air' AND s.item_name ~ '\\[H\\]\\s*$' THEN 0
+              ELSE s.qty
+            END AS point_qty,
             ps.status_code AS status_code,
             -- Design dimension (workbook Bonus_Maps). SDA=subtype, Air=inverter/on-off,
             -- REF=door type and Washer=load type both from ic_design (Top/Front/Twin Tub);
@@ -177,8 +188,8 @@ export async function GET(request: NextRequest) {
               WHEN s.pcat IN ('REF', 'Washer') THEN COALESCE(stok.size_token, '')
               WHEN s.pcat = 'AV' AND s.item_category = '008' THEN COALESCE(stok.size_token, '')
               WHEN s.pcat IN ('AV', 'Air') THEN
-                CASE WHEN s.price <= 10000 THEN '<=10000'
-                     WHEN s.price <= 20000 THEN '10001-20000'
+                CASE WHEN s.combo_price <= 10000 THEN '<=10000'
+                     WHEN s.combo_price <= 20000 THEN '10001-20000'
                      ELSE '>20000' END
               WHEN s.pcat = 'SDA' THEN
                 CASE WHEN s.price <= 500  THEN '<=500'
@@ -195,12 +206,20 @@ export async function GET(request: NextRequest) {
             -- not explicitly mapped defaults to SDA/OTH (the workbook's catch-all bucket);
             -- brand gating in the point map keeps non-bonus items at zero.
             SELECT
-              sd.doc_date, sd.salename, sd.qty, sd.sum_amount AS sales_amount, sd.price, sd.item_name,
+              sd.doc_date, sd.doc_no, sd.salename, sd.qty, sd.sum_amount AS sales_amount, sd.price, sd.item_name,
               sd.item_category, sd.design_name, sd.size_name, sd.item_code,
               UPPER(COALESCE(sd.item_brand, '')) AS brand,
               COALESCE(cat.pointmap_category, 'SDA') AS pcat,
               COALESCE(cat.sda_subtype, 'OTH') AS sda_subtype,
-              COALESCE(cat.group_code, 'CE_SDA') AS group_code
+              COALESCE(cat.group_code, 'CE_SDA') AS group_code,
+              CASE
+                WHEN COALESCE(cat.pointmap_category, 'SDA') = 'Air' THEN
+                  SUM(sd.price) OVER (
+                    PARTITION BY sd.doc_no, sd.salename,
+                                 UPPER(COALESCE(sd.item_brand, '')), sd.qty, sd.price
+                  )
+                ELSE sd.price
+              END AS combo_price
             FROM odg_sale_detail sd
             LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
             WHERE sd.branch_code = '01'
@@ -215,7 +234,15 @@ export async function GET(request: NextRequest) {
           ) s
           LEFT JOIN app_incentive_design_token dtok ON dtok.design_name = s.design_name
           LEFT JOIN app_incentive_size_token stok ON stok.size_name = s.size_name
-          LEFT JOIN app_incentive_product_status ps ON ps.item_code = s.item_code
+          LEFT JOIN LATERAL (
+            SELECT ps0.status_code
+            FROM app_incentive_product_status_rule ps0
+            WHERE ps0.item_code = s.item_code
+              AND s.doc_date::date BETWEEN ps0.effective_from AND ps0.effective_to
+            ORDER BY (ps0.effective_to - ps0.effective_from) ASC,
+                     ps0.updated_at DESC
+            LIMIT 1
+          ) ps ON true
         ),
         sold AS (
           SELECT
@@ -224,11 +251,11 @@ export async function GET(request: NextRequest) {
             l.brand,
             l.qty,
             l.sales_amount,
-            COALESCE(pm.points, 0) * COALESCE(sm.multiplier, 1) * l.qty AS line_points,
+            COALESCE(pm.points, 0) * COALESCE(sm.multiplier, 1) * l.point_qty AS line_points,
             COALESCE(pm.points, 0)
               * cfg.base_amount
               * COALESCE(sm.multiplier, 1)
-              * l.qty AS line_bonus
+              * l.point_qty AS line_bonus
           FROM lines l
           CROSS JOIN app_incentive_config cfg
           -- Point map is defined per month with carry-forward: the newest
@@ -375,7 +402,23 @@ export async function GET(request: NextRequest) {
             )
         ) s ON true
         WHERE ur.is_active
+          AND ur.effective_from < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+          AND ur.effective_to >= make_date(${year}, ${month}, 1)
       `.catch(() => []),
+      // The whole-department reward is measured on every eligible front-store
+      // sale, including salespeople who are not on this month's payout roster.
+      // The roster still controls who receives the flat per-person reward.
+      prisma.$queryRaw<DepartmentTotalRow[]>`
+        SELECT COALESCE(SUM(sd.sum_amount), 0) AS sales_amount
+        FROM odg_sale_detail sd
+        LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
+        WHERE sd.branch_code = '01'
+          AND sd.argroup_main = '101'
+          AND sd.doc_date >= make_date(${year}, ${month}, 1)
+          AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+          AND COALESCE(cat.is_active, true)
+          AND sd.item_code NOT LIKE '97%'
+      `,
     ]);
 
     const config = configRows[0] ?? {
@@ -466,11 +509,15 @@ export async function GET(request: NextRequest) {
     // person's share of those sales, otherwise it is a flat amount per person in the group.
     for (const reward of rewardRows) {
       const group = reward.group_code;
-      const inGroup = mapped.filter((row) => row.groupCode === group);
+      const inGroup = group === "ALL"
+        ? mapped
+        : mapped.filter((row) => row.groupCode === group);
       if (inGroup.length === 0) continue;
       const qualifyingOf = (row: (typeof mapped)[number]) =>
         reward.brand_code === "HISENSE" ? row.hisenseSales : row.salesAmount;
-      const deptTotal = inGroup.reduce((sum, row) => sum + qualifyingOf(row), 0);
+      const deptTotal = group === "ALL" && !reward.brand_code
+        ? number(departmentTotalRows[0]?.sales_amount)
+        : inGroup.reduce((sum, row) => sum + qualifyingOf(row), 0);
       if (deptTotal < number(reward.target_amount)) continue;
       const rewardAmount = number(reward.reward_amount);
       for (const row of inGroup) {

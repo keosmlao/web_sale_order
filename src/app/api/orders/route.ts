@@ -103,6 +103,12 @@ type IncomingItem = {
   // here it wins over the cart-level salespersonCode for that line's
   // ic_trans_detail.sale_code; absent → fall back to cart-level.
   salespersonCode: string | null;
+  // Optional per-line transport type (transport_type.code). Set by the POS
+  // when a cart is dispatched from several warehouses and each warehouse
+  // ships differently. Recorded in ic_trans_detail.remark per line only when
+  // the cart actually mixes transports; otherwise the bill-level transport in
+  // the header remark covers it.
+  transportCode: string | null;
 };
 
 function parseDiscountPct(raw: string | number | null): number {
@@ -240,6 +246,11 @@ function normalizeItems(rawItems: unknown[], fallbackWarehouseCode: string | nul
           "string" &&
         (i as { salespersonCode: string }).salespersonCode.trim() !== ""
           ? (i as { salespersonCode: string }).salespersonCode.trim()
+          : null,
+      transportCode:
+        typeof (i as { transportCode?: unknown }).transportCode === "string" &&
+        (i as { transportCode: string }).transportCode.trim() !== ""
+          ? (i as { transportCode: string }).transportCode.trim().slice(0, 25)
           : null,
     }))
     .filter((i) => i.productId.length > 0 && i.quantity > 0);
@@ -1054,6 +1065,41 @@ export async function POST(request: NextRequest) {
   if (note) remarkParts.push(`ໝາຍເຫດ: ${note}`);
   const remark = remarkParts.length === 0 ? null : remarkParts.join(" | ");
 
+  // Per-line transport. Only meaningful when the cart mixes transports across
+  // its warehouses — e.g. goods from warehouse A go by truck while warehouse
+  // B's line is self-pickup. When every line shares one transport (the common
+  // case) the bill-level transport in the header remark already says it all,
+  // so we skip writing per-line remarks and keep single-transport bills byte
+  // identical to before. Names are resolved once from transport_type so the
+  // per-line remark reads the same as the header one: "ຂົນສົ່ງ: <name> (<code>)".
+  const perLineTransportCodes = items.map((it) =>
+    (it.transportCode ?? "").trim(),
+  );
+  const nonEmptyLineTransports = new Set(
+    perLineTransportCodes.filter(Boolean),
+  );
+  // Record per-line only when lines genuinely differ (truck vs bike, or
+  // truck vs none) AND at least one line actually names a transport. All
+  // lines sharing one transport → the header remark already covers it, so
+  // single-transport bills stay byte identical to before.
+  const writePerLineTransport =
+    nonEmptyLineTransports.size >= 1 &&
+    new Set(perLineTransportCodes).size > 1;
+  const transportNameByCode = new Map<string, string>();
+  if (writePerLineTransport) {
+    const codes = Array.from(nonEmptyLineTransports);
+    const rows = await prisma.$queryRaw<
+      Array<{ code: string; name_1: string | null }>
+    >`
+      SELECT code, name_1
+      FROM transport_type
+      WHERE code IN (${Prisma.join(codes)})
+    `;
+    for (const row of rows) {
+      transportNameByCode.set(row.code, (row.name_1 ?? "").trim() || row.code);
+    }
+  }
+
   // The sale order is recorded in SML ic_trans + ic_trans_detail only —
   // order_cart / order_item are no longer written. The 5-digit cart_number
   // is the suffix of the SOK doc_no so it still fits app_* tables that key
@@ -1339,6 +1385,16 @@ export async function POST(request: NextRequest) {
         const itemWh = (item.warehouseCode ?? "").trim() || primaryWh;
         const itemShelf =
           (item.locationCode ?? "").trim() || defaultShelfCode;
+        // Per-line transport tag (only when the cart mixes transports — see
+        // writePerLineTransport above). Same "ຂົນສົ່ງ: <name> (<code>)" shape as
+        // the header remark so the receipt/back-office read it consistently.
+        const lineTransportCode = (item.transportCode ?? "").trim();
+        const lineRemark =
+          writePerLineTransport && lineTransportCode
+            ? `ຂົນສົ່ງ: ${
+                transportNameByCode.get(lineTransportCode) ?? lineTransportCode
+              } (${lineTransportCode})`.slice(0, 255)
+            : "";
         await tx.$executeRaw`
           INSERT INTO ic_trans_detail (
             trans_type, trans_flag,
@@ -1351,6 +1407,7 @@ export async function POST(request: NextRequest) {
             price_2, sum_amount_2,
             discount, discount_amount, discount_amount_2,
             wh_code, shelf_code,
+            remark,
             line_number,
             status, cancel_qty,
             stand_value, divide_value,
@@ -1381,6 +1438,7 @@ export async function POST(request: NextRequest) {
             ${priceKip}, ${sumKip},
             ${discountStr}, ${discountThb}, ${discountKip},
             ${itemWh}, ${itemShelf},
+            ${lineRemark},
             ${i},
             0, 0,
             1, 1,

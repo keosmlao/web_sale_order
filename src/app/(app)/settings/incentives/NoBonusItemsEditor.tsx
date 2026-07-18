@@ -2,13 +2,13 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 
-type ExemptItem = { itemCode: string; itemName: string; note: string };
+type ExemptItem = { itemCode: string; itemName: string; note: string; statusCode: string; weight: number };
 type Match = { itemCode: string; itemName: string };
 type Payload = { items: ExemptItem[]; matches?: Match[]; error?: string };
 
 // Manages the bonus-exempt product list (app_incentive_product_status rows with
 // status special_no_bonus → multiplier 0, so their sales earn zero points).
-export default function NoBonusItemsEditor({ canManage }: { canManage: boolean }) {
+export default function NoBonusItemsEditor({ canManage, year, month }: { canManage: boolean; year: number; month: number }) {
   const [items, setItems] = useState<ExemptItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -22,7 +22,7 @@ export default function NoBonusItemsEditor({ canManage }: { canManage: boolean }
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/incentives/no-bonus-items", { cache: "no-store" });
+      const res = await fetch(`/api/incentives/no-bonus-items?year=${year}&month=${month}`, { cache: "no-store" });
       const body = (await res.json()) as Payload;
       if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
       setItems(body.items);
@@ -31,7 +31,7 @@ export default function NoBonusItemsEditor({ canManage }: { canManage: boolean }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [year, month]);
 
   useEffect(() => {
     void load();
@@ -47,7 +47,7 @@ export default function NoBonusItemsEditor({ canManage }: { canManage: boolean }
     }
     searchTimer.current = setTimeout(async () => {
       try {
-        const res = await fetch(`/api/incentives/no-bonus-items?q=${encodeURIComponent(q)}`, { cache: "no-store" });
+        const res = await fetch(`/api/incentives/no-bonus-items?q=${encodeURIComponent(q)}&year=${year}&month=${month}`, { cache: "no-store" });
         const body = (await res.json()) as Payload;
         if (res.ok) setMatches(body.matches ?? []);
       } catch {
@@ -57,7 +57,7 @@ export default function NoBonusItemsEditor({ canManage }: { canManage: boolean }
     return () => {
       if (searchTimer.current) clearTimeout(searchTimer.current);
     };
-  }, [query]);
+  }, [query, year, month]);
 
   async function send(method: "PUT" | "DELETE", itemCode: string) {
     setBusy(itemCode);
@@ -66,7 +66,7 @@ export default function NoBonusItemsEditor({ canManage }: { canManage: boolean }
       const res = await fetch("/api/incentives/no-bonus-items", {
         method,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ itemCode, note: note.trim() }),
+        body: JSON.stringify({ itemCode, note: note.trim(), year, month }),
       });
       const body = (await res.json()) as Payload;
       if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
@@ -78,13 +78,14 @@ export default function NoBonusItemsEditor({ canManage }: { canManage: boolean }
     }
   }
 
-  const exempt = new Set(items.map((i) => i.itemCode));
+  const exempt = new Set(items.filter((item) => item.statusCode === "special_no_bonus").map((i) => i.itemCode));
+  const statusLabel = (item: ExemptItem) => item.statusCode === "special_no_bonus" ? "ບໍ່ຈ່າຍ" : item.statusCode === "special_min_bonus" ? "Min ×0.5" : item.statusCode === "special_promo_max" ? "Max ×1.2" : `×${item.weight}`;
 
   return (
     <section className="odoo-card incentive-editor incentive-editor--exclusions p-4">
       <div className="incentive-editor-head mb-3">
-        <h2 className="text-sm font-black uppercase tracking-wide text-odoo-text-strong">ສິນຄ້າຍົກເວັ້ນຄະແນນ (ບໍ່ນັບໂບນັດ)</h2>
-        <p className="text-xs text-odoo-text-muted">ສິນຄ້າໃນລາຍການນີ້ ຂາຍໄດ້ແຕ່ບໍ່ໄດ້ຄະແນນໂບນັດ (ຕົວຄູນ = 0) — ມີຜົນທຸກເດືອນຈົນກວ່າຈະເອົາອອກ</p>
+        <h2 className="text-sm font-black uppercase tracking-wide text-odoo-text-strong">ສະຖານະສິນຄ້າ Min / Max / ບໍ່ຈ່າຍ</h2>
+        <p className="text-xs text-odoo-text-muted">ສະເພາະເດືອນ {String(month).padStart(2, "0")}/{year} · ສິນຄ້າໃນລາຍການນີ້ມີຕົວຄູນ 0</p>
       </div>
 
       {error ? <div className="mb-3 rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-semibold text-odoo-danger">{error}</div> : null}
@@ -131,7 +132,7 @@ export default function NoBonusItemsEditor({ canManage }: { canManage: boolean }
       ) : null}
 
       <div className="incentive-stats incentive-stats--compact">
-        <div className="is-warning"><span>ສິນຄ້າຍົກເວັ້ນ</span><strong>{items.length}</strong><small>ລາຍການ</small></div>
+        <div className="is-warning"><span>ສະຖານະພິເສດ</span><strong>{items.length}</strong><small>ລາຍການ</small></div>
       </div>
 
       <div className="incentive-table-wrap overflow-x-auto">
@@ -140,21 +141,23 @@ export default function NoBonusItemsEditor({ canManage }: { canManage: boolean }
             <tr>
               <th className="px-3 py-2">ລະຫັດ</th>
               <th className="px-3 py-2">ຊື່ສິນຄ້າ</th>
+              <th className="px-3 py-2">ສະຖານະ</th>
               <th className="px-3 py-2">ໝາຍເຫດ</th>
               {canManage ? <th className="px-3 py-2 text-right">ຈັດການ</th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-odoo-border">
             {loading ? (
-              <tr><td colSpan={canManage ? 4 : 3} className="px-3 py-8 text-center text-odoo-text-muted">ກຳລັງໂຫລດ…</td></tr>
+              <tr><td colSpan={canManage ? 5 : 4} className="px-3 py-8 text-center text-odoo-text-muted">ກຳລັງໂຫລດ…</td></tr>
             ) : items.length === 0 ? (
-              <tr><td colSpan={canManage ? 4 : 3} className="px-3 py-8 text-center text-odoo-text-muted">ບໍ່ມີສິນຄ້າຍົກເວັ້ນ</td></tr>
+              <tr><td colSpan={canManage ? 5 : 4} className="px-3 py-8 text-center text-odoo-text-muted">ບໍ່ມີສະຖານະສິນຄ້າໃນເດືອນນີ້</td></tr>
             ) : items.map((item) => (
               <tr key={item.itemCode}>
                 <td className="px-3 py-2 font-mono font-bold text-odoo-text-strong">{item.itemCode}</td>
                 <td className="px-3 py-2">{item.itemName || <span className="text-odoo-text-muted">—</span>}</td>
+                <td className="px-3 py-2 font-bold text-teal-700">{statusLabel(item)}</td>
                 <td className="px-3 py-2 text-odoo-text-muted">{item.note || "—"}</td>
-                {canManage ? (
+                {canManage && item.statusCode === "special_no_bonus" ? (
                   <td className="px-3 py-2 text-right">
                     <button
                       type="button"
@@ -163,7 +166,7 @@ export default function NoBonusItemsEditor({ canManage }: { canManage: boolean }
                       className="odoo-btn text-odoo-danger disabled:opacity-40"
                     >ເອົາອອກ</button>
                   </td>
-                ) : null}
+                ) : canManage ? <td /> : null}
               </tr>
             ))}
           </tbody>

@@ -420,6 +420,13 @@ function PosScreen({
 
   const [transportTypes, setTransportTypes] = useState<TransportType[]>([]);
   const [transportCode, setTransportCode] = useState("");
+  // Per-warehouse transport override, keyed by warehouseCode. Only surfaces
+  // when the cart is dispatched from more than one warehouse (a line from
+  // ສາງ A may go by truck while ສາງ B is self-pickup). Warehouses without an
+  // entry fall back to the bill-level `transportCode` above.
+  const [warehouseTransport, setWarehouseTransport] = useState<
+    Record<string, string>
+  >({});
   const [deliveryName, setDeliveryName] = useState("");
   const [receiveDate, setReceiveDate] = useState("");
   const [deliveryRound, setDeliveryRound] = useState("");
@@ -1770,6 +1777,27 @@ function PosScreen({
     return locationTotal >= it.quantity;
   });
 
+  // Distinct warehouses the cart draws from, in first-added order. When the
+  // cart spans more than one warehouse the checkout lets the cashier pick a
+  // transport per warehouse (goods from ສາງ A by truck, ສາງ B self-pickup).
+  const cartWarehouses = Array.from(
+    items
+      .reduce((m, it) => {
+        if (it.warehouseCode && !m.has(it.warehouseCode)) {
+          m.set(
+            it.warehouseCode,
+            warehouseNames[it.warehouseCode] ?? it.warehouseCode,
+          );
+        }
+        return m;
+      }, new Map<string, string>())
+      .entries(),
+  ).map(([code, name]) => ({ code, name }));
+  const isMultiWarehouse = cartWarehouses.length > 1;
+  // A warehouse with no explicit override ships by the bill-level transport.
+  const effectiveTransportForWh = (wh: string) =>
+    warehouseTransport[wh] || transportCode;
+
   // Customer is optional — a blank customer settles as a walk-in sale
   // (the orders API treats an empty customerId as walk-in: no member
   // discount, no loyalty earn). Only warehouse, salesperson and at least
@@ -1844,6 +1872,11 @@ function PosScreen({
             // the cart-level salespersonCode above so existing call sites
             // keep working.
             salespersonCode: it.salespersonCode || undefined,
+            // Per-line transport: the override chosen for this line's
+            // warehouse, or the bill-level transport. The server only records
+            // it per line when the cart actually mixes transports; a bill
+            // where every line shares one transport is unchanged.
+            transportCode: effectiveTransportForWh(it.warehouseCode) || undefined,
           })),
         }),
       });
@@ -1926,7 +1959,9 @@ function PosScreen({
   const deliveryFormFields = (
     <div className="pos-extras-grid">
       <div>
-        <label className="odoo-label">ຂົນສົ່ງ</label>
+        <label className="odoo-label">
+          {isMultiWarehouse ? "ຂົນສົ່ງ (ຄ່າເລີ່ມຕົ້ນ)" : "ຂົນສົ່ງ"}
+        </label>
         <select
           value={transportCode}
           onChange={(e) => setTransportCode(e.target.value)}
@@ -1940,6 +1975,51 @@ function PosScreen({
           ))}
         </select>
       </div>
+      {isMultiWarehouse ? (
+        <div className="col-span-full pos-wh-transport">
+          <label className="odoo-label">ຂົນສົ່ງແຍກຕາມສາງ</label>
+          <p className="pos-wh-transport-hint">
+            ກະຕ່ານີ້ຈ່າຍເຄື່ອງຈາກ {cartWarehouses.length} ສາງ —
+            ກຳນົດຂົນສົ່ງໃຫ້ແຕ່ລະສາງໄດ້. ວ່າງໄວ້ = ໃຊ້ຄ່າເລີ່ມຕົ້ນ.
+          </p>
+          <div className="pos-wh-transport-list">
+            {cartWarehouses.map((wh) => (
+              <div key={wh.code} className="pos-wh-transport-row">
+                <span className="pos-wh-transport-name" title={wh.name}>
+                  ສາງ {wh.name}
+                </span>
+                <select
+                  value={warehouseTransport[wh.code] ?? ""}
+                  onChange={(e) =>
+                    setWarehouseTransport((prev) => {
+                      const next = { ...prev };
+                      if (e.target.value) next[wh.code] = e.target.value;
+                      else delete next[wh.code];
+                      return next;
+                    })
+                  }
+                  className="odoo-input"
+                >
+                  <option value="">
+                    ຄ່າເລີ່ມຕົ້ນ
+                    {transportCode
+                      ? ` (${
+                          transportTypes.find((t) => t.code === transportCode)
+                            ?.name ?? transportCode
+                        })`
+                      : ""}
+                  </option>
+                  {transportTypes.map((t) => (
+                    <option key={t.code} value={t.code}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       {isSelfPickup ? null : (
         <div>
           <label className="odoo-label">ຊື່ຜູ້ຮັບ / ຈັດສົ່ງ</label>

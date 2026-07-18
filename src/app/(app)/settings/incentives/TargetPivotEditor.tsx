@@ -11,10 +11,7 @@ type TargetRow = { employeeCode: string; groupCode: string; target: number };
 const fmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const MONTHS = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"];
 
-export default function TargetPivotEditor({ canManage }: { canManage: boolean }) {
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+export default function TargetPivotEditor({ canManage, year, month }: { canManage: boolean; year: number; month: number }) {
   const [employees, setEmployees] = useState<Emp[]>([]);
   // "code|GROUP" → input string
   const [values, setValues] = useState<Record<string, string>>({});
@@ -120,24 +117,7 @@ export default function TargetPivotEditor({ canManage }: { canManage: boolean })
             ກຳນົດເປົ້າ CE ແລະ AC ໃຫ້ພະນັກງານຂາຍແຕ່ລະຄົນ
           </p>
         </div>
-        <div className="incentive-filters flex items-end gap-2">
-          <div>
-            <label className="odoo-label">ເດືອນ</label>
-            <select value={month} onChange={(e) => setMonth(Number(e.target.value))} className="odoo-input">
-              {MONTHS.map((m, i) => (
-                <option key={m} value={i + 1}>{m}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="odoo-label">ປີ</label>
-            <select value={year} onChange={(e) => setYear(Number(e.target.value))} className="odoo-input">
-              {[year - 1, year, year + 1].filter((v, i, a) => a.indexOf(v) === i).map((y) => (
-                <option key={y} value={y}>{y}</option>
-              ))}
-            </select>
-          </div>
-        </div>
+        <span className="rounded-lg bg-teal-50 px-3 py-2 font-mono text-sm font-black text-teal-700">{MONTHS[month - 1]}/{year}</span>
       </div>
 
       <div className="incentive-stats">

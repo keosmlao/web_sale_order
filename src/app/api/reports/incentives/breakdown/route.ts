@@ -113,7 +113,15 @@ export async function GET(request: NextRequest) {
         ) s
         LEFT JOIN app_incentive_design_token dtok ON dtok.design_name = s.design_name
         LEFT JOIN app_incentive_size_token stok ON stok.size_name = s.size_name
-        LEFT JOIN app_incentive_product_status ps ON ps.item_code = s.item_code
+        LEFT JOIN LATERAL (
+          SELECT ps0.status_code
+          FROM app_incentive_product_status_rule ps0
+          WHERE ps0.item_code = s.item_code
+            AND s.doc_date::date BETWEEN ps0.effective_from AND ps0.effective_to
+          ORDER BY (ps0.effective_to - ps0.effective_from) ASC,
+                   ps0.updated_at DESC
+          LIMIT 1
+        ) ps ON true
       )
       SELECT
         l.pcat, l.doc_date, l.doc_no, l.brand, l.item_name, l.qty, l.price, l.sales_amount,

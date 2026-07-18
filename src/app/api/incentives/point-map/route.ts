@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
 
-type RuleRow = { id: bigint; category_code: string; brand_code: string; design_token: string; size_token: string; effective_from: Date; effective_to: Date; points: string | number; is_special: boolean };
+type RuleRow = { id: bigint; category_code: string; brand_code: string; design_token: string; size_token: string; effective_from: string; effective_to: string; points: string | number; is_special: boolean };
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const canManage = (employee: Awaited<ReturnType<typeof getEmployeeFromRequest>>) => employee && ["manager", "head"].includes(roleFromEmployee(employee));
 
@@ -21,10 +21,10 @@ async function listOptions() {
   return { categories, brands, designTokens, sizeTokens };
 }
 
-async function listRows() {
-  const rows = await prisma.$queryRaw<RuleRow[]>`SELECT id, category_code, brand_code, design_token, size_token, effective_from, effective_to, points, is_special FROM app_incentive_point_rule ORDER BY is_special DESC, effective_from DESC, category_code, brand_code`;
+async function listRows(year = 0, month = 0) {
+  const rows = await prisma.$queryRaw<RuleRow[]>`SELECT id, category_code, brand_code, design_token, size_token, effective_from::text, effective_to::text, points, is_special FROM app_incentive_point_rule WHERE (${year}=0 OR ${month}=0 OR (effective_from < make_date(${year},${month},1) + INTERVAL '1 month' AND effective_to >= make_date(${year},${month},1))) ORDER BY is_special DESC, effective_from DESC, category_code, brand_code`;
   const options = await listOptions();
-  return { categories: options.categories, options, rows: rows.map((row) => ({ id: row.id.toString(), categoryCode: row.category_code, brandCode: row.brand_code, designToken: row.design_token, sizeToken: row.size_token, effectiveFrom: row.effective_from.toISOString().slice(0, 10), effectiveTo: row.effective_to.toISOString().slice(0, 10), points: Number(row.points), isSpecial: row.is_special })) };
+  return { categories: options.categories, options, rows: rows.map((row) => ({ id: row.id.toString(), categoryCode: row.category_code, brandCode: row.brand_code, designToken: row.design_token, sizeToken: row.size_token, effectiveFrom: row.effective_from, effectiveTo: row.effective_to, points: Number(row.points), isSpecial: row.is_special })) };
 }
 
 function parse(body: Record<string, unknown> | null) {
@@ -43,7 +43,8 @@ function parse(body: Record<string, unknown> | null) {
 
 export async function GET(request: NextRequest) {
   if (!await getEmployeeFromRequest(request)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  try { return NextResponse.json(await listRows()); } catch { return NextResponse.json({ error: "Run sql/add-pointmap-date-ranges.sql first" }, { status: 503 }); }
+  const url = new URL(request.url);
+  try { return NextResponse.json(await listRows(Number(url.searchParams.get("year")), Number(url.searchParams.get("month")))); } catch { return NextResponse.json({ error: "Run sql/add-pointmap-date-ranges.sql first" }, { status: 503 }); }
 }
 
 export async function PUT(request: NextRequest) {

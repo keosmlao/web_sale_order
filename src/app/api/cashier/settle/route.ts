@@ -188,6 +188,10 @@ type CartItemRow = {
   discount_amount_2: number | string | null;
   wh_code: string | null;
   shelf_code: string | null;
+  // Per-line note carried from the SOK. The POS writes the per-warehouse
+  // transport tag here ("ຂົນສົ່ງ: <name> (<code>)") when a cart mixes
+  // transports; carrying it onto the CAKAP row keeps it on the receipt.
+  remark: string | null;
 };
 
 function yy(): string {
@@ -431,7 +435,8 @@ export async function POST(request: NextRequest) {
           discount_amount_2,
           wh_code,
           shelf_code,
-          item_name
+          item_name,
+          remark
         FROM ic_trans_detail
         WHERE doc_no = ${cart.doc_no}
           AND trans_type = 2
@@ -1069,6 +1074,7 @@ export async function POST(request: NextRequest) {
             price_2, sum_amount_2,
             discount, discount_amount, discount_amount_2,
             wh_code, shelf_code,
+            remark,
             line_number,
             status, cancel_qty,
             stand_value, divide_value,
@@ -1097,6 +1103,7 @@ export async function POST(request: NextRequest) {
             ${priceKip}, ${sumKip},
             ${discountStr}, ${discountThb}, ${discountKip},
             ${itemWh}, ${itemShelf},
+            ${(it.remark ?? "").slice(0, 255)},
             ${i},
             0, 0,
             1, 1,

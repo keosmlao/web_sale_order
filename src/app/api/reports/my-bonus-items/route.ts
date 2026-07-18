@@ -71,7 +71,15 @@ export async function GET(request: NextRequest) {
         LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
         LEFT JOIN app_incentive_design_token dtok ON dtok.design_name = sd.design_name
         LEFT JOIN app_incentive_size_token stok ON stok.size_name = sd.size_name
-        LEFT JOIN app_incentive_product_status ps ON ps.item_code = sd.item_code
+        LEFT JOIN LATERAL (
+          SELECT ps0.status_code
+          FROM app_incentive_product_status_rule ps0
+          WHERE ps0.item_code = sd.item_code
+            AND sd.doc_date::date BETWEEN ps0.effective_from AND ps0.effective_to
+          ORDER BY (ps0.effective_to - ps0.effective_from) ASC,
+                   ps0.updated_at DESC
+          LIMIT 1
+        ) ps ON true
         WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
           ${dateFilter}
           AND sd.salename IN (SELECT sn FROM names)

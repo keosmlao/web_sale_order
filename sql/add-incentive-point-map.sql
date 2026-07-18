@@ -268,11 +268,17 @@ CREATE TABLE IF NOT EXISTS app_incentive_special_reward (
   target_amount numeric(18,4) NOT NULL,
   reward_amount numeric(18,4) NOT NULL,
   split_by_share boolean NOT NULL DEFAULT false,
-  is_active      boolean NOT NULL DEFAULT false);
+  is_active      boolean NOT NULL DEFAULT false,
+  effective_from date NOT NULL DEFAULT DATE '2026-01-01',
+  effective_to   date NOT NULL DEFAULT DATE '2099-12-31',
+  CHECK (effective_to >= effective_from));
 -- is_active defaults FALSE: the workbook's June sheet shows 0 special pay for everyone even
 -- though a department target was met, so the exact trigger logic is not yet business-confirmed.
 -- Enable per reward once verified (Settings, or UPDATE ... SET is_active = true).
 ALTER TABLE app_incentive_special_reward ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT false;
+ALTER TABLE app_incentive_special_reward
+  ADD COLUMN IF NOT EXISTS effective_from date NOT NULL DEFAULT DATE '2026-01-01',
+  ADD COLUMN IF NOT EXISTS effective_to date NOT NULL DEFAULT DATE '2099-12-31';
 INSERT INTO app_incentive_special_reward (reward_code, description, group_code, brand_code, target_amount, reward_amount, split_by_share, is_active) VALUES
   ('HISENSE_CE', 'ບັນລຸເປົ້າ CE ຍີ່ຫໍ້ HISENSE', 'CE_SDA', 'HISENSE', 1000000, 5000, true, false),
   ('DEPT_CE_SDA', 'ບັນລຸເປົ້າ CE+SDA ລວມພະແນກ', 'CE_SDA', NULL, 10012100, 1000, false, false)
@@ -295,7 +301,12 @@ WHERE id = 1;
 --    workbook (e.g. 110101-0929 was special_min_bonus there but is a normal-bonus item in
 --    this workbook). Keeping them would under-pay those items.
 DELETE FROM app_incentive_product_status WHERE note = 'Imported from workbook Product_Status';
-INSERT INTO app_incentive_product_status (item_code, status_code, weight, note) VALUES
+DELETE FROM app_incentive_product_status_rule WHERE note = 'Imported from workbook Product_Status';
+INSERT INTO app_incentive_product_status_rule
+  (item_code, status_code, weight, note, effective_from, effective_to)
+SELECT v.item_code, v.status_code, v.weight, v.note,
+       DATE '2026-06-01', DATE '2026-06-30'
+FROM (VALUES
   ('110101-0266', 'special_no_bonus', 0, 'workbook 2026-06-30 no-bonus list'),
   ('110101-0285', 'special_no_bonus', 0, 'workbook 2026-06-30 no-bonus list'),
   ('110101-1046', 'special_no_bonus', 0, 'workbook 2026-06-30 no-bonus list'),
@@ -324,8 +335,19 @@ INSERT INTO app_incentive_product_status (item_code, status_code, weight, note) 
   ('110301-0773', 'special_no_bonus', 0, 'workbook 2026-06-30 no-bonus list'),
   ('110301-0775', 'special_no_bonus', 0, 'workbook 2026-06-30 no-bonus list'),
   ('110302-0347', 'special_no_bonus', 0, 'workbook 2026-06-30 no-bonus list')
-ON CONFLICT (item_code) DO UPDATE SET status_code = EXCLUDED.status_code,
-  weight = EXCLUDED.weight, note = EXCLUDED.note, updated_at = now();
+) AS v(item_code, status_code, weight, note)
+-- All rows in this VALUES list are the June snapshot.
+ON CONFLICT (item_code, effective_from) DO UPDATE SET status_code = EXCLUDED.status_code,
+  weight = EXCLUDED.weight, note = EXCLUDED.note,
+  effective_to = EXCLUDED.effective_to, updated_at = now();
+
+-- Mirror the latest snapshot for legacy clients that join by item_code only.
+INSERT INTO app_incentive_product_status (item_code, status_code, weight, note)
+SELECT item_code, status_code, weight, note
+FROM app_incentive_product_status_rule
+WHERE effective_from = DATE '2026-06-01'
+ON CONFLICT (item_code) DO UPDATE SET status_code=EXCLUDED.status_code,
+  weight=EXCLUDED.weight, note=EXCLUDED.note, updated_at=now();
 
 
 -- 9) Salesperson name aliases: odg_sale_detail.salename (free-text from SML) can differ

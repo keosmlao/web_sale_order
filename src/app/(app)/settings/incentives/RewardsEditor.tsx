@@ -12,32 +12,43 @@ type Reward = {
   rewardAmount: number;
   splitByShare: boolean;
   isActive: boolean;
+  effectiveFrom: string;
+  effectiveTo: string;
 };
 
 const numberFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
 
-const emptyDraft = {
+function monthRange(year: number, month: number) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return {
+    effectiveFrom: `${year}-${pad(month)}-01`,
+    effectiveTo: `${year}-${pad(month)}-${pad(new Date(year, month, 0).getDate())}`,
+  };
+}
+
+const emptyDraft = (year: number, month: number) => ({
   description: "",
   groupCode: "AIR",
   brandCode: "",
   targetAmount: "",
   rewardAmount: "",
   splitByShare: false,
-};
+  ...monthRange(year, month),
+});
 
-export default function RewardsEditor({ canManage }: { canManage: boolean }) {
+export default function RewardsEditor({ canManage, year, month }: { canManage: boolean; year: number; month: number }) {
   const [rewards, setRewards] = useState<Reward[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [draft, setDraft] = useState(emptyDraft);
+  const [draft, setDraft] = useState(() => emptyDraft(year, month));
   const [brandData, setBrandData] = useState<{ air: string[]; other: string[] }>({ air: [], other: [] });
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/incentives/rewards", { cache: "no-store" });
+      const res = await fetch(`/api/incentives/rewards?year=${year}&month=${month}`, { cache: "no-store" });
       const body = (await res.json()) as { rewards: Reward[]; error?: string };
       if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
       setRewards(body.rewards);
@@ -46,10 +57,10 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [year, month]);
 
   useEffect(() => {
-    void load();
+    Promise.resolve().then(() => void load());
   }, [load]);
 
   useEffect(() => {
@@ -75,11 +86,13 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
           isActive: reward.isActive,
           targetAmount: reward.targetAmount,
           rewardAmount: reward.rewardAmount,
+          effectiveFrom: reward.effectiveFrom,
+          effectiveTo: reward.effectiveTo,
         }),
       });
       const body = (await res.json()) as { rewards: Reward[]; error?: string };
       if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
-      setRewards(body.rewards);
+      await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Save failed");
     } finally {
@@ -101,12 +114,14 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
           targetAmount: Number(draft.targetAmount) || 0,
           rewardAmount: Number(draft.rewardAmount) || 0,
           splitByShare: draft.splitByShare,
+          effectiveFrom: draft.effectiveFrom,
+          effectiveTo: draft.effectiveTo,
         }),
       });
       const body = (await res.json()) as { rewards: Reward[]; error?: string };
       if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
-      setRewards(body.rewards);
-      setDraft(emptyDraft);
+      await load();
+      setDraft(emptyDraft(year, month));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Create failed");
     } finally {
@@ -124,7 +139,7 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
       });
       const body = (await res.json()) as { rewards: Reward[]; error?: string };
       if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
-      setRewards(body.rewards);
+      await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Delete failed");
     } finally {
@@ -155,6 +170,7 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
             <tr>
               <th className="px-3 py-2">ລາງວັນ</th>
               <th className="px-3 py-2">ຂອບເຂດ</th>
+              <th className="px-3 py-2">ໄລຍະນຳໃຊ້</th>
               <th className="px-3 py-2 text-right">ເປົ້າ (฿)</th>
               <th className="px-3 py-2 text-right">ລາງວັນ (฿)</th>
               <th className="px-3 py-2 text-center">ເປີດໃຊ້</th>
@@ -163,9 +179,9 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
           </thead>
           <tbody className="divide-y divide-odoo-border">
             {loading ? (
-              <tr><td colSpan={canManage ? 6 : 5} className="px-3 py-8 text-center text-odoo-text-muted">ກຳລັງໂຫລດ…</td></tr>
+              <tr><td colSpan={canManage ? 7 : 6} className="px-3 py-8 text-center text-odoo-text-muted">ກຳລັງໂຫລດ…</td></tr>
             ) : rewards.length === 0 ? (
-              <tr><td colSpan={canManage ? 6 : 5} className="px-3 py-8 text-center text-odoo-text-muted">ບໍ່ມີຂໍ້ມູນ</td></tr>
+              <tr><td colSpan={canManage ? 7 : 6} className="px-3 py-8 text-center text-odoo-text-muted">ບໍ່ມີຂໍ້ມູນ</td></tr>
             ) : rewards.map((reward) => (
               <tr key={reward.rewardCode}>
                 <td className="px-3 py-2">
@@ -175,6 +191,18 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
                 <td className="px-3 py-2 text-xs">
                   {reward.brandCode ? `${reward.groupCode} · ${reward.brandCode}` : reward.groupCode}
                   <div className="text-odoo-text-muted">{reward.splitByShare ? "ແບ່ງຕາມ % ຍອດ" : "ຄົງທີ່/ຄົນ"}</div>
+                </td>
+                <td className="px-3 py-2">
+                  {canManage ? (
+                    <div className="grid gap-1">
+                      <input type="date" value={reward.effectiveFrom}
+                        onChange={(e) => patch(reward.rewardCode, { effectiveFrom: e.target.value })}
+                        className="odoo-input w-36 text-xs" />
+                      <input type="date" value={reward.effectiveTo}
+                        onChange={(e) => patch(reward.rewardCode, { effectiveTo: e.target.value })}
+                        className="odoo-input w-36 text-xs" />
+                    </div>
+                  ) : <span className="text-xs">{reward.effectiveFrom}<br />{reward.effectiveTo}</span>}
                 </td>
                 <td className="px-3 py-2 text-right">
                   {canManage ? (
@@ -226,10 +254,17 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
               className="odoo-input w-32">
               <option value="AIR">AIR (ແອ)</option>
               <option value="CE_SDA">CE_SDA</option>
+              <option value="ALL">ALL (ລວມທັງໝົດ)</option>
             </select>
             <BrandSelect value={draft.brandCode} placeholder="ແບຮນດ໌ (ທາງເລືອກ)"
               options={draft.groupCode === "AIR" ? brandData.air : brandData.other}
               onChange={(v) => setDraft({ ...draft, brandCode: v })} wrapClassName="w-32" />
+            <input type="date" value={draft.effectiveFrom}
+              onChange={(e) => setDraft({ ...draft, effectiveFrom: e.target.value })}
+              className="odoo-input w-36" />
+            <input type="date" value={draft.effectiveTo}
+              onChange={(e) => setDraft({ ...draft, effectiveTo: e.target.value })}
+              className="odoo-input w-36" />
             <input type="number" min="0" step="1000" placeholder="ເປົ້າ ฿" value={draft.targetAmount}
               onChange={(e) => setDraft({ ...draft, targetAmount: e.target.value })}
               className="odoo-input w-28 text-right" />
@@ -249,7 +284,7 @@ export default function RewardsEditor({ canManage }: { canManage: boolean }) {
         </div>
       ) : null}
       <p className="mt-2 text-xs text-odoo-text-muted">
-        ⚠️ ສູດການແບ່ງລາງວັນຍັງບໍ່ໄດ້ຢືນຢັນກັບ Excel — ເປີດໃຊ້ເມື່ອຢືນຢັນເງື່ອນໄຂແລ້ວ.
+        ລາງວັນຖືກນຳໃຊ້ສະເພາະເດືອນ/ຊ່ວງວັນທີ່ກຳນົດ ເພື່ອບໍ່ໃຫ້ rule ເດືອນໃໝ່ປ່ຽນລາຍງານເກົ່າ.
       </p>
     </section>
   );

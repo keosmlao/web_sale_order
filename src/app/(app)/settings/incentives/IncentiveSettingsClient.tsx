@@ -14,7 +14,7 @@ import PointmapCategoryEditor from "./PointmapCategoryEditor";
 import styles from "./incentives.module.css";
 
 type TabKey = "config" | "targets" | "rewards" | "points";
-type IconName = "sliders" | "target" | "gift" | "sparkles" | "ban" | "shield" | "chevron";
+type IconName = "sliders" | "target" | "gift" | "sparkles" | "ban" | "shield" | "chevron" | "calendar" | "download";
 
 const TABS: { key: TabKey; eyebrow: string; label: string; icon: IconName; hint: string; summary: string }[] = [
   { key: "config", eyebrow: "01 · ພື້ນຖານ", label: "ສູດ & ເປົ້າ", icon: "sliders", hint: "ກຳນົດກົດກາການຄຳນວນ Incentive", summary: "ໂບນັດ, ເກນຜົນງານ ແລະ ຄ່າຄອມ" },
@@ -32,11 +32,16 @@ function Icon({ name }: { name: IconName }) {
     ban: <><circle cx="12" cy="12" r="9" /><path d="m5.6 5.6 12.8 12.8" /></>,
     shield: <path d="M12 3 5 6v5c0 4.6 2.8 8 7 10 4.2-2 7-5.4 7-10V6l-7-3Zm-3 9 2 2 4-5" />,
     chevron: <path d="m9 18 6-6-6-6" />,
+    calendar: <><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M16 3v4M8 3v4M3 10h18" /></>,
+    download: <><path d="M12 3v12m0 0 4-4m-4 4-4-4" /><path d="M5 19h14" /></>,
   };
   return <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden>{paths[name]}</svg>;
 }
 
 export default function IncentiveSettingsClient({ canManage }: { canManage: boolean }) {
+  const now = new Date();
+  const [year, setYear] = useState(now.getFullYear());
+  const [month, setMonth] = useState(now.getMonth() + 1);
   const [tab, setTab] = useState<TabKey>("config");
   const [pointsTab, setPointsTab] = useState<"map" | "exclusions" | "categories">("map");
   const [pmVersion, setPmVersion] = useState(0);
@@ -47,7 +52,7 @@ export default function IncentiveSettingsClient({ canManage }: { canManage: bool
       <header className={styles.hero}>
         <div className={styles.heroGlow} />
         <div className={styles.heroTopline}>
-          <span className={styles.breadcrumb}>SETTINGS <span>/</span> INCENTIVES</span>
+          <span className={styles.breadcrumb}>ODIEN SALES OPERATIONS <span>/</span> SETTINGS</span>
           <span className={canManage ? styles.accessEdit : styles.accessRead}>
             <Icon name="shield" /> {canManage ? "ສາມາດແກ້ໄຂ" : "ອ່ານຢ່າງດຽວ"}
           </span>
@@ -55,12 +60,26 @@ export default function IncentiveSettingsClient({ canManage }: { canManage: bool
         <div className={styles.heroContent}>
           <div>
             <p className={styles.kicker}>INCENTIVE CONTROL CENTER</p>
-            <h1>ຈັດການແຮງຈູງໃຈ<br /><span>ໃຫ້ຊັດເຈນ ແລະ ເປັນທຳ</span></h1>
-            <p className={styles.heroCopy}>ສູນລວມການຕັ້ງຄ່າເປົ້າ, ຄ່າຄອມ, ລາງວັນ ແລະ ຄະແນນສິນຄ້າ ສຳລັບທີມຂາຍ.</p>
+            <h1>ສູນຄວບຄຸມ Incentive</h1>
+            <p className={styles.heroCopy}>ຈັດການເປົ້າຂາຍ, ຄ່າຄອມ, ລາງວັນ ແລະ Point Map ຂອງທີມຂາຍ.</p>
           </div>
-          <div className={styles.heroMark}><span>4</span><small>ກຸ່ມການຕັ້ງຄ່າ</small></div>
+          <div className={styles.heroMark}><small>WORKFLOWS</small><span>04</span><em>ກຸ່ມການຕັ້ງຄ່າ</em></div>
         </div>
+
       </header>
+
+      <section className={styles.periodBar} aria-label="ເລືອກເດືອນ Incentive">
+          <div className={styles.periodIntro}>
+            <span className={styles.periodIcon}><Icon name="calendar" /></span>
+            <div><small>INCENTIVE PERIOD</small><strong>ຮອບການຄຳນວນ</strong><span>ຂໍ້ມູນທຸກກຸ່ມຈະອີງຕາມເດືອນນີ້</span></div>
+          </div>
+          <div className={styles.periodFields}>
+            <label><span>ເດືອນ</span><select value={month} onChange={(event) => setMonth(Number(event.target.value))}>{Array.from({ length: 12 }, (_, index) => <option key={index + 1} value={index + 1}>{String(index + 1).padStart(2, "0")}</option>)}</select></label>
+            <label><span>ປີ</span><select value={year} onChange={(event) => setYear(Number(event.target.value))}>{Array.from({ length: 5 }, (_, index) => now.getFullYear() - 2 + index).map((value) => <option key={value} value={value}>{value}</option>)}</select></label>
+          </div>
+          <b className={styles.dateBadge}><small>ACTIVE</small>{String(month).padStart(2, "0")}<span>/</span>{year}</b>
+          <a className={styles.exportButton} href={`/api/incentives/export?year=${year}&month=${month}`}><Icon name="download" /><span>Export Excel</span></a>
+      </section>
 
       <nav className={styles.navGrid} aria-label="ກຸ່ມການຕັ້ງຄ່າ Incentive">
         {TABS.map((item) => {
@@ -87,22 +106,22 @@ export default function IncentiveSettingsClient({ canManage }: { canManage: bool
             <RoleCommissionEditor canManage={canManage} />
             <CommissionTierEditor canManage={canManage} />
           </div>
-          <div className={tab === "targets" ? styles.panelActive : styles.panelHidden}><TargetPivotEditor canManage={canManage} /></div>
-          <div className={tab === "rewards" ? `${styles.panelActive} ${styles.stack}` : styles.panelHidden}><RewardsEditor canManage={canManage} /><UnitRewardsEditor canManage={canManage} /></div>
+          <div className={tab === "targets" ? styles.panelActive : styles.panelHidden}><TargetPivotEditor key={`targets-${year}-${month}`} canManage={canManage} year={year} month={month} /></div>
+          <div className={tab === "rewards" ? `${styles.panelActive} ${styles.stack}` : styles.panelHidden}><RewardsEditor key={`rewards-${year}-${month}`} canManage={canManage} year={year} month={month} /><UnitRewardsEditor key={`units-${year}-${month}`} canManage={canManage} year={year} month={month} /></div>
           <div className={tab === "points" ? styles.panelActive : styles.panelHidden}>
             <div className={styles.subTabs} role="tablist" aria-label="ຄະແນນໂບນັດ">
               <button type="button" role="tab" aria-selected={pointsTab === "map"} onClick={() => setPointsTab("map")} className={pointsTab === "map" ? styles.subTabActive : styles.subTab}>
                 <Icon name="sparkles" /> ຄະແນນໂບນັດ (Point Map)
               </button>
               <button type="button" role="tab" aria-selected={pointsTab === "exclusions"} onClick={() => setPointsTab("exclusions")} className={pointsTab === "exclusions" ? styles.subTabActive : styles.subTab}>
-                <Icon name="ban" /> ສິນຄ້າຍົກເວັ້ນຄະແນນ (ບໍ່ນັບໂບນັດ)
+                <Icon name="ban" /> ສະຖານະສິນຄ້າ Min / Max / ບໍ່ຈ່າຍ
               </button>
               <button type="button" role="tab" aria-selected={pointsTab === "categories"} onClick={() => setPointsTab("categories")} className={pointsTab === "categories" ? styles.subTabActive : styles.subTab}>
                 <Icon name="sliders" /> ໝວດສິນຄ້າ (Category Map)
               </button>
             </div>
-            <div className={pointsTab === "map" ? "" : "hidden"}><PointMapEditor canManage={canManage} /></div>
-            <div className={pointsTab === "exclusions" ? "" : "hidden"}><NoBonusItemsEditor canManage={canManage} /></div>
+            <div className={pointsTab === "map" ? "" : "hidden"}><PointMapEditor key={`points-${year}-${month}`} canManage={canManage} year={year} month={month} /></div>
+            <div className={pointsTab === "exclusions" ? "" : "hidden"}><NoBonusItemsEditor key={`statuses-${year}-${month}`} canManage={canManage} year={year} month={month} /></div>
             <div className={pointsTab === "categories" ? `${styles.stack}` : "hidden"}>
               <PointmapCategoryEditor canManage={canManage} onChange={() => setPmVersion((v) => v + 1)} />
               <CategoryEditor canManage={canManage} pointmapVersion={pmVersion} />

@@ -4,27 +4,30 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 type Rule = { id: string; categoryCode: string; brandCode: string; designToken: string; sizeToken: string; effectiveFrom: string; effectiveTo: string; points: number; isSpecial: boolean };
 type Data = { categories: string[]; rows: Rule[]; options?: { categories: string[]; brands: string[]; designTokens: string[]; sizeTokens: string[] } };
-const today = () => new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Vientiane" }).format(new Date());
-const emptyDraft = { categoryCode: "", brandCode: "", designToken: "", sizeToken: "", effectiveFrom: today(), effectiveTo: today(), points: "", isSpecial: false };
+const monthRange = (year: number, month: number) => {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return { effectiveFrom: `${year}-${pad(month)}-01`, effectiveTo: `${year}-${pad(month)}-${pad(new Date(year, month, 0).getDate())}` };
+};
+const emptyDraft = (year: number, month: number) => ({ categoryCode: "", brandCode: "", designToken: "", sizeToken: "", ...monthRange(year, month), points: "", isSpecial: false });
 
-export default function PointMapEditor({ canManage }: { canManage: boolean }) {
+export default function PointMapEditor({ canManage, year, month }: { canManage: boolean; year: number; month: number }) {
   const [data, setData] = useState<Data | null>(null);
   const [category, setCategory] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [draft, setDraft] = useState(emptyDraft);
+  const [draft, setDraft] = useState(() => emptyDraft(year, month));
 
   const load = useCallback(async () => {
     setLoading(true); setError(null);
     try {
-      const response = await fetch("/api/incentives/point-map", { cache: "no-store" });
+      const response = await fetch(`/api/incentives/point-map?year=${year}&month=${month}`, { cache: "no-store" });
       const body = await response.json() as Data & { error?: string };
       if (!response.ok) throw new Error(body.error || `Error ${response.status}`);
       setData(body); setCategory((current) => current || body.categories[0] || "");
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Fetch failed"); }
     finally { setLoading(false); }
-  }, []);
+  }, [year, month]);
   useEffect(() => { Promise.resolve().then(() => void load()); }, [load]);
 
   const rows = useMemo(() => (data?.rows ?? []).filter((row) => row.categoryCode === category), [data, category]);
@@ -36,7 +39,7 @@ export default function PointMapEditor({ canManage }: { canManage: boolean }) {
       const response = await fetch("/api/incentives/point-map", { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...draft, points }) });
       const body = await response.json() as Data & { error?: string };
       if (!response.ok) throw new Error(body.error || `Error ${response.status}`);
-      setData(body); setCategory(draft.categoryCode); setDraft({ ...emptyDraft, effectiveFrom: today(), effectiveTo: today() });
+      await load(); setCategory(draft.categoryCode); setDraft(emptyDraft(year, month));
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Save failed"); }
     finally { setBusy(null); }
   }
@@ -45,7 +48,7 @@ export default function PointMapEditor({ canManage }: { canManage: boolean }) {
     try {
       const response = await fetch("/api/incentives/point-map", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
       const body = await response.json() as Data & { error?: string };
-      if (!response.ok) throw new Error(body.error || `Error ${response.status}`); setData(body);
+      if (!response.ok) throw new Error(body.error || `Error ${response.status}`); await load();
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Delete failed"); }
     finally { setBusy(null); }
   }

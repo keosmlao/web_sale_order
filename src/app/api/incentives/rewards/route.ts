@@ -5,10 +5,10 @@ import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
 
-// The eligibility roster only ever produces these two groups (product_group
-// AC -> AIR, CE/FZ -> CE_SDA), so a reward attached to anything else would have
-// no members. Constrain new rewards to the meaningful set.
-const REWARD_GROUPS: readonly string[] = ["AIR", "CE_SDA"];
+// ALL uses the complete monthly target roster and the whole department's
+// eligible walk-in sales. AIR / CE_SDA retain the product-group scopes.
+const REWARD_GROUPS: readonly string[] = ["ALL", "AIR", "CE_SDA"];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 type RewardRow = {
   reward_code: string;
@@ -19,6 +19,8 @@ type RewardRow = {
   reward_amount: string | number;
   split_by_share: boolean;
   is_active: boolean;
+  effective_from: string;
+  effective_to: string;
 };
 
 const canManage = (employee: Awaited<ReturnType<typeof getEmployeeFromRequest>>) => {
@@ -27,11 +29,15 @@ const canManage = (employee: Awaited<ReturnType<typeof getEmployeeFromRequest>>)
   return role === "manager" || role === "head";
 };
 
-async function listRewards() {
+async function listRewards(year = 0, month = 0) {
   const rows = await prisma.$queryRaw<RewardRow[]>`
     SELECT reward_code, description, group_code, brand_code,
-           target_amount, reward_amount, split_by_share, is_active
+           target_amount, reward_amount, split_by_share, is_active,
+           effective_from::text, effective_to::text
     FROM app_incentive_special_reward
+    WHERE (${year} = 0 OR ${month} = 0 OR
+      (effective_from < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+       AND effective_to >= make_date(${year}, ${month}, 1)))
     ORDER BY reward_code
   `;
   return {
@@ -44,6 +50,8 @@ async function listRewards() {
       rewardAmount: Number(r.reward_amount),
       splitByShare: r.split_by_share,
       isActive: r.is_active,
+      effectiveFrom: r.effective_from,
+      effectiveTo: r.effective_to,
     })),
   };
 }
@@ -52,7 +60,8 @@ export async function GET(request: NextRequest) {
   const employee = await getEmployeeFromRequest(request);
   if (!employee) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    return NextResponse.json(await listRewards());
+    const url = new URL(request.url);
+    return NextResponse.json(await listRewards(Number(url.searchParams.get("year")), Number(url.searchParams.get("month"))));
   } catch {
     return NextResponse.json(
       { error: "Reward table missing. Run sql/add-incentive-point-map.sql first." },
@@ -61,7 +70,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// Update one reward's active flag / target / amount (structural fields stay fixed).
+// Update one reward's active flag, target, amount and active date range.
 export async function PUT(request: NextRequest) {
   const employee = await getEmployeeFromRequest(request);
   if (!canManage(employee)) {
@@ -72,10 +81,13 @@ export async function PUT(request: NextRequest) {
   const isActive = Boolean(body?.isActive);
   const targetAmount = Number(body?.targetAmount);
   const rewardAmount = Number(body?.rewardAmount);
+  const effectiveFrom = String(body?.effectiveFrom ?? "");
+  const effectiveTo = String(body?.effectiveTo ?? "");
   if (
     !rewardCode ||
     !Number.isFinite(targetAmount) || targetAmount < 0 ||
-    !Number.isFinite(rewardAmount) || rewardAmount < 0
+    !Number.isFinite(rewardAmount) || rewardAmount < 0 ||
+    !DATE_RE.test(effectiveFrom) || !DATE_RE.test(effectiveTo) || effectiveTo < effectiveFrom
   ) {
     return NextResponse.json({ error: "ຂໍ້ມູນເງິນພິເສດບໍ່ຖືກຕ້ອງ" }, { status: 400 });
   }
@@ -83,7 +95,9 @@ export async function PUT(request: NextRequest) {
     UPDATE app_incentive_special_reward
     SET is_active = ${isActive},
         target_amount = ${targetAmount},
-        reward_amount = ${rewardAmount}
+        reward_amount = ${rewardAmount},
+        effective_from = ${effectiveFrom}::date,
+        effective_to = ${effectiveTo}::date
     WHERE reward_code = ${rewardCode}
   `;
   if (updated === 0) {
@@ -107,14 +121,17 @@ export async function POST(request: NextRequest) {
   const rewardAmount = Number(body?.rewardAmount);
   const splitByShare = Boolean(body?.splitByShare);
   const isActive = body?.isActive === undefined ? true : Boolean(body?.isActive);
+  const effectiveFrom = String(body?.effectiveFrom ?? "");
+  const effectiveTo = String(body?.effectiveTo ?? "");
   if (
     !description ||
     !REWARD_GROUPS.includes(groupCode) ||
     !Number.isFinite(targetAmount) || targetAmount < 0 ||
-    !Number.isFinite(rewardAmount) || rewardAmount < 0
+    !Number.isFinite(rewardAmount) || rewardAmount < 0 ||
+    !DATE_RE.test(effectiveFrom) || !DATE_RE.test(effectiveTo) || effectiveTo < effectiveFrom
   ) {
     return NextResponse.json(
-      { error: "ຂໍ້ມູນບໍ່ຖືກຕ້ອງ — ຕ້ອງມີຄຳອະທິບາຍ ແລະ ເລືອກ group (AIR/CE_SDA)" },
+      { error: "ຂໍ້ມູນບໍ່ຖືກຕ້ອງ — ຕ້ອງມີຄຳອະທິບາຍ, group ແລະຊ່ວງວັນທີ" },
       { status: 400 },
     );
   }
@@ -122,9 +139,11 @@ export async function POST(request: NextRequest) {
   await prisma.$executeRaw`
     INSERT INTO app_incentive_special_reward
       (reward_code, description, group_code, brand_code,
-       target_amount, reward_amount, split_by_share, is_active)
+       target_amount, reward_amount, split_by_share, is_active,
+       effective_from, effective_to)
     VALUES (${rewardCode}, ${description}, ${groupCode}, ${brandCode},
-            ${targetAmount}, ${rewardAmount}, ${splitByShare}, ${isActive})
+            ${targetAmount}, ${rewardAmount}, ${splitByShare}, ${isActive},
+            ${effectiveFrom}::date, ${effectiveTo}::date)
   `;
   return NextResponse.json(await listRewards());
 }

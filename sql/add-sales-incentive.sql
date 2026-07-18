@@ -30,11 +30,38 @@ CREATE TABLE IF NOT EXISTS app_incentive_brand_weight (
 );
 
 CREATE TABLE IF NOT EXISTS app_incentive_product_status (
-  item_code varchar(50) PRIMARY KEY,
+  item_code varchar(50) NOT NULL,
   status_code varchar(40) NOT NULL DEFAULT 'current',
   weight numeric(8,4) NOT NULL DEFAULT 1,
   note text,
-  updated_at timestamptz NOT NULL DEFAULT now()
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  effective_from date NOT NULL DEFAULT DATE '2026-01-01',
+  effective_to date NOT NULL DEFAULT DATE '2099-12-31',
+  PRIMARY KEY (item_code),
+  CHECK (effective_to >= effective_from)
+);
+
+-- Keep legacy/current status rows single-valued for older deployed clients.
+ALTER TABLE app_incentive_product_status
+  ADD COLUMN IF NOT EXISTS effective_from date NOT NULL DEFAULT DATE '2026-01-01',
+  ADD COLUMN IF NOT EXISTS effective_to date NOT NULL DEFAULT DATE '2099-12-31';
+
+ALTER TABLE app_incentive_product_status
+  DROP CONSTRAINT IF EXISTS app_incentive_product_status_effective_dates_check;
+ALTER TABLE app_incentive_product_status
+  ADD CONSTRAINT app_incentive_product_status_effective_dates_check
+  CHECK (effective_to >= effective_from);
+
+CREATE TABLE IF NOT EXISTS app_incentive_product_status_rule (
+  item_code varchar(50) NOT NULL,
+  status_code varchar(40) NOT NULL DEFAULT 'current',
+  weight numeric(8,4) NOT NULL DEFAULT 1,
+  note text,
+  effective_from date NOT NULL,
+  effective_to date NOT NULL,
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (item_code, effective_from),
+  CHECK (effective_to >= effective_from)
 );
 
 CREATE TABLE IF NOT EXISTS app_incentive_gp_tier (
@@ -57,6 +84,8 @@ CREATE TABLE IF NOT EXISTS app_incentive_target (
 
 CREATE INDEX IF NOT EXISTS app_incentive_product_status_weight_idx
   ON app_incentive_product_status (weight);
+CREATE INDEX IF NOT EXISTS app_incentive_product_status_period_idx
+  ON app_incentive_product_status_rule (item_code, effective_from, effective_to);
 CREATE INDEX IF NOT EXISTS app_incentive_target_period_idx
   ON app_incentive_target (year, month);
 
@@ -81,7 +110,8 @@ ON CONFLICT (category_code) DO UPDATE SET
   group_code = EXCLUDED.group_code;
 
 -- Product overrides present in Product_Status in the supplied workbook.
-INSERT INTO app_incentive_product_status (item_code, status_code, weight, note) VALUES
+INSERT INTO app_incentive_product_status
+  (item_code, status_code, weight, note) VALUES
   ('110104-0585', 'special_no_bonus', 0, 'Imported from workbook Product_Status'),
   ('110102-0375', 'special_no_bonus', 0, 'Imported from workbook Product_Status'),
   ('110101-0929', 'special_min_bonus', 0.5, 'Imported from workbook Product_Status')
@@ -90,6 +120,15 @@ ON CONFLICT (item_code) DO UPDATE SET
   weight = EXCLUDED.weight,
   note = EXCLUDED.note,
   updated_at = now();
+
+INSERT INTO app_incentive_product_status_rule
+  (item_code, status_code, weight, note, effective_from, effective_to) VALUES
+  ('110104-0585', 'special_no_bonus', 0, 'Imported from workbook Product_Status', DATE '2026-06-01', DATE '2026-06-30'),
+  ('110102-0375', 'special_no_bonus', 0, 'Imported from workbook Product_Status', DATE '2026-06-01', DATE '2026-06-30'),
+  ('110101-0929', 'special_min_bonus', 0.5, 'Imported from workbook Product_Status', DATE '2026-06-01', DATE '2026-06-30')
+ON CONFLICT (item_code, effective_from) DO UPDATE SET
+  status_code=EXCLUDED.status_code, weight=EXCLUDED.weight,
+  note=EXCLUDED.note, effective_to=EXCLUDED.effective_to, updated_at=now();
 
 -- Monthly targets copied from Config_Weights, section 8.3 (THB).
 INSERT INTO app_incentive_target (year, month, group_code, group_target, staff_count) VALUES

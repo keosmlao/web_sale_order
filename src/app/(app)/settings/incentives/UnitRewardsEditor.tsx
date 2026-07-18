@@ -16,9 +16,19 @@ type UnitReward = {
   highMinQty: number;
   highReward: number;
   isActive: boolean;
+  effectiveFrom: string;
+  effectiveTo: string;
 };
 
-const emptyDraft = {
+function monthRange(year: number, month: number) {
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return {
+    effectiveFrom: `${year}-${pad(month)}-01`,
+    effectiveTo: `${year}-${pad(month)}-${pad(new Date(year, month, 0).getDate())}`,
+  };
+}
+
+const emptyDraft = (year: number, month: number) => ({
   description: "",
   groupCode: "AIR",
   brandCode: "",
@@ -27,14 +37,15 @@ const emptyDraft = {
   lowReward: "",
   highMinQty: "",
   highReward: "",
-};
+  ...monthRange(year, month),
+});
 
-export default function UnitRewardsEditor({ canManage }: { canManage: boolean }) {
+export default function UnitRewardsEditor({ canManage, year, month }: { canManage: boolean; year: number; month: number }) {
   const [rewards, setRewards] = useState<UnitReward[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [draft, setDraft] = useState(emptyDraft);
+  const [draft, setDraft] = useState(() => emptyDraft(year, month));
   const [brandData, setBrandData] = useState<{ air: string[]; other: string[] }>({ air: [], other: [] });
   const allBrands = Array.from(new Set([...brandData.air, ...brandData.other])).sort();
 
@@ -42,7 +53,7 @@ export default function UnitRewardsEditor({ canManage }: { canManage: boolean })
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch("/api/incentives/unit-rewards", { cache: "no-store" });
+      const res = await fetch(`/api/incentives/unit-rewards?year=${year}&month=${month}`, { cache: "no-store" });
       const body = (await res.json()) as { rewards: UnitReward[]; error?: string };
       if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
       setRewards(body.rewards);
@@ -51,7 +62,7 @@ export default function UnitRewardsEditor({ canManage }: { canManage: boolean })
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [year, month]);
 
   useEffect(() => {
     Promise.resolve().then(() => void load());
@@ -78,17 +89,20 @@ export default function UnitRewardsEditor({ canManage }: { canManage: boolean })
         body: JSON.stringify({
           rewardCode: reward.rewardCode,
           isActive: reward.isActive,
+          groupCode: reward.groupCode,
           brandCode: reward.brandCode ?? "",
           itemMatch: reward.itemMatch ?? "",
           lowMinQty: reward.lowMinQty,
           lowReward: reward.lowReward,
           highMinQty: reward.highMinQty,
           highReward: reward.highReward,
+          effectiveFrom: reward.effectiveFrom,
+          effectiveTo: reward.effectiveTo,
         }),
       });
       const body = (await res.json()) as { rewards: UnitReward[]; error?: string };
       if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
-      setRewards(body.rewards);
+      await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Save failed");
     } finally {
@@ -112,12 +126,14 @@ export default function UnitRewardsEditor({ canManage }: { canManage: boolean })
           lowReward: Number(draft.lowReward) || 0,
           highMinQty: Number(draft.highMinQty) || 0,
           highReward: Number(draft.highReward) || 0,
+          effectiveFrom: draft.effectiveFrom,
+          effectiveTo: draft.effectiveTo,
         }),
       });
       const body = (await res.json()) as { rewards: UnitReward[]; error?: string };
       if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
-      setRewards(body.rewards);
-      setDraft(emptyDraft);
+      await load();
+      setDraft(emptyDraft(year, month));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Create failed");
     } finally {
@@ -135,7 +151,7 @@ export default function UnitRewardsEditor({ canManage }: { canManage: boolean })
       });
       const body = (await res.json()) as { rewards: UnitReward[]; error?: string };
       if (!res.ok) throw new Error(body.error || `Error ${res.status}`);
-      setRewards(body.rewards);
+      await load();
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Delete failed");
     } finally {
@@ -176,32 +192,42 @@ export default function UnitRewardsEditor({ canManage }: { canManage: boolean })
       </datalist>
 
       <div className="incentive-table-wrap overflow-x-auto">
-        <table className="odoo-table incentive-data-table min-w-[880px]">
+        <table className="odoo-table incentive-data-table min-w-[1120px]">
           <thead>
             <tr>
               <th className="px-3 py-2">ລາງວັນ</th>
+              <th className="px-3 py-2">ກຸ່ມ</th>
               <th className="px-3 py-2">ແບຮນດ໌</th>
               <th className="px-3 py-2">ຮຸ່ນ (ລະຫັດ/ຊື່)</th>
               <th className="px-3 py-2 text-right">ຂັ້ນຕ່ຳ ≥ (ຊຸດ)</th>
               <th className="px-3 py-2 text-right">฿/ຊຸດ</th>
               <th className="px-3 py-2 text-right">ຂັ້ນສູງ ≥ (ຊຸດ)</th>
               <th className="px-3 py-2 text-right">฿/ຊຸດ</th>
+              <th className="px-3 py-2">ໄລຍະນຳໃຊ້</th>
               <th className="px-3 py-2 text-center">ເປີດໃຊ້</th>
               {canManage ? <th className="px-3 py-2 text-right">ຈັດການ</th> : null}
             </tr>
           </thead>
           <tbody className="divide-y divide-odoo-border">
             {loading ? (
-              <tr><td colSpan={canManage ? 9 : 8} className="px-3 py-8 text-center text-odoo-text-muted">ກຳລັງໂຫລດ…</td></tr>
+              <tr><td colSpan={canManage ? 11 : 10} className="px-3 py-8 text-center text-odoo-text-muted">ກຳລັງໂຫລດ…</td></tr>
             ) : rewards.length === 0 ? (
-              <tr><td colSpan={canManage ? 9 : 8} className="px-3 py-8 text-center text-odoo-text-muted">ບໍ່ມີຂໍ້ມູນ</td></tr>
+              <tr><td colSpan={canManage ? 11 : 10} className="px-3 py-8 text-center text-odoo-text-muted">ບໍ່ມີຂໍ້ມູນ</td></tr>
             ) : rewards.map((reward) => (
               <tr key={reward.rewardCode}>
                 <td className="px-3 py-2">
                   <div className="font-bold text-odoo-text-strong">{reward.description}</div>
-                  <div className="font-mono text-[10px] text-odoo-text-muted">
-                    {reward.rewardCode} · {reward.groupCode}
-                  </div>
+                  <div className="font-mono text-[10px] text-odoo-text-muted">{reward.rewardCode}</div>
+                </td>
+                <td className="px-3 py-2">
+                  {canManage ? (
+                    <select value={reward.groupCode}
+                      onChange={(e) => patch(reward.rewardCode, { groupCode: e.target.value })}
+                      className="odoo-input w-28 text-xs">
+                      <option value="AIR">AIR</option>
+                      <option value="CE_SDA">CE_SDA</option>
+                    </select>
+                  ) : <span className="font-mono text-xs">{reward.groupCode}</span>}
                 </td>
                 <td className="px-3 py-2">
                   {canManage ? (
@@ -244,6 +270,18 @@ export default function UnitRewardsEditor({ canManage }: { canManage: boolean })
                       onChange={(e) => patch(reward.rewardCode, { highReward: Number(e.target.value) })}
                       className="odoo-input w-24 text-right" />
                   ) : <span className="font-mono">{reward.highReward}</span>}
+                </td>
+                <td className="px-3 py-2">
+                  {canManage ? (
+                    <div className="grid gap-1">
+                      <input type="date" value={reward.effectiveFrom}
+                        onChange={(e) => patch(reward.rewardCode, { effectiveFrom: e.target.value })}
+                        className="odoo-input w-36 text-xs" />
+                      <input type="date" value={reward.effectiveTo}
+                        onChange={(e) => patch(reward.rewardCode, { effectiveTo: e.target.value })}
+                        className="odoo-input w-36 text-xs" />
+                    </div>
+                  ) : <span className="text-xs">{reward.effectiveFrom}<br />{reward.effectiveTo}</span>}
                 </td>
                 <td className="px-3 py-2 text-center">
                   <input type="checkbox" checked={reward.isActive} disabled={!canManage}
@@ -288,6 +326,12 @@ export default function UnitRewardsEditor({ canManage }: { canManage: boolean })
             <input placeholder="ຮຸ່ນ (ທາງເລືອກ)" value={draft.itemMatch}
               onChange={(e) => setDraft({ ...draft, itemMatch: e.target.value })}
               className="odoo-input w-32" />
+            <input type="date" value={draft.effectiveFrom}
+              onChange={(e) => setDraft({ ...draft, effectiveFrom: e.target.value })}
+              className="odoo-input w-36" />
+            <input type="date" value={draft.effectiveTo}
+              onChange={(e) => setDraft({ ...draft, effectiveTo: e.target.value })}
+              className="odoo-input w-36" />
             <input type="number" min="0" step="1" placeholder="ຂັ້ນຕ່ຳ" value={draft.lowMinQty}
               onChange={(e) => setDraft({ ...draft, lowMinQty: e.target.value })}
               className="odoo-input w-20 text-right" />

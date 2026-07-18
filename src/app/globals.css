@@ -7341,6 +7341,48 @@ a {
 }
 
 /* ============================================================
+   Per-warehouse transport picker — shown in the delivery block only
+   when a cart is dispatched from more than one warehouse. One row per
+   warehouse: name on the left, transport dropdown on the right.
+   ============================================================ */
+.pos-wh-transport {
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--surface-2, #f9fafb);
+}
+.pos-wh-transport-hint {
+  margin: 2px 0 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--muted, #6b7280);
+}
+.pos-wh-transport-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pos-wh-transport-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
+  align-items: center;
+  gap: 10px;
+}
+.pos-wh-transport-name {
+  font-size: 13px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 640px) {
+  .pos-wh-transport-row {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+}
+
+/* ============================================================
    Product picker — compact list rows on phones. The desktop grid
    of tall cards becomes a single-column list: name/code left,
    stock + price right, everything on one row.

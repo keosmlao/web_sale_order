@@ -44,6 +44,10 @@ type UnitRewardMemberRow = {
   units: string | number | null;
 };
 
+type DepartmentTotalRow = {
+  sales_amount: string | number | null;
+};
+
 const number = (value: string | number | bigint | null | undefined) =>
   Number(value ?? 0) || 0;
 
@@ -77,7 +81,7 @@ export async function GET(request: NextRequest) {
   const month = Number.isInteger(mo) && mo >= 1 && mo <= 12 ? mo : current.month;
 
   try {
-    const [rows, unitRows] = await Promise.all([
+    const [rows, unitRows, departmentTotalRows] = await Promise.all([
       prisma.$queryRaw<RewardMemberRow[]>`
       WITH roster AS (
         -- This month's target roster, one row per person, grouped the same way
@@ -116,7 +120,7 @@ export async function GET(request: NextRequest) {
         COALESCE(NULLIF(e.fullname_lo, ''), NULLIF(e.nickname, ''), r.emp_code) AS emp_name,
         COALESCE(s.amount, 0) AS amount
       FROM app_incentive_special_reward rw
-      LEFT JOIN roster r ON r.group_code = rw.group_code
+      LEFT JOIN roster r ON rw.group_code = 'ALL' OR r.group_code = rw.group_code
       LEFT JOIN odg_employee e ON e.employee_code = r.emp_code
       LEFT JOIN LATERAL (
         -- This member's month-to-date walk-in sales, optionally restricted to
@@ -135,6 +139,8 @@ export async function GET(request: NextRequest) {
             OR UPPER(COALESCE(sd.item_brand, '')) = UPPER(rw.brand_code)
           )
       ) s ON true
+      WHERE rw.effective_from < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+        AND rw.effective_to >= make_date(${year}, ${month}, 1)
       ORDER BY rw.reward_code, amount DESC
     `,
       // Unit-count spiffs (workbook ④/⑤) — per person, tiered per-unit pay.
@@ -202,8 +208,21 @@ export async function GET(request: NextRequest) {
             END
           )
       ) s ON true
+      WHERE ur.effective_from < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+        AND ur.effective_to >= make_date(${year}, ${month}, 1)
       ORDER BY ur.reward_code, units DESC
     `.catch(() => [] as UnitRewardMemberRow[]),
+      prisma.$queryRaw<DepartmentTotalRow[]>`
+      SELECT COALESCE(SUM(sd.sum_amount), 0) AS sales_amount
+      FROM odg_sale_detail sd
+      LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
+      WHERE sd.branch_code = '01'
+        AND sd.argroup_main = '101'
+        AND sd.doc_date >= make_date(${year}, ${month}, 1)
+        AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+        AND COALESCE(cat.is_active, true)
+        AND sd.item_code NOT LIKE '97%'
+    `,
     ]);
 
     // Assemble per-reward aggregates from the member rows.
@@ -221,7 +240,10 @@ export async function GET(request: NextRequest) {
       const members = memberRows
         .filter((row) => row.emp_code !== null)
         .map((row) => ({ code: row.emp_code!, name: row.emp_name ?? row.emp_code!, amount: number(row.amount) }));
-      const current = members.reduce((sum, m) => sum + m.amount, 0);
+      const memberCurrent = members.reduce((sum, m) => sum + m.amount, 0);
+      const current = meta.group_code === "ALL" && !meta.brand_code
+        ? number(departmentTotalRows[0]?.sales_amount)
+        : memberCurrent;
       const mine = members.find((m) => m.code === myCode)?.amount ?? 0;
       // Whether the caller belongs to this reward's target roster — i.e. they
       // received the matching monthly target (AC target → AIR rewards like
@@ -230,7 +252,7 @@ export async function GET(request: NextRequest) {
       const mineEligible = members.some((m) => m.code === myCode);
       // A member's slice of the department total — for split_by_share rewards
       // this is exactly the share of the pot they would be paid.
-      const shareOf = (amount: number) => (current > 0 ? amount / current : 0);
+      const shareOf = (amount: number) => (memberCurrent > 0 ? amount / memberCurrent : 0);
       return {
         code: meta.reward_code,
         description: meta.description,
