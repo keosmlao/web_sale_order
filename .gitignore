@@ -25,6 +25,9 @@
 ._*
 *.pem
 
+# editor settings — local to each machine
+.vscode/
+
 # debug
 npm-debug.log*
 yarn-debug.log*
