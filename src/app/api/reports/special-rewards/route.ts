@@ -1,8 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
+import {
+  EXCLUDED_DOC_FORMATS,
+  EXCLUDED_SALE_GROUP,
+  TARGET_ITEM_MAIN_GROUPS,
+} from "@/lib/sales-scope";
 
 // Special department rewards (workbook "🎁 ລາງວັນພິເສດ") with the department's
 // live month-to-date progress toward each target. The home page shows every
@@ -79,6 +85,12 @@ export async function GET(request: NextRequest) {
   const mo = Number(url.searchParams.get("month"));
   const year = Number.isInteger(yr) && yr >= 2020 && yr <= 2100 ? yr : current.year;
   const month = Number.isInteger(mo) && mo >= 1 && mo <= 12 ? mo : current.month;
+
+  // The department total is compared against the monthly retail target, so it
+  // has to be scoped exactly like the branch's own sales workbook — target
+  // product groups only, storefront channel only. See @/lib/sales-scope.
+  const targetGroups = Prisma.join([...TARGET_ITEM_MAIN_GROUPS]);
+  const excludedDocFormats = Prisma.join([...EXCLUDED_DOC_FORMATS]);
 
   try {
     const [rows, unitRows, departmentTotalRows] = await Promise.all([
@@ -218,6 +230,9 @@ export async function GET(request: NextRequest) {
       LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
       WHERE sd.branch_code = '01'
         AND sd.argroup_main = '101'
+        AND sd.itemmaingroup IN (${targetGroups})
+        AND COALESCE(sd.sale_group_name, '') <> ${EXCLUDED_SALE_GROUP}
+        AND sd.doc_format_code NOT IN (${excludedDocFormats})
         AND sd.doc_date >= make_date(${year}, ${month}, 1)
         AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
         AND COALESCE(cat.is_active, true)
