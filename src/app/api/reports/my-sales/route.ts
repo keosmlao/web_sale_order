@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
+import { targetSalesScope } from "@/lib/sales-scope";
 
 type Totals = { sales: string | number | null; qty: string | number | null; target: string | number | null };
 type DailyRow = { d: Date; sales: string | number; qty: string | number };
@@ -27,6 +28,11 @@ export async function GET(request: NextRequest) {
   const year = Number.isInteger(yr) && yr >= 2020 && yr <= 2100 ? yr : current.year;
   const month = Number.isInteger(mo) && mo >= 1 && mo <= 12 ? mo : current.month;
 
+  // Every figure here is read against a monthly retail target, so it carries
+  // the same scope the branch's own workbook uses. See @/lib/sales-scope.
+  const scopeSd = targetSalesScope("sd");
+  const scopeDetail = targetSalesScope("detail");
+
   try {
     // Every salename that belongs to this employee: their roster name plus any alias.
     const [totalsRows, daily, categories, emp, rankRows] = await Promise.all([
@@ -38,11 +44,13 @@ export async function GET(request: NextRequest) {
         SELECT
           (SELECT COALESCE(SUM(sd.sum_amount), 0) FROM odg_sale_detail sd
              WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+               ${scopeSd}
                AND sd.doc_date >= make_date(${year}, ${month}, 1)
                AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
                AND sd.salename IN (SELECT sn FROM names)) AS sales,
           (SELECT COALESCE(SUM(sd.qty), 0) FROM odg_sale_detail sd
              WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+               ${scopeSd}
                AND sd.doc_date >= make_date(${year}, ${month}, 1)
                AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
                AND sd.salename IN (SELECT sn FROM names)) AS qty,
@@ -58,6 +66,7 @@ export async function GET(request: NextRequest) {
         SELECT sd.doc_date AS d, SUM(sd.sum_amount) AS sales, SUM(sd.qty) AS qty
         FROM odg_sale_detail sd
         WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+          ${scopeSd}
           AND sd.doc_date >= make_date(${year}, ${month}, 1)
           AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
           AND sd.salename IN (SELECT sn FROM names)
@@ -72,6 +81,7 @@ export async function GET(request: NextRequest) {
                SUM(sd.sum_amount) AS sales, SUM(sd.qty) AS qty
         FROM odg_sale_detail sd
         WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+          ${scopeSd}
           AND sd.doc_date >= make_date(${year}, ${month}, 1)
           AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
           AND sd.salename IN (SELECT sn FROM names)
@@ -93,6 +103,7 @@ export async function GET(request: NextRequest) {
             ) q ORDER BY pr, employee_code LIMIT 1
           ) emp ON true
           WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+            ${scopeSd}
             AND sd.doc_date >= make_date(${year}, ${month}, 1)
             AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
             AND emp.employee_code IS NOT NULL
@@ -121,56 +132,35 @@ export async function GET(request: NextRequest) {
     const role = roleFromEmployee(employee);
 
     // Supervisors normally do not carry a personal retail target. Keep the
-    // comparison visible on their homepage by showing the full targeted team.
+    // comparison visible on their homepage by showing the whole storefront:
+    // every seller in scope, not just the ones who were given a target. A
+    // leaver's credit note still belongs to the month the branch reports, and
+    // this keeps the card equal to the department reward card.
     if (target <= 0 && (role === "manager" || role === "head")) {
       const [teamRows, teamDailyRows] = await Promise.all([prisma.$queryRaw<Totals[]>`
-        WITH roster AS (
-          SELECT DISTINCT emp_code
-          FROM odg_retail_target_employee
-          WHERE year = ${year.toString()}
-            AND LPAD(month, 2, '0') = LPAD(${month.toString()}, 2, '0')
-        ), names AS (
-          SELECT employee.employee_code, employee.fullname_lo AS salename
-          FROM odg_employee employee JOIN roster ON roster.emp_code = employee.employee_code
-          WHERE COALESCE(employee.fullname_lo, '') <> ''
-          UNION
-          SELECT alias.employee_code, alias.salename
-          FROM app_incentive_sale_alias alias JOIN roster ON roster.emp_code = alias.employee_code
-        )
         SELECT
           COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
             WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+              ${scopeDetail}
               AND detail.doc_date >= make_date(${year}, ${month}, 1)
-              AND detail.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
-              AND detail.salename IN (SELECT salename FROM names)), 0) AS sales,
+              AND detail.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'), 0) AS sales,
           COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
             WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+              ${scopeDetail}
               AND detail.doc_date >= make_date(${year}, ${month}, 1)
-              AND detail.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
-              AND detail.salename IN (SELECT salename FROM names)), 0) AS qty,
+              AND detail.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'), 0) AS qty,
           COALESCE((SELECT SUM(employee_target.target) FROM odg_retail_target_employee employee_target
             WHERE employee_target.year = ${year.toString()}
               AND LPAD(employee_target.month, 2, '0') = LPAD(${month.toString()}, 2, '0')), 0) AS target
       `, prisma.$queryRaw<DailyRow[]>`
-        WITH roster AS (
-          SELECT DISTINCT emp_code FROM odg_retail_target_employee
-          WHERE year = ${year.toString()}
-            AND LPAD(month, 2, '0') = LPAD(${month.toString()}, 2, '0')
-        ), names AS (
-          SELECT employee.fullname_lo AS salename
-          FROM odg_employee employee JOIN roster ON roster.emp_code = employee.employee_code
-          WHERE COALESCE(employee.fullname_lo, '') <> ''
-          UNION SELECT alias.salename FROM app_incentive_sale_alias alias
-          JOIN roster ON roster.emp_code = alias.employee_code
-        )
         SELECT detail.doc_date::date AS d,
                COALESCE(SUM(detail.sum_amount), 0) AS sales,
                COALESCE(SUM(detail.qty), 0) AS qty
         FROM odg_sale_detail detail
         WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+          ${scopeDetail}
           AND detail.doc_date >= make_date(${year}, ${month}, 1)
           AND detail.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
-          AND detail.salename IN (SELECT salename FROM names)
         GROUP BY detail.doc_date::date ORDER BY d
       `]);
       const team = teamRows[0];

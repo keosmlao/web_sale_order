@@ -1,14 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
-import {
-  EXCLUDED_DOC_FORMATS,
-  EXCLUDED_SALE_GROUP,
-  TARGET_ITEM_MAIN_GROUPS,
-} from "@/lib/sales-scope";
+import { targetSalesScope } from "@/lib/sales-scope";
 
 // Special department rewards (workbook "🎁 ລາງວັນພິເສດ") with the department's
 // live month-to-date progress toward each target. The home page shows every
@@ -50,8 +45,8 @@ type UnitRewardMemberRow = {
   units: string | number | null;
 };
 
-type DepartmentTotalRow = {
-  sales_amount: string | number | null;
+type OtherSellersRow = {
+  amount: string | number | null;
 };
 
 const number = (value: string | number | bigint | null | undefined) =>
@@ -87,13 +82,11 @@ export async function GET(request: NextRequest) {
   const month = Number.isInteger(mo) && mo >= 1 && mo <= 12 ? mo : current.month;
 
   // The department total is compared against the monthly retail target, so it
-  // has to be scoped exactly like the branch's own sales workbook — target
-  // product groups only, storefront channel only. See @/lib/sales-scope.
-  const targetGroups = Prisma.join([...TARGET_ITEM_MAIN_GROUPS]);
-  const excludedDocFormats = Prisma.join([...EXCLUDED_DOC_FORMATS]);
+  // has to be scoped exactly like the branch's own sales workbook.
+  const salesScope = targetSalesScope("sd");
 
   try {
-    const [rows, unitRows, departmentTotalRows] = await Promise.all([
+    const [rows, unitRows, otherRows] = await Promise.all([
       prisma.$queryRaw<RewardMemberRow[]>`
       WITH roster AS (
         -- This month's target roster, one row per person, grouped the same way
@@ -144,6 +137,7 @@ export async function GET(request: NextRequest) {
         WHERE n.emp_code = r.emp_code
           AND sd.branch_code = '01'
           AND sd.argroup_main = '101'
+          ${salesScope}
           AND sd.doc_date >= make_date(${year}, ${month}, 1)
           AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
           AND (
@@ -224,21 +218,35 @@ export async function GET(request: NextRequest) {
         AND ur.effective_to >= make_date(${year}, ${month}, 1)
       ORDER BY ur.reward_code, units DESC
     `.catch(() => [] as UnitRewardMemberRow[]),
-      prisma.$queryRaw<DepartmentTotalRow[]>`
-      SELECT COALESCE(SUM(sd.sum_amount), 0) AS sales_amount
+      // Storefront sales booked by someone who is NOT on this month's target
+      // roster — a leaver's credit note, a seller who moved to another channel
+      // mid-month. Small, and usually negative, but it is part of what the
+      // department actually rang up, so the department-wide reward counts it
+      // and the breakdown shows it on its own line.
+      prisma.$queryRaw<OtherSellersRow[]>`
+      WITH roster AS (
+        SELECT DISTINCT emp_code FROM odg_retail_target_employee
+        WHERE year = ${year.toString()}
+          AND LPAD(month, 2, '0') = LPAD(${month.toString()}, 2, '0')
+      ), names AS (
+        SELECT e.fullname_lo AS salename FROM roster r
+        JOIN odg_employee e ON e.employee_code = r.emp_code
+        WHERE COALESCE(e.fullname_lo, '') <> ''
+        UNION
+        SELECT a.salename FROM roster r
+        JOIN app_incentive_sale_alias a ON a.employee_code = r.emp_code
+      )
+      SELECT COALESCE(SUM(sd.sum_amount), 0) AS amount
       FROM odg_sale_detail sd
-      LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
       WHERE sd.branch_code = '01'
         AND sd.argroup_main = '101'
-        AND sd.itemmaingroup IN (${targetGroups})
-        AND COALESCE(sd.sale_group_name, '') <> ${EXCLUDED_SALE_GROUP}
-        AND sd.doc_format_code NOT IN (${excludedDocFormats})
+        ${salesScope}
         AND sd.doc_date >= make_date(${year}, ${month}, 1)
         AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
-        AND COALESCE(cat.is_active, true)
-        AND sd.item_code NOT LIKE '97%'
+        AND (sd.salename IS NULL OR sd.salename NOT IN (SELECT salename FROM names))
     `,
     ]);
+    const otherSellers = number(otherRows[0]?.amount);
 
     // Assemble per-reward aggregates from the member rows.
     const byReward = new Map<string, RewardMemberRow[]>();
@@ -256,9 +264,13 @@ export async function GET(request: NextRequest) {
         .filter((row) => row.emp_code !== null)
         .map((row) => ({ code: row.emp_code!, name: row.emp_name ?? row.emp_code!, amount: number(row.amount) }));
       const memberCurrent = members.reduce((sum, m) => sum + m.amount, 0);
-      const current = meta.group_code === "ALL" && !meta.brand_code
-        ? number(departmentTotalRows[0]?.sales_amount)
-        : memberCurrent;
+      // The department-wide reward measures everything the storefront rang up,
+      // roster or not; a brand / group reward stays on its own roster. Either
+      // way the breakdown below lists every row that went into this figure, so
+      // the header always equals the sum of the lines under it.
+      const countsOtherSellers = meta.group_code === "ALL" && !meta.brand_code;
+      const other = countsOtherSellers ? otherSellers : 0;
+      const current = memberCurrent + other;
       const mine = members.find((m) => m.code === myCode)?.amount ?? 0;
       // Whether the caller belongs to this reward's target roster — i.e. they
       // received the matching monthly target (AC target → AIR rewards like
@@ -283,15 +295,28 @@ export async function GET(request: NextRequest) {
         people: members.length,
         achieved: target > 0 && current >= target,
         pct: target > 0 ? current / target : 0,
-        // Full per-person breakdown — managers / unit heads only.
+        // Full per-person breakdown — managers / unit heads only. Sellers with
+        // no target this month are rolled into one line so the rows still add
+        // up to `current`; they share no reward, only the sales.
         breakdown: seesEveryone
-          ? members.map((m) => ({
-              code: m.code,
-              name: m.name,
-              amount: m.amount,
-              share: shareOf(m.amount),
-              reward: meta.split_by_share ? reward * shareOf(m.amount) : reward,
-            }))
+          ? [
+              ...members.map((m) => ({
+                code: m.code,
+                name: m.name,
+                amount: m.amount,
+                share: shareOf(m.amount),
+                reward: meta.split_by_share ? reward * shareOf(m.amount) : reward,
+              })),
+              ...(other !== 0
+                ? [{
+                    code: "__other",
+                    name: "ອື່ນໆ (ບໍ່ມີເປົ້າ)",
+                    amount: other,
+                    share: shareOf(other),
+                    reward: 0,
+                  }]
+                : []),
+            ]
           : undefined,
       };
     });

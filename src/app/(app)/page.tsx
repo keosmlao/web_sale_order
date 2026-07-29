@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireEmployee } from "@/lib/auth";
 import { roleFromEmployee, canApprovePriceRequests } from "@/lib/roles";
+import { targetSalesScope } from "@/lib/sales-scope";
 import MyTargetCard, { type TargetDashboard } from "./MyTargetCard";
 import MyBonusCard from "./MyBonusCard";
 import ActivePromosCard from "./ActivePromosCard";
@@ -59,6 +60,7 @@ type TopSalesperson = {
   fullname_lo: string | null;
   nickname: string | null;
   orders: bigint;
+  day_total: string | number | null;
   total: string | number | null;
   ytd_total: string | number | null;
   month_target: string | number | null;
@@ -240,6 +242,7 @@ export default async function HomePage() {
         emp.fullname_lo,
         emp.nickname,
         COALESCE(s.orders, 0)::bigint AS orders,
+        COALESCE(s.day_total, 0) AS day_total,
         COALESCE(s.month_total, 0) AS total,
         COALESCE(s.ytd_total, 0) AS ytd_total,
         COALESCE(tg.month_target, 0) AS month_target,
@@ -247,11 +250,23 @@ export default async function HomePage() {
       FROM odg_employee emp
       LEFT JOIN LATERAL (
         SELECT
+          -- "ຍອດຂາຍລາຍວັນ" — the most recent day that actually has sales in
+          -- odg_sale_detail, not CURRENT_DATE: the table is fed on a lag, so
+          -- today's rows are usually not in yet and every seller would read 0.
+          COALESCE(SUM(sd.sum_amount) FILTER (
+            WHERE sd.doc_date = (
+              SELECT MAX(d.doc_date) FROM odg_sale_detail d
+              WHERE d.branch_code = '01' AND d.argroup_main = '101'
+                ${targetSalesScope("d")}
+                AND d.doc_date >= date_trunc('month', CURRENT_DATE)
+            )
+          ), 0) AS day_total,
           COALESCE(SUM(sd.sum_amount) FILTER (WHERE sd.doc_date >= date_trunc('month', CURRENT_DATE)), 0) AS month_total,
           COALESCE(SUM(sd.sum_amount), 0) AS ytd_total,
           COUNT(DISTINCT sd.doc_no) FILTER (WHERE sd.doc_date >= date_trunc('month', CURRENT_DATE)) AS orders
         FROM odg_sale_detail sd
         WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+          ${targetSalesScope("sd")}
           AND sd.doc_date >= date_trunc('year', CURRENT_DATE)
           AND sd.salename IN (
             SELECT emp.fullname_lo WHERE COALESCE(emp.fullname_lo, '') <> ''
@@ -347,29 +362,20 @@ export default async function HomePage() {
     `,
     role === "manager" || role === "head"
       ? prisma.$queryRaw<HomeTargetRow[]>`
-          WITH roster AS (
-            SELECT DISTINCT emp_code FROM odg_retail_target_employee
-            WHERE year = to_char(CURRENT_DATE, 'YYYY')
-              AND LPAD(month, 2, '0') = to_char(CURRENT_DATE, 'MM')
-          ), names AS (
-            SELECT employee.fullname_lo AS salename
-            FROM odg_employee employee JOIN roster ON roster.emp_code = employee.employee_code
-            WHERE COALESCE(employee.fullname_lo, '') <> ''
-            UNION
-            SELECT alias.salename FROM app_incentive_sale_alias alias
-            JOIN roster ON roster.emp_code = alias.employee_code
-          )
+          -- Supervisor view: the whole storefront, every seller in scope — not
+          -- only the ones given a target. Matches /api/reports/my-sales and the
+          -- department reward card.
           SELECT
             COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
               WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+                ${targetSalesScope("detail")}
                 AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
-                AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
-                AND detail.salename IN (SELECT salename FROM names)), 0) AS sales,
+                AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'), 0) AS sales,
             COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
               WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+                ${targetSalesScope("detail")}
                 AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
-                AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
-                AND detail.salename IN (SELECT salename FROM names)), 0) AS qty,
+                AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'), 0) AS qty,
             COALESCE((SELECT SUM(employee_target.target) FROM odg_retail_target_employee employee_target
               WHERE employee_target.year = to_char(CURRENT_DATE, 'YYYY')
                 AND LPAD(employee_target.month, 2, '0') = to_char(CURRENT_DATE, 'MM')), 0) AS target
@@ -384,11 +390,13 @@ export default async function HomePage() {
           SELECT
             COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
               WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+                ${targetSalesScope("detail")}
                 AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
                 AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
                 AND detail.salename IN (SELECT salename FROM names)), 0) AS sales,
             COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
               WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+                ${targetSalesScope("detail")}
                 AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
                 AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
                 AND detail.salename IN (SELECT salename FROM names)), 0) AS qty,
@@ -411,26 +419,14 @@ export default async function HomePage() {
     `,
     role === "manager" || role === "head"
       ? prisma.$queryRaw<HomeTargetDailyRow[]>`
-          WITH roster AS (
-            SELECT DISTINCT emp_code FROM odg_retail_target_employee
-            WHERE year = to_char(CURRENT_DATE, 'YYYY')
-              AND LPAD(month, 2, '0') = to_char(CURRENT_DATE, 'MM')
-          ), names AS (
-            SELECT employee.fullname_lo AS salename
-            FROM odg_employee employee JOIN roster ON roster.emp_code = employee.employee_code
-            WHERE COALESCE(employee.fullname_lo, '') <> ''
-            UNION
-            SELECT alias.salename FROM app_incentive_sale_alias alias
-            JOIN roster ON roster.emp_code = alias.employee_code
-          )
           SELECT detail.doc_date::date AS day,
                  COALESCE(SUM(detail.sum_amount), 0) AS sales,
                  COALESCE(SUM(detail.qty), 0) AS qty
           FROM odg_sale_detail detail
           WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+            ${targetSalesScope("detail")}
             AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
             AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
-            AND detail.salename IN (SELECT salename FROM names)
           GROUP BY detail.doc_date::date ORDER BY day
         `
       : prisma.$queryRaw<HomeTargetDailyRow[]>`
@@ -445,6 +441,7 @@ export default async function HomePage() {
                  COALESCE(SUM(detail.qty), 0) AS qty
           FROM odg_sale_detail detail
           WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+            ${targetSalesScope("detail")}
             AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
             AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
             AND detail.salename IN (SELECT salename FROM names)
@@ -932,12 +929,13 @@ export default async function HomePage() {
                     : "bg-rose-50 text-rose-600";
               return (
                 <div className="-mx-2 overflow-x-auto">
-                  <table className="w-full min-w-[560px] text-sm">
+                  <table className="w-full min-w-[640px] text-sm">
                     <thead>
                       <tr className="text-xs font-bold uppercase tracking-wide text-slate-400">
                         <th className="px-2 py-1.5 text-left">ພະນັກງານ</th>
                         <th className="px-2 py-1.5 text-right">ເປົ້າ</th>
                         <th className="px-2 py-1.5 text-right">ຍອດຂາຍ</th>
+                        <th className="px-2 py-1.5 text-right">ຍອດສະສົມ</th>
                         <th className="px-2 py-1.5 text-center">Ach%</th>
                         <th className="px-2 py-1.5 text-center">Days</th>
                         <th className="px-2 py-1.5 text-right">Req/Day</th>
@@ -949,6 +947,7 @@ export default async function HomePage() {
                     <tbody className="divide-y divide-slate-100">
                       {topRows.map((r, i) => {
                         const total = Number(r.total ?? 0);
+                        const dayTotal = Number(r.day_total ?? 0);
                         const target = Number(r.month_target ?? 0);
                         const ytdTotal = Number(r.ytd_total ?? 0);
                         const ytdTarget = Number(r.ytd_target ?? 0);
@@ -961,6 +960,9 @@ export default async function HomePage() {
                           <tr key={(r.user_owner ?? "") + i} className="hover:bg-slate-50">
                             <td className="max-w-36 truncate px-2 py-2 font-bold text-slate-800">{name}</td>
                             <td className="px-2 py-2 text-right font-mono text-slate-500">{moneyFmt.format(target)}</td>
+                            <td className={`px-2 py-2 text-right font-mono ${dayTotal > 0 ? "font-bold text-slate-700" : "text-slate-300"}`}>
+                              {dayTotal > 0 ? moneyFmt.format(dayTotal) : "—"}
+                            </td>
                             <td className="px-2 py-2 text-right font-mono font-black text-slate-800">{moneyFmt.format(total)}</td>
                             <td className="px-2 py-2 text-center">
                               <span className={`inline-block rounded-full px-2 py-0.5 font-mono text-xs font-black ${achPill(ach)}`}>

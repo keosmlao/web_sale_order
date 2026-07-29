@@ -1,3 +1,5 @@
+import { Prisma } from "@/generated/prisma/client";
+
 // How the branch's own "ສະຫລຸບຍອດຂາຍ ODG" workbook scopes storefront sales.
 // Any figure compared against a monthly retail target has to be built the same
 // way, otherwise the app reads higher than the report managers actually use.
@@ -23,3 +25,18 @@ export const EXCLUDED_SALE_GROUP = "ONLINE";
 // Internal / staff-POS document formats that the workbook leaves out.
 // Sales bills (CAK, INK) and credit notes (CNK) stay in.
 export const EXCLUDED_DOC_FORMATS = ["SPOS", "CAKSP"] as const;
+
+// The three rules as a WHERE fragment, so every target-facing query applies the
+// same scope instead of spelling it out again. `alias` is the odg_sale_detail
+// alias at the call site (a literal in our own SQL, never user input).
+//
+// Callers still supply branch_code / argroup_main / date themselves — those
+// vary by report; this covers only what the target scope adds.
+export function targetSalesScope(alias: string): Prisma.Sql {
+  const t = Prisma.raw(alias);
+  return Prisma.sql`
+    AND ${t}.itemmaingroup IN (${Prisma.join([...TARGET_ITEM_MAIN_GROUPS])})
+    AND COALESCE(${t}.sale_group_name, '') <> ${EXCLUDED_SALE_GROUP}
+    AND ${t}.doc_format_code NOT IN (${Prisma.join([...EXCLUDED_DOC_FORMATS])})
+  `;
+}
