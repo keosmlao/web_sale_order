@@ -59,6 +59,8 @@ export const MENU_REGISTRY: MenuRegistryItem[] = [
   { key: "/monitor", label: "ຕິດຕາມມືຖື sale", section: "Management" },
   { key: "/settings/sales-warehouses", label: "ສາງຂາຍ", section: "Management · ການຕັ້ງຄ່າ" },
   { key: "/settings/stock-minimum", label: "Minimum Stock", section: "Management · ການຕັ້ງຄ່າ" },
+  { key: "/settings/sales-targets", label: "ຈັດການເປົ້າຂາຍ", section: "Management · ການຕັ້ງຄ່າ" },
+  { key: "/settings/special-rewards", label: "ຈັດການລາງວັນພິເສດ", section: "Management · ການຕັ້ງຄ່າ" },
   { key: "/settings/incentives", label: "Config Incentive", section: "Management · ການຕັ້ງຄ່າ" },
   { key: "/settings/barcodes", label: "Barcode ສິນຄ້າ", section: "Management · ການຕັ້ງຄ່າ" },
   { key: "/settings/payment-accounts", label: "ບັນຊີຮັບເງິນ", section: "Management · ການຕັ້ງຄ່າ" },

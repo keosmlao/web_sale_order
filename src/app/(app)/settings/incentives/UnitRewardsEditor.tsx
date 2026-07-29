@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import BrandSelect from "./BrandSelect";
+import BrandSelect from "@/components/BrandSelect";
 
 // Editor for unit-count spiffs (workbook ④ brand / ⑤ pushed model):
 // per-person tiered per-unit rewards on air sets / a specified model.

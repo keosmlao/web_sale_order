@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import BrandSelect from "./BrandSelect";
+import BrandSelect from "@/components/BrandSelect";
 
 type Reward = {
   rewardCode: string;
