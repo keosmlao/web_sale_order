@@ -8,7 +8,7 @@ import { targetSalesScope } from "@/lib/sales-scope";
 import MyTargetCard, { type TargetDashboard } from "./MyTargetCard";
 import MyBonusCard from "./MyBonusCard";
 import ActivePromosCard from "./ActivePromosCard";
-import SpecialRewardCard from "./SpecialRewardCard";
+import SpecialRewardCard, { LAO_MONTHS } from "./SpecialRewardCard";
 import LowStockBanner from "./cashier/LowStockBanner";
 import DeliveryTodayCard from "./orders/new/DeliveryTodayCard";
 
@@ -53,6 +53,13 @@ type SaleDayRow = {
 type SaleMonthRow = {
   month_sales: string | number | null;
   month_bills: bigint | number | null;
+};
+
+type TargetGroupRow = {
+  grp: string | null;
+  target: string | number | null;
+  day_total: string | number | null;
+  month_total: string | number | null;
 };
 
 type TopSalesperson = {
@@ -214,6 +221,7 @@ export default async function HomePage() {
     refillPendingRows,
     monthCompareRows,
     newMemberRows,
+    targetGroupRows,
   ] = await Promise.all([
     prisma.$queryRaw<DayMetrics[]>`
       SELECT
@@ -559,6 +567,46 @@ export default async function HomePage() {
             AND create_date_time_now >= date_trunc('month', CURRENT_DATE)
         `.catch(() => [] as Array<{ count: bigint }>)
       : Promise.resolve([] as Array<{ count: bigint }>),
+    // "ສະຫລຸບເປົ້າ ODG" — target, latest day's sales and month-to-date per
+    // product group. Sales map to a group by itemmaingroup (ແອ is the AC
+    // target's product); the roster's CE target covers everything else.
+    // Managers / heads only — department targets are not a salesperson's
+    // business.
+    role === "manager" || role === "head"
+      ? prisma.$queryRaw<TargetGroupRow[]>`
+          WITH scope AS (
+            SELECT CASE WHEN sd.itemmaingroup = 'ແອ' THEN 'AC' ELSE 'CE' END AS grp,
+                   sd.doc_date, sd.sum_amount
+            FROM odg_sale_detail sd
+            WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+              ${targetSalesScope("sd")}
+              AND sd.doc_date >= date_trunc('month', CURRENT_DATE)
+              AND sd.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+          ), latest AS (
+            -- "ລາຍວັນ" is the newest day that actually has rows, not
+            -- CURRENT_DATE: odg_sale_detail can land on a lag, and on those
+            -- mornings every group would read 0.
+            SELECT MAX(doc_date) AS d FROM scope
+          ), sales AS (
+            SELECT grp,
+                   COALESCE(SUM(sum_amount) FILTER (WHERE doc_date = (SELECT d FROM latest)), 0) AS day_total,
+                   COALESCE(SUM(sum_amount), 0) AS month_total
+            FROM scope GROUP BY grp
+          ), tg AS (
+            SELECT CASE WHEN product_group = 'AC' THEN 'AC' ELSE 'CE' END AS grp,
+                   COALESCE(SUM(target), 0) AS target
+            FROM odg_retail_target_employee
+            WHERE year = to_char(CURRENT_DATE, 'YYYY')
+              AND LPAD(month, 2, '0') = to_char(CURRENT_DATE, 'MM')
+            GROUP BY 1
+          )
+          SELECT COALESCE(tg.grp, sales.grp) AS grp,
+                 COALESCE(tg.target, 0) AS target,
+                 COALESCE(sales.day_total, 0) AS day_total,
+                 COALESCE(sales.month_total, 0) AS month_total
+          FROM tg FULL OUTER JOIN sales ON sales.grp = tg.grp
+        `
+      : Promise.resolve([] as TargetGroupRow[]),
   ]);
 
   const today = normalizeMetrics(todayRows[0]);
@@ -610,6 +658,34 @@ export default async function HomePage() {
   const mtdPrev = Number(monthCompare?.prev_sales ?? 0);
   const mtdDeltaPct = mtdPrev > 0 ? ((mtdCur - mtdPrev) / mtdPrev) * 100 : null;
   const newMembersCount = Number(newMemberRows[0]?.count ?? 0);
+  // "ສະຫລຸບເປົ້າ ODG". The roster stores AC and CE; the CE target has not been
+  // split into CE / SDA in the database, so that line reads "CE+SDA".
+  const TARGET_GROUP_LABEL: Record<string, string> = { AC: "AC", CE: "CE+SDA", SDA: "SDA", FZ: "FZ" };
+  const targetGroups = targetGroupRows
+    .map((row) => {
+      const code = (row.grp ?? "").trim().toUpperCase();
+      return {
+        code,
+        label: TARGET_GROUP_LABEL[code] ?? (code || "—"),
+        target: Number(row.target ?? 0),
+        day: Number(row.day_total ?? 0),
+        month: Number(row.month_total ?? 0),
+      };
+    })
+    .filter((g) => g.target !== 0 || g.month !== 0)
+    // AC first to match the circulated sheet, then the rest by target size.
+    .sort((a, b) => (a.code === "AC" ? -1 : b.code === "AC" ? 1 : b.target - a.target));
+  const targetOdg = targetGroups.reduce((s, g) => s + g.target, 0);
+  const targetDayOdg = targetGroups.reduce((s, g) => s + g.day, 0);
+  const targetMonthOdg = targetGroups.reduce((s, g) => s + g.month, 0);
+  const vientianeNow = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Vientiane",
+    year: "numeric",
+    month: "numeric",
+  }).formatToParts(new Date());
+  const vtMonth = Number(vientianeNow.find((p) => p.type === "month")?.value ?? 0);
+  const vtYear = vientianeNow.find((p) => p.type === "year")?.value ?? "";
+  const targetPeriodLabel = `${LAO_MONTHS[vtMonth - 1] ?? vtMonth} ${vtYear}`;
   const homeTarget = homeTargetRows[0];
   const homeTargetSales = Number(homeTarget?.sales ?? 0);
   const homeTargetAmount = Number(homeTarget?.target ?? 0);
@@ -895,6 +971,59 @@ export default async function HomePage() {
             </Link>
           ) : null}
           <div className="lg:col-span-2"><DeliveryTodayCard /></div>
+        </section>
+      ) : null}
+
+      {/* ສະຫລຸບເປົ້າ ODG — this month's target per product group, laid out like
+          the sheet the branch circulates. */}
+      {isManagerOrHead && targetGroups.length > 0 ? (
+        <section className="mt-4">
+          <Panel title="ສະຫລຸບເປົ້າ ODG" eyebrow={`ເປົ້າໝາຍ ເດືອນ${targetPeriodLabel}`}>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[460px] text-sm">
+                <thead>
+                  <tr className="text-xs font-bold uppercase tracking-wide text-slate-400">
+                    <th className="px-3 py-2 text-left">ກຸ່ມສິນຄ້າ</th>
+                    <th className="px-3 py-2 text-right">ເປົ້າໝາຍ</th>
+                    <th className="px-3 py-2 text-right">ລາຍວັນ</th>
+                    <th className="px-3 py-2 text-right">ສະສົມ</th>
+                    <th className="px-3 py-2 text-right">%</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {targetGroups.map((g) => {
+                    const pct = g.target > 0 ? (g.month / g.target) * 100 : 0;
+                    return (
+                      <tr key={g.code}>
+                        <td className="px-3 py-2 font-bold text-slate-700">{g.label}</td>
+                        <td className="px-3 py-2 text-right font-mono text-slate-500">{moneyFmt.format(g.target)}</td>
+                        <td className={`px-3 py-2 text-right font-mono ${g.day !== 0 ? "text-slate-600" : "text-slate-300"}`}>
+                          {g.day !== 0 ? moneyFmt.format(g.day) : "—"}
+                        </td>
+                        <td className="px-3 py-2 text-right font-mono font-bold text-slate-800">{moneyFmt.format(g.month)}</td>
+                        <td className={`px-3 py-2 text-right font-mono font-black ${pct >= 100 ? "text-emerald-600" : pct >= 80 ? "text-amber-600" : "text-rose-500"}`}>
+                          {pct.toFixed(2)}%
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t-2 border-slate-800 bg-amber-50/70">
+                    <td className="px-3 py-2.5 font-black text-slate-900">TOTAL ODG</td>
+                    <td className="px-3 py-2.5 text-right font-mono font-black text-slate-900">{moneyFmt.format(targetOdg)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono font-black text-slate-900">
+                      {targetDayOdg !== 0 ? moneyFmt.format(targetDayOdg) : "—"}
+                    </td>
+                    <td className="px-3 py-2.5 text-right font-mono font-black text-slate-900">{moneyFmt.format(targetMonthOdg)}</td>
+                    <td className="px-3 py-2.5 text-right font-mono text-base font-black text-slate-900">
+                      {(targetOdg > 0 ? (targetMonthOdg / targetOdg) * 100 : 0).toFixed(2)}%
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          </Panel>
         </section>
       ) : null}
 
