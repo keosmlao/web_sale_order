@@ -51,7 +51,14 @@ type Row = {
   isActive: boolean;
   from: string;
   to: string;
-  saved: { target: number; reward: number; isActive: boolean; from: string; to: string };
+  saved: {
+    target: number;
+    reward: number;
+    isActive: boolean;
+    splitByShare: boolean;
+    from: string;
+    to: string;
+  };
 };
 
 const GROUPS = [
@@ -77,6 +84,7 @@ const toRow = (r: Reward): Row => ({
     target: r.targetAmount,
     reward: r.rewardAmount,
     isActive: r.isActive,
+    splitByShare: r.splitByShare,
     from: r.effectiveFrom,
     to: r.effectiveTo,
   },
@@ -86,6 +94,7 @@ const isDirty = (row: Row) =>
   digitsOf(row.target) !== row.saved.target ||
   digitsOf(row.reward) !== row.saved.reward ||
   row.isActive !== row.saved.isActive ||
+  row.splitByShare !== row.saved.splitByShare ||
   row.from !== row.saved.from ||
   row.to !== row.saved.to;
 
@@ -177,6 +186,7 @@ export default function SpecialRewardsClient() {
         body: JSON.stringify({
           rewardCode: row.code,
           isActive: row.isActive,
+          splitByShare: row.splitByShare,
           targetAmount: digitsOf(row.target),
           rewardAmount: digitsOf(row.reward),
           effectiveFrom: row.from,
@@ -477,7 +487,7 @@ export default function SpecialRewardsClient() {
         ) : null}
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[980px] text-sm">
+          <table className="w-full min-w-[1100px] text-sm">
             <thead className="bg-odoo-surface-muted text-left text-[10px] font-bold uppercase tracking-wider text-odoo-text-muted">
               <tr>
                 <th className="px-4 py-3">ລາງວັນ</th>
@@ -485,6 +495,12 @@ export default function SpecialRewardsClient() {
                 <th className="px-4 py-3">ໄລຍະນຳໃຊ້</th>
                 <th className="px-4 py-3 text-right">ເປົ້າ (ບາດ)</th>
                 <th className="px-4 py-3 text-right">ລາງວັນ (ບາດ)</th>
+                <th className="px-4 py-3 text-center">
+                  ແບ່ງຕາມ % ຍອດຂາຍ
+                  <div className="mt-0.5 text-[9px] font-normal normal-case tracking-normal text-odoo-text-muted">
+                    ບໍ່ຕິກ = ຈ່າຍເທົ່າກັນ/ຄົນ
+                  </div>
+                </th>
                 <th className="px-4 py-3 text-center">ເປີດໃຊ້</th>
                 <th className="px-4 py-3 text-right">ຈັດການ</th>
               </tr>
@@ -492,13 +508,13 @@ export default function SpecialRewardsClient() {
             <tbody>
               {loading ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-xs text-odoo-text-muted">
+                  <td colSpan={8} className="px-4 py-10 text-center text-xs text-odoo-text-muted">
                     ກຳລັງໂຫລດ…
                   </td>
                 </tr>
               ) : rows.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-xs text-odoo-text-muted">
+                  <td colSpan={8} className="px-4 py-10 text-center text-xs text-odoo-text-muted">
                     ບໍ່ມີໂຄງການລາງວັນ — ກົດ “+ ເພີ່ມລາງວັນໃໝ່” ເພື່ອສ້າງ
                   </td>
                 </tr>
@@ -569,9 +585,19 @@ export default function SpecialRewardsClient() {
                       <td className="px-4 py-3 text-center">
                         <input
                           type="checkbox"
+                          checked={row.splitByShare}
+                          onChange={(e) => patch(row.code, { splitByShare: e.target.checked })}
+                          className="h-4 w-4 accent-odoo-primary"
+                          aria-label={`ແບ່ງລາງວັນຕາມສັດສ່ວນຍອດຂາຍ — ${row.description}`}
+                        />
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <input
+                          type="checkbox"
                           checked={row.isActive}
                           onChange={(e) => patch(row.code, { isActive: e.target.checked })}
                           className="h-4 w-4 accent-odoo-primary"
+                          aria-label={`ເປີດໃຊ້ — ${row.description}`}
                         />
                       </td>
                       <td className="px-4 py-3 text-right">

@@ -79,6 +79,7 @@ export async function PUT(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as Record<string, unknown> | null;
   const rewardCode = String(body?.rewardCode ?? "").trim();
   const isActive = Boolean(body?.isActive);
+  const splitByShare = Boolean(body?.splitByShare);
   const targetAmount = Number(body?.targetAmount);
   const rewardAmount = Number(body?.rewardAmount);
   const effectiveFrom = String(body?.effectiveFrom ?? "");
@@ -94,6 +95,7 @@ export async function PUT(request: NextRequest) {
   const updated = await prisma.$executeRaw`
     UPDATE app_incentive_special_reward
     SET is_active = ${isActive},
+        split_by_share = ${splitByShare},
         target_amount = ${targetAmount},
         reward_amount = ${rewardAmount},
         effective_from = ${effectiveFrom}::date,
