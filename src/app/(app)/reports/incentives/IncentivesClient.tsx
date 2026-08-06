@@ -224,14 +224,19 @@ export default function IncentivesClient() {
   const isSelf = report?.scope === "self";
 
   return (
-    <div className="odoo-page">
+    <div className="odoo-page incentive-print">
       <div className="odoo-page-header">
         <div>
           <div className="text-[11px] font-bold uppercase tracking-widest text-odoo-text-muted">Reports</div>
           <h1 className="odoo-page-title">{isSelf ? "ໂບນັດຂອງຂ້ອຍ" : "ໂບນັດພະນັກງານຂາຍ"}</h1>
+          {/* Print-only line: the month is picked from a control that the
+              printout hides, so state it on the page itself. */}
+          <div className="incentive-print-period">
+            ເດືອນ {period} · ສະກຸນ {currency}
+          </div>
           <p className="odoo-page-subtitle flex flex-wrap items-center gap-x-2">
             <span>ຄຳນວນຈາກໃບຮັບເງິນຈິງ · ສະກຸນ {currency}</span>
-            <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+            <span className="print:hidden inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-emerald-500" /> LIVE
             </span>
             {updatedAt ? <span className="text-[11px] text-odoo-text-muted">ອັບເດດ {updatedAt}</span> : null}
@@ -244,13 +249,27 @@ export default function IncentivesClient() {
         </div>
       </div>
 
-      <section className="odoo-card p-4">
+      <section className="odoo-card p-4 print:hidden">
         <div className="flex flex-wrap items-end gap-3">
           <label className="grid w-full gap-1 sm:w-auto">
             <span className="odoo-label">ເດືອນ</span>
             <input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} className="odoo-input" />
           </label>
           <button type="button" onClick={() => void load()} className="odoo-btn odoo-btn-primary">ໂຫລດໃໝ່</button>
+          <button
+            type="button"
+            onClick={() => window.print()}
+            className="odoo-btn"
+            title="ເປີດໜ້າຕ່າງພິມ — ເລືອກ 'Save as PDF' ເພື່ອບັນທຶກເປັນໄຟລ໌"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+              strokeLinecap="round" strokeLinejoin="round" className="mr-1.5 h-4 w-4">
+              <path d="M6 9V2h12v7" />
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+              <rect x="6" y="14" width="12" height="8" />
+            </svg>
+            ພິມ / PDF
+          </button>
           <p className="text-xs text-odoo-text-muted sm:ml-auto">
             {tiers
               ? `ເກນຈ່າຍ: ≤${pct(tiers.lowMaxPct)} = ${pct(tiers.lowMultiplier)} · ${pct(tiers.lowMaxPct)}–${pct(tiers.standardMaxPct)} = ${pct(tiers.standardMultiplier)} · >${pct(tiers.standardMaxPct)} = ${pct(tiers.highMultiplier)}`

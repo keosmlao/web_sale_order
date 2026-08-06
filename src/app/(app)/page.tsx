@@ -258,17 +258,9 @@ export default async function HomePage() {
       FROM odg_employee emp
       LEFT JOIN LATERAL (
         SELECT
-          -- "ຍອດຂາຍລາຍວັນ" — the most recent day that actually has sales in
-          -- odg_sale_detail, not CURRENT_DATE: the table is fed on a lag, so
-          -- today's rows are usually not in yet and every seller would read 0.
-          COALESCE(SUM(sd.sum_amount) FILTER (
-            WHERE sd.doc_date = (
-              SELECT MAX(d.doc_date) FROM odg_sale_detail d
-              WHERE d.branch_code = '01' AND d.argroup_main = '101'
-                ${targetSalesScope("d")}
-                AND d.doc_date >= date_trunc('month', CURRENT_DATE)
-            )
-          ), 0) AS day_total,
+          -- "ຍອດຂາຍ" — today only, matching the ຍອດຂາຍມື້ນີ້ card and the
+          -- ສະຫລຸບເປົ້າ ODG table. Reads 0 until the day's first bill lands.
+          COALESCE(SUM(sd.sum_amount) FILTER (WHERE sd.doc_date = CURRENT_DATE), 0) AS day_total,
           COALESCE(SUM(sd.sum_amount) FILTER (WHERE sd.doc_date >= date_trunc('month', CURRENT_DATE)), 0) AS month_total,
           COALESCE(SUM(sd.sum_amount), 0) AS ytd_total,
           COUNT(DISTINCT sd.doc_no) FILTER (WHERE sd.doc_date >= date_trunc('month', CURRENT_DATE)) AS orders
@@ -339,6 +331,7 @@ export default async function HomePage() {
       FROM odg_sale_detail
       WHERE branch_code = '01'
         AND argroup_main = '101'
+        ${targetSalesScope("odg_sale_detail")}
         -- sargable (no ::date cast) so the front-store index range-scans doc_date
         AND doc_date >= CURRENT_DATE - 6
         ${insightFilter}
@@ -365,6 +358,7 @@ export default async function HomePage() {
       FROM odg_sale_detail
       WHERE branch_code = '01'
         AND argroup_main = '101'
+        ${targetSalesScope("odg_sale_detail")}
         AND doc_date >= CURRENT_DATE - 1
         ${insightFilter}
     `,
@@ -421,6 +415,7 @@ export default async function HomePage() {
       FROM odg_sale_detail
       WHERE branch_code = '01'
         AND argroup_main = '101'
+        ${targetSalesScope("odg_sale_detail")}
         AND doc_date >= date_trunc('month', CURRENT_DATE)
         AND doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
         ${insightFilter}
@@ -555,6 +550,7 @@ export default async function HomePage() {
             ), 0) AS prev_sales
           FROM odg_sale_detail
           WHERE branch_code = '01' AND argroup_main = '101'
+            ${targetSalesScope("odg_sale_detail")}
             AND doc_date >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
         `
       : Promise.resolve([] as Array<{ cur_sales: string | number | null; prev_sales: string | number | null }>),
@@ -582,14 +578,12 @@ export default async function HomePage() {
               ${targetSalesScope("sd")}
               AND sd.doc_date >= date_trunc('month', CURRENT_DATE)
               AND sd.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
-          ), latest AS (
-            -- "ລາຍວັນ" is the newest day that actually has rows, not
-            -- CURRENT_DATE: odg_sale_detail can land on a lag, and on those
-            -- mornings every group would read 0.
-            SELECT MAX(doc_date) AS d FROM scope
           ), sales AS (
+            -- "ລາຍວັນ" is today and only today. Reading back to the newest day
+            -- that has rows would quietly show yesterday's sales under a
+            -- today label, and disagree with the ຍອດຂາຍມື້ນີ້ card above.
             SELECT grp,
-                   COALESCE(SUM(sum_amount) FILTER (WHERE doc_date = (SELECT d FROM latest)), 0) AS day_total,
+                   COALESCE(SUM(sum_amount) FILTER (WHERE doc_date = CURRENT_DATE), 0) AS day_total,
                    COALESCE(SUM(sum_amount), 0) AS month_total
             FROM scope GROUP BY grp
           ), tg AS (
