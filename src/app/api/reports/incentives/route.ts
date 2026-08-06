@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
+import { targetSalesScope } from "@/lib/sales-scope";
 
 type IncentiveRow = {
   employee_code: string;
@@ -18,12 +19,27 @@ type IncentiveRow = {
 
 type RewardRow = {
   reward_code: string;
+  description: string | null;
   group_code: string;
   brand_code: string | null;
   target_amount: string | number;
   reward_amount: string | number;
   split_by_share: boolean;
 };
+
+// Where a row's ເງິນພິເສດ came from. The figure is a sum of independent
+// programmes, so without the parts a manager cannot check it or explain it to
+// the person being paid.
+type SpecialLine = {
+  label: string;
+  note: string;
+  amount: number;
+};
+
+// Amounts inside the explanation strings — grouped, no decimals, so the note
+// reads like the workbook rather than like a database value.
+const fmt = (value: number) =>
+  new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
 
 type DepartmentTotalRow = {
   sales_amount: string | number | null;
@@ -137,7 +153,8 @@ export async function GET(request: NextRequest) {
         ORDER BY position_code, from_pct
       `.catch(() => []),
       prisma.$queryRaw<RewardRow[]>`
-        SELECT reward_code, group_code, brand_code, target_amount, reward_amount, split_by_share
+        SELECT reward_code, description, group_code, brand_code,
+               target_amount, reward_amount, split_by_share
         FROM app_incentive_special_reward
         WHERE is_active
           AND effective_from < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
@@ -345,6 +362,7 @@ export async function GET(request: NextRequest) {
       // Best-effort — table ships in sql/add-incentive-unit-reward.sql.
       prisma.$queryRaw<Array<{
         reward_code: string;
+        description: string | null;
         low_min_qty: string | number;
         low_reward: string | number;
         high_min_qty: string | number | null;
@@ -375,7 +393,8 @@ export async function GET(request: NextRequest) {
           JOIN app_incentive_sale_alias a ON a.employee_code = r.emp_code
         )
         SELECT
-          ur.reward_code, ur.low_min_qty, ur.low_reward, ur.high_min_qty, ur.high_reward,
+          ur.reward_code, ur.description,
+          ur.low_min_qty, ur.low_reward, ur.high_min_qty, ur.high_reward,
           r.emp_code,
           COALESCE(s.units, 0) AS units
         FROM app_incentive_unit_reward ur
@@ -408,12 +427,18 @@ export async function GET(request: NextRequest) {
       // The whole-department reward is measured on every eligible front-store
       // sale, including salespeople who are not on this month's payout roster.
       // The roster still controls who receives the flat per-person reward.
+      //
+      // Scoped exactly like the ລາງວັນພິເສດ card (@/lib/sales-scope): the
+      // department target covers storefront product groups only, so counting
+      // ອາໄຫຼ່ and ONLINE here paid the reward out on ~2.2M of sales the target
+      // never included.
       prisma.$queryRaw<DepartmentTotalRow[]>`
         SELECT COALESCE(SUM(sd.sum_amount), 0) AS sales_amount
         FROM odg_sale_detail sd
         LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
         WHERE sd.branch_code = '01'
           AND sd.argroup_main = '101'
+          ${targetSalesScope("sd")}
           AND sd.doc_date >= make_date(${year}, ${month}, 1)
           AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
           AND COALESCE(cat.is_active, true)
@@ -492,6 +517,8 @@ export async function GET(request: NextRequest) {
         multiplier,
         netBonus,
         specialReward: 0,
+
+        specialLines: [] as SpecialLine[],
         commissionRate,
         commission,
         commissionBase: sellerBase,
@@ -520,12 +547,27 @@ export async function GET(request: NextRequest) {
         : inGroup.reduce((sum, row) => sum + qualifyingOf(row), 0);
       if (deptTotal < number(reward.target_amount)) continue;
       const rewardAmount = number(reward.reward_amount);
+      // "ALL" with no brand is the whole department — saying so adds nothing,
+      // so only a narrower scope earns a prefix.
+      const scope = reward.brand_code
+        ? `${reward.brand_code} · `
+        : reward.group_code === "ALL"
+          ? ""
+          : `${reward.group_code} · `;
+      const hit = `${scope}ບັນລຸ ${fmt(deptTotal)}/${fmt(number(reward.target_amount))}`;
       for (const row of inGroup) {
         const pay = reward.split_by_share
           ? (deptTotal > 0 ? rewardAmount * (qualifyingOf(row) / deptTotal) : 0)
           : rewardAmount;
         row.specialReward += pay;
         row.totalPay += pay;
+        row.specialLines.push({
+          label: reward.description?.trim() || reward.reward_code,
+          note: reward.split_by_share
+            ? `${hit} → ແບ່ງ ${fmt(rewardAmount)} ຕາມ % ຍອດ`
+            : `${hit} → ${fmt(rewardAmount)}/ຄົນ`,
+          amount: pay,
+        });
       }
     }
 
@@ -548,6 +590,15 @@ export async function GET(request: NextRequest) {
       if (!row) continue;
       row.specialReward += pay;
       row.totalPay += pay;
+      const tierMin = highMin > 0 && units >= highMin ? highMin : lowMin;
+      const tierRate = highMin > 0 && units >= highMin
+        ? number(line.high_reward)
+        : number(line.low_reward);
+      row.specialLines.push({
+        label: line.description?.trim() || line.reward_code,
+        note: `${units} ຊຸດ (ຂັ້ນ ≥${tierMin}) × ${fmt(tierRate)}/ຊຸດ`,
+        amount: pay,
+      });
     }
 
     // Manager (pos 11) / unit head (pos 12) commission: per product group,
@@ -613,6 +664,8 @@ export async function GET(request: NextRequest) {
           multiplier: 1,
           netBonus: 0,
           specialReward: 0,
+
+          specialLines: [] as SpecialLine[],
           commissionRate: rateForPosition(boss.position_code, achByGroup.ALL),
           commission,
           commissionBase: 0,
@@ -655,6 +708,8 @@ export async function GET(request: NextRequest) {
           multiplier: number(config.standard_multiplier),
           netBonus: 0,
           specialReward: 0,
+
+          specialLines: [] as SpecialLine[],
           commissionRate: 0,
           commission: 0,
           commissionBase: number(config.commission_base),
@@ -694,6 +749,7 @@ export async function GET(request: NextRequest) {
       ),
       totalBonus: visible.reduce((sum, row) => sum + row.netBonus, 0),
       totalSpecial: visible.reduce((sum, row) => sum + row.specialReward, 0),
+      // (specialLines rides along on each row — see SpecialLine)
       totalCommission: visible.reduce((sum, row) => sum + row.commission, 0),
       totalPay: visible.reduce((sum, row) => sum + row.totalPay, 0),
     });

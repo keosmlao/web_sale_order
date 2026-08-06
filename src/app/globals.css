@@ -7525,3 +7525,97 @@ a {
     print-color-adjust: exact;
   }
 }
+
+/* ---- ໃບ PDF ໂບນັດ (/reports/incentives/pdf) ----
+   Two documents from one stylesheet: ?mode=summary is one table of everyone,
+   ?mode=detail is a section per salesperson with their point breakdown. Both
+   render outside the app shell, so there is no sidebar or nav to hide. */
+.pr-state { padding: 48px; text-align: center; font-size: 14px; color: #475569; }
+
+.pr-sheet {
+  /* A4 landscape — the screen preview is the same width as the paper, so what
+     the operator sees is what prints. */
+  max-width: 297mm;
+  margin: 0 auto;
+  padding: 10mm;
+  background: #fff;
+  color: #0f172a;
+  font-size: 10px;
+}
+
+.pr-print-btn {
+  position: fixed; right: 16px; top: 16px; z-index: 10;
+  border-radius: 8px; background: #4f46e5; padding: 9px 16px;
+  font-size: 13px; font-weight: 700; color: #fff;
+  box-shadow: 0 6px 16px -6px rgba(79, 70, 229, 0.6);
+}
+.pr-print-btn:hover { background: #4338ca; }
+.pr-hint {
+  position: fixed; right: 16px; top: 58px; z-index: 10; max-width: 240px;
+  border-radius: 8px; border: 1px solid #fde68a; background: #fffbeb;
+  padding: 8px 10px; font-size: 11px; line-height: 1.5; color: #92400e;
+}
+
+.pr-head {
+  display: flex; align-items: flex-start; justify-content: space-between;
+  gap: 16px; border-bottom: 2px solid #0f172a; padding-bottom: 10px;
+}
+.pr-head-left { display: flex; align-items: center; gap: 10px; }
+.pr-logo { height: 34px; width: auto; object-fit: contain; }
+.pr-org { font-size: 15px; font-weight: 800; letter-spacing: 0.02em; }
+.pr-sub { font-size: 11px; color: #64748b; }
+.pr-head-right { text-align: right; }
+.pr-title { font-size: 16px; font-weight: 800; }
+.pr-period { font-size: 13px; font-weight: 700; color: #334155; }
+.pr-meta { font-size: 10px; color: #64748b; }
+
+.pr-summary { display: grid; gap: 7px; margin: 10px 0; grid-auto-flow: column; grid-auto-columns: 1fr; }
+.pr-summary > div { border: 1px solid #cbd5e1; border-radius: 6px; padding: 7px 9px; }
+.pr-summary span { display: block; font-size: 9px; color: #64748b; }
+.pr-summary b { display: block; margin-top: 2px; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
+.pr-summary-accent { background: #eef2ff; border-color: #a5b4fc !important; }
+.pr-summary-accent b { color: #4338ca; }
+
+.pr-table { width: 100%; border-collapse: collapse; }
+.pr-table th {
+  border-bottom: 1.5px solid #0f172a; padding: 5px; text-align: left;
+  font-size: 9px; font-weight: 800; text-transform: uppercase;
+  color: #334155; white-space: nowrap;
+}
+.pr-table td { border-bottom: 1px solid #e2e8f0; padding: 5px; font-variant-numeric: tabular-nums; }
+.pr-table .pr-r { text-align: right; }
+.pr-table .pr-c { text-align: center; }
+.pr-name { font-weight: 700; }
+.pr-code { font-size: 8.5px; color: #94a3b8; font-family: ui-monospace, monospace; }
+.pr-strong { font-weight: 800; }
+.pr-empty { padding: 24px; text-align: center; color: #64748b; }
+.pr-table tfoot td {
+  border-top: 1.5px solid #0f172a; border-bottom: none;
+  padding-top: 7px; font-weight: 800; background: #f8fafc;
+}
+.pr-total-label { text-align: right; }
+
+/* ---- Detail sheet: one flat landscape table ----
+   Left block = the salesperson's own figures (printed once per person via
+   rowSpan); right block = their ໝວດ / ຍີ່ຫໍ້ lines. A vertical rule marks the
+   boundary so the eye can tell personal totals from line detail. */
+.pr-wide { margin-top: 10px; }
+.pr-wide .pr-sep { border-left: 1.5px solid #cbd5e1; }
+.pr-wide tbody.pr-group > tr:first-child > td { border-top: 1.5px solid #94a3b8; }
+.pr-wide td { vertical-align: top; }
+.pr-subtotal td { background: #f1f5f9; font-weight: 700; }
+.pr-nodetail { color: #94a3b8; }
+
+@media print {
+  .pr-print-btn, .pr-hint { display: none !important; }
+  .pr-sheet { max-width: none; padding: 0; font-size: 9px; }
+  .pr-table th { padding: 4px; font-size: 8px; letter-spacing: 0; }
+  .pr-table td { padding: 4px; }
+  .pr-code { font-size: 7.5px; }
+  /* The table runs as long as the roster, so the header repeats on every sheet
+     and a person's block is never split across the fold. */
+  .pr-table thead { display: table-header-group; }
+  .pr-wide tbody.pr-group { break-inside: avoid; }
+  .pr-table tr { break-inside: avoid; }
+  .pr-sheet, .pr-sheet * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}

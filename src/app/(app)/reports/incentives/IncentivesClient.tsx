@@ -2,6 +2,13 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
+// One programme that fed a row's ເງິນພິເສດ, with the condition it met.
+type SpecialLine = {
+  label: string;
+  note: string;
+  amount: number;
+};
+
 type IncentiveRow = {
   employeeCode: string;
   displayName: string;
@@ -16,6 +23,7 @@ type IncentiveRow = {
   multiplier: number;
   netBonus: number;
   specialReward: number;
+  specialLines?: SpecialLine[];
   commissionRate: number;
   commission: number;
   totalPay: number;
@@ -110,6 +118,7 @@ export default function IncentivesClient() {
   const [report, setReport] = useState<Report | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [pdfMenu, setPdfMenu] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   // Per-person point breakdown (tree view), lazy-loaded on row expand.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
@@ -260,7 +269,7 @@ export default function IncentivesClient() {
             type="button"
             onClick={() => window.print()}
             className="odoo-btn"
-            title="ເປີດໜ້າຕ່າງພິມ — ເລືອກ 'Save as PDF' ເພື່ອບັນທຶກເປັນໄຟລ໌"
+            title="ພິມໜ້ານີ້ຕາມທີ່ເຫັນ"
           >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
               strokeLinecap="round" strokeLinejoin="round" className="mr-1.5 h-4 w-4">
@@ -268,8 +277,59 @@ export default function IncentivesClient() {
               <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
               <rect x="6" y="14" width="12" height="8" />
             </svg>
-            ພິມ / PDF
+            ພິມ
           </button>
+          {/* Two PDFs the branch asks for: the report exactly as shown, or a
+              per-person sheet carrying the point breakdown behind each bonus. */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setPdfMenu((open) => !open)}
+              aria-expanded={pdfMenu}
+              className="odoo-btn"
+              title="ບັນທຶກເປັນ PDF — ເລືອກແບບ"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
+                strokeLinecap="round" strokeLinejoin="round" className="mr-1.5 h-4 w-4">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                <path d="M14 2v6h6" />
+                <path d="M12 18v-6" />
+                <path d="m9 15 3 3 3-3" />
+              </svg>
+              PDF ▾
+            </button>
+            {pdfMenu ? (
+              <>
+                <button
+                  type="button"
+                  aria-label="ປິດ"
+                  className="fixed inset-0 z-10 cursor-default"
+                  onClick={() => setPdfMenu(false)}
+                />
+                <div className="absolute right-0 z-20 mt-1 w-64 overflow-hidden rounded-lg border border-odoo-border bg-white shadow-lg">
+                  <button
+                    type="button"
+                    className="block w-full px-3 py-2.5 text-left text-sm hover:bg-odoo-surface-muted"
+                    onClick={() => { setPdfMenu(false); window.print(); }}
+                  >
+                    <div className="font-bold">ແບບ 1 · ໜ້າຈໍ</div>
+                    <div className="text-xs text-odoo-text-muted">ຕາຕະລາງລວມ ຕາມທີ່ເຫັນໃນໜ້ານີ້</div>
+                  </button>
+                  <button
+                    type="button"
+                    className="block w-full border-t border-odoo-border px-3 py-2.5 text-left text-sm hover:bg-odoo-surface-muted"
+                    onClick={() => {
+                      setPdfMenu(false);
+                      window.open(`/reports/incentives/pdf?period=${period}`, "_blank");
+                    }}
+                  >
+                    <div className="font-bold">ແບບ 2 · ລາຍບຸກຄົນ</div>
+                    <div className="text-xs text-odoo-text-muted">ແຍກເປັນຄົນ ພ້ອມລາຍລະອຽດຄະແນນ</div>
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
           <p className="text-xs text-odoo-text-muted sm:ml-auto">
             {tiers
               ? `ເກນຈ່າຍ: ≤${pct(tiers.lowMaxPct)} = ${pct(tiers.lowMultiplier)} · ${pct(tiers.lowMaxPct)}–${pct(tiers.standardMaxPct)} = ${pct(tiers.standardMultiplier)} · >${pct(tiers.standardMaxPct)} = ${pct(tiers.highMultiplier)}`
@@ -360,6 +420,8 @@ export default function IncentivesClient() {
                         data={breakdowns[row.employeeCode]}
                         loading={bdLoading.has(row.employeeCode)}
                         currency={currency}
+                        specialLines={row.specialLines}
+                        specialTotal={row.specialReward}
                       />
                     </td>
                   </tr>
@@ -403,7 +465,19 @@ const CAT_CHIP: Record<string, string> = {
 };
 
 // Tree view: ພະນັກງານ → ໝວດ (category) → ຍີ່ຫໍ້ (brand) → ສິນຄ້າ that earned points.
-function BreakdownTree({ data, loading, currency }: { data?: Breakdown; loading: boolean; currency: string }) {
+function BreakdownTree({
+  data,
+  loading,
+  currency,
+  specialLines = [],
+  specialTotal = 0,
+}: {
+  data?: Breakdown;
+  loading: boolean;
+  currency: string;
+  specialLines?: SpecialLine[];
+  specialTotal?: number;
+}) {
   const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
   if (loading && !data) return <div className="px-10 py-4 text-sm text-odoo-text-muted">ກຳລັງໂຫລດລາຍລະອຽດ…</div>;
   if (!data) return null;
@@ -494,6 +568,24 @@ function BreakdownTree({ data, loading, currency }: { data?: Breakdown; loading:
         <span className="font-mono font-black text-odoo-primary">{numberFmt.format(data.totalPoints)}</span>
         <span className="text-odoo-text-muted">· × 10 {currency}/ຄະແນນ × ຕົວຄູນ = ໂບນັດ</span>
       </div>
+
+      {/* ② ເງິນພິເສດ is a sum of separate programmes, so name what produced it —
+          one compact right-aligned line each, matching the points line above. */}
+      {specialLines.map((line, i) => (
+        <div key={`${line.label}-${i}`} className="flex items-center justify-end gap-2 pt-1 text-sm">
+          <span className="text-odoo-text-muted">ເງິນພິເສດ:</span>
+          <span className="font-mono font-black text-amber-600">{numberFmt.format(line.amount)}</span>
+          <span className="text-odoo-text-muted">· {line.note}</span>
+        </div>
+      ))}
+      {specialLines.length > 1 ? (
+        <div className="flex items-center justify-end gap-2 pt-1 text-sm">
+          <span className="text-odoo-text-muted">ລວມເງິນພິເສດ:</span>
+          <span className="font-mono font-black text-amber-600">
+            {numberFmt.format(specialTotal)} {currency}
+          </span>
+        </div>
+      ) : null}
     </div>
   );
 }
