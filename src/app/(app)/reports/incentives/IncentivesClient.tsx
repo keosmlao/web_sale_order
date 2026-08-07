@@ -2,6 +2,14 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 
+// ພິມ / PDF are still being shaped with the branch, so they stay off the
+// deployed report and on in development. Set NEXT_PUBLIC_ENABLE_REPORT_PRINT=1
+// to switch them on in production without touching this file — the value is
+// read at build time, so a rebuild is needed for the change to take effect.
+const SHOW_PRINT =
+  process.env.NEXT_PUBLIC_ENABLE_REPORT_PRINT === "1" ||
+  process.env.NODE_ENV !== "production";
+
 // One programme that fed a row's ເງິນພິເສດ, with the condition it met.
 type SpecialLine = {
   label: string;
@@ -265,6 +273,8 @@ export default function IncentivesClient() {
             <input type="month" value={period} onChange={(event) => setPeriod(event.target.value)} className="odoo-input" />
           </label>
           <button type="button" onClick={() => void load()} className="odoo-btn odoo-btn-primary">ໂຫລດໃໝ່</button>
+          {SHOW_PRINT ? (
+          <>
           <button
             type="button"
             onClick={() => window.print()}
@@ -330,6 +340,8 @@ export default function IncentivesClient() {
               </>
             ) : null}
           </div>
+          </>
+          ) : null}
           <p className="text-xs text-odoo-text-muted sm:ml-auto">
             {tiers
               ? `ເກນຈ່າຍ: ≤${pct(tiers.lowMaxPct)} = ${pct(tiers.lowMultiplier)} · ${pct(tiers.lowMaxPct)}–${pct(tiers.standardMaxPct)} = ${pct(tiers.standardMultiplier)} · >${pct(tiers.standardMaxPct)} = ${pct(tiers.highMultiplier)}`
