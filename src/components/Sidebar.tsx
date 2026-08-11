@@ -52,6 +52,18 @@ const sections: NavSection[] = [
     label: "Reports",
     items: [
       {
+        href: "/reports/total-company",
+        label: "ສະຫລຸບທັງບໍລິສັດ",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <path d="M3 21h18" />
+            <path d="M5 21V7l7-4 7 4v14" />
+            <path d="M9 21v-5h6v5" />
+            <path d="M9 10h.01M15 10h.01" />
+          </svg>
+        ),
+      },
+      {
         href: "/reports/daily-sales",
         label: "ຍອດຂາຍປະຈຳວັນ",
         icon: (
@@ -517,7 +529,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
       ) : null}
 
       {/* Mobile top header */}
-      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/5 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 px-3 pb-2.5 pt-[calc(0.625rem+env(safe-area-inset-top))] shadow-md md:hidden">
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-white/10 bg-gradient-to-r from-[#003361] via-[#2b70b5] to-[#003361] px-3 pb-2.5 pt-[calc(0.625rem+env(safe-area-inset-top))] shadow-md md:hidden">
         <div className="flex min-w-0 items-center gap-2">
           <button
             type="button"
@@ -588,7 +600,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
         // the className translate handle the open/close slide animation.
         style={dragX ? { transform: `translateX(${dragX}px)`, transition: "none" } : undefined}
         className={
-          "fixed left-0 top-0 z-50 flex h-dvh max-h-dvh min-h-0 w-[88vw] max-w-80 flex-col overflow-hidden bg-gradient-to-b from-slate-900 via-indigo-950 to-slate-900 shadow-2xl transition-transform duration-300 ease-out md:hidden " +
+          "fixed left-0 top-0 z-50 flex h-dvh max-h-dvh min-h-0 w-[88vw] max-w-80 flex-col overflow-hidden bg-gradient-to-b from-[#003361] via-[#174f87] to-[#2b70b5] shadow-2xl transition-transform duration-300 ease-out md:hidden " +
           (mobileOpen ? "translate-x-0" : "-translate-x-full")
         }
       >
@@ -676,7 +688,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
                                     className={
                                       "flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition " +
                                       (childActive
-                                        ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/30"
+                                        ? "bg-[#2b70b5] text-white shadow-sm shadow-[#2b70b5]/30"
                                         : "text-slate-400 hover:bg-white/10 hover:text-white")
                                     }
                                   >
@@ -705,7 +717,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
                         className={
                           "flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-semibold transition " +
                           (active
-                            ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/20"
+                            ? "bg-[#2b70b5] text-white shadow-md shadow-[#2b70b5]/20"
                             : "text-slate-300 hover:bg-white/10 hover:text-white")
                         }
                       >
@@ -723,7 +735,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
 
         <div className="shrink-0 border-t border-white/10 px-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-3">
           <div className="mb-2 flex items-center gap-3 px-1">
-            <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-indigo-600 text-sm font-bold text-white">
+            <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#4ac7f0] to-[#2b70b5] text-sm font-bold text-white">
               {userInitial}
             </div>
             <div className="min-w-0">

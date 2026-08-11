@@ -13,7 +13,7 @@ export default function DateFilter({ selectedDate }: { selectedDate: string }) {
   return (
     <div className="flex items-end gap-2">
       <div>
-        <label htmlFor="date" className="odoo-label">
+        <label htmlFor="date" className="mb-1 block text-[10px] font-bold text-white/70">
           ເລືອກວັນທີ
         </label>
         <input
@@ -21,9 +21,7 @@ export default function DateFilter({ selectedDate }: { selectedDate: string }) {
           name="date"
           type="date"
           defaultValue={selectedDate}
-          min="2026-01-01"
-          max="2026-12-31"
-          className="odoo-input"
+          className="h-10 rounded-lg border border-white/20 bg-white px-3 text-sm font-bold text-odoo-primary-dark outline-none transition focus:border-odien-yellow focus:ring-2 focus:ring-odien-yellow/30"
           onChange={(e) => {
             const v = e.target.value;
             if (!v) return;
@@ -38,7 +36,7 @@ export default function DateFilter({ selectedDate }: { selectedDate: string }) {
       <span
         aria-live="polite"
         className={
-          "inline-flex items-center gap-1.5 pb-2 text-xs text-odoo-text-muted transition-opacity " +
+          "inline-flex items-center gap-1.5 pb-2 text-xs text-white/75 transition-opacity " +
           (pending ? "opacity-100" : "opacity-0")
         }
       >

@@ -30,7 +30,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#4f46e5",
+  themeColor: "#2B70B5",
   width: "device-width",
   initialScale: 1,
   // Disable pinch / double-tap zoom (kiosk-style POS use).

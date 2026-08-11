@@ -1,4 +1,5 @@
-.page { min-height:100%; margin:-1rem; padding:1rem 1rem 2rem; color:#475569; background:#f8fafc; }
+.page { min-height:100%; margin:-1rem; padding:1rem 1rem 2rem; color:#475569; background:#f8fafc; font-family:var(--font-noto-sans-lao),"Noto Sans Lao",Arial,Helvetica,sans-serif; }
+.page * { font-family:var(--font-noto-sans-lao),"Noto Sans Lao",Arial,Helvetica,sans-serif !important; }
 .hero { position:relative; isolation:isolate; overflow:hidden; max-width:1480px; margin:0 auto; padding:20px 24px 24px; border-radius:16px; color:#fff; background:#020617; box-shadow:0 18px 36px rgba(15,23,42,.12); }
 .hero::before { content:""; position:absolute; z-index:-1; right:12%; bottom:-100px; width:260px; height:260px; border-radius:50%; background:rgba(14,165,233,.1); filter:blur(54px); }
 .heroGlow { position:absolute; z-index:-1; right:-60px; top:-110px; width:280px; height:280px; border-radius:50%; background:rgba(20,184,166,.2); filter:blur(56px); }
@@ -154,3 +155,15 @@
 @media (max-width:900px){.panel :global(.point-rule-form){grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:640px){.panel :global(.point-rule-form){grid-template-columns:1fr;margin-inline:10px}}
 @media (prefers-reduced-motion:reduce){.navCard{transition:none}.panelActive{animation:none}}
+
+/* ODIEN brand layer for this custom settings workspace. */
+.hero{background:#003361}.hero::before,.heroGlow{background:rgba(74,199,240,.18)}
+.breadcrumb span,.kicker,.navText small,.sectionHeading span,.periodIntro small{color:#4ac7f0}
+.accessEdit{color:#dff5fd;background:rgba(74,199,240,.14)}
+.navCard:hover{border-color:#8cdbf6}.navCardActive{border-color:#4ac7f0;background:#f1faff;box-shadow:0 5px 16px rgba(43,112,181,.1),inset 3px 0 #2b70b5}
+.navIcon,.sectionIcon,.periodIcon{color:#2b70b5;background:#f1faff}.sectionIcon{border-color:#bceafb}
+.periodFields select:focus{border-color:#2b70b5;box-shadow:0 0 0 3px #dff5fd}
+.dateBadge,.exportButton,.subTabActive{background:#2b70b5}.exportButton:hover{background:#003361}
+.subTab:hover{border-color:#8cdbf6;color:#2b70b5}.subTabActive{border-color:#2b70b5;box-shadow:0 6px 16px rgba(43,112,181,.22)}
+.panel :global(.odoo-input:focus){border-color:#2b70b5;box-shadow:0 0 0 3px #dff5fd}
+.panel :global(.odoo-btn-primary),.panel :global(.odoo-btn-primary:hover:not(:disabled)){background:#2b70b5;border-color:#2b70b5}

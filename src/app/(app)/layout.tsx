@@ -5,7 +5,6 @@ import { roleFromEmployee, isPrivilegedRole, isSelfServePath } from "@/lib/roles
 import { getHiddenMenuKeys } from "@/lib/menu-visibility";
 import Sidebar from "@/components/Sidebar";
 import BottomNav from "@/components/BottomNav";
-import MobileReloadButton from "@/components/MobileReloadButton";
 import OrderNotifier from "@/components/OrderNotifier";
 import { logoutAction } from "@/app/login/actions";
 
@@ -81,7 +80,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <a href="/profile" className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-bold ${pathname.startsWith("/profile") ? "text-odoo-primary" : "text-odoo-text-muted"}`}>
             <span className="text-lg">👤</span> ໂປຣໄຟລ໌
           </a>
-          <MobileReloadButton />
         </nav>
       </div>
     );

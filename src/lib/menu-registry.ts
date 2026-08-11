@@ -38,6 +38,7 @@ export type MenuRegistryItem = {
 export const MENU_REGISTRY: MenuRegistryItem[] = [
   { key: "/", label: "ໜ້າຫຼັກ", section: "Dashboard" },
 
+  { key: "/reports/total-company", label: "ສະຫລຸບທັງບໍລິສັດ", section: "Reports" },
   { key: "/reports/daily-sales", label: "ຍອດຂາຍປະຈຳວັນ", section: "Reports" },
   { key: "/reports/cashiers", label: "Cashier performance", section: "Reports" },
   { key: "/reports/promo-effectiveness", label: "ປະສິດທິພາບໂປຣ", section: "Reports" },

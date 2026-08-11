@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
 /*
- * Theme tokens — Deep Indigo + Slate palette.
+ * Theme tokens — ODIEN Mall official brand palette.
  *
  * Token names keep the `--odoo-*` prefix from the original Odoo theme so
  * existing class names (bg-odoo-primary, text-odoo-text-muted, ...) all
@@ -14,14 +14,16 @@
   --background: #f8fafc;        /* slate-50 — flat app shell */
   --foreground: #0f172a;        /* slate-900 — body text */
 
-  /* Premium SaaS Brand — Business Blue */
-  --odoo-primary: #2563eb;      /* blue-600 */
-  --odoo-primary-dark: #1d4ed8; /* blue-700 */
-  --odoo-primary-light: #60a5fa;/* blue-400 */
-  --odoo-primary-50: #eff6ff;   /* blue-50  */
-  --odoo-primary-100: #dbeafe;  /* blue-100 */
-  --odoo-primary-200: #bfdbfe;  /* blue-200 */
-  --odoo-accent: #0ea5e9;       /* sky-500 — secondary highlight */
+  /* ODIEN primary and accent colours from the brand guideline. */
+  --odoo-primary: #2b70b5;      /* Deep Blue */
+  --odoo-primary-dark: #003361; /* Navy */
+  --odoo-primary-light: #4ac7f0;/* Sky Blue */
+  --odoo-primary-50: #f1faff;
+  --odoo-primary-100: #dff5fd;
+  --odoo-primary-200: #bceafb;
+  --odoo-accent: #4ac7f0;       /* Sky Blue */
+  --odien-orange: #f5911f;
+  --odien-yellow: #ffd170;
 
   /* Surfaces and lines — Slate neutrals. */
   --odoo-surface: #ffffff;
@@ -37,7 +39,7 @@
 
   /* Status — solid (used for icons / text / outlines). */
   --odoo-success: #10b981;      /* emerald-500 */
-  --odoo-warning: #f59e0b;      /* amber-500 */
+  --odoo-warning: #f5911f;      /* ODIEN Orange */
   --odoo-danger: #ef4444;       /* red-500   */
   --odoo-info:    #0ea5e9;      /* sky-500   */
 
@@ -109,6 +111,108 @@
   --color-odoo-muted-bg: var(--odoo-muted-bg);
   --color-odoo-muted-border: var(--odoo-muted-border);
   --color-odoo-muted-text: var(--odoo-muted-text);
+
+  /* Brand compatibility ramps. Existing screens use these Tailwind colour
+     families; mapping them here brings the entire product into the ODIEN
+     palette without changing semantic success/danger states. */
+  --color-blue-50: #f1faff;
+  --color-blue-100: #dff5fd;
+  --color-blue-200: #bceafb;
+  --color-blue-300: #8cdbf6;
+  --color-blue-400: #4ac7f0;
+  --color-blue-500: #378fc7;
+  --color-blue-600: #2b70b5;
+  --color-blue-700: #235f9b;
+  --color-blue-800: #174f87;
+  --color-blue-900: #003361;
+  --color-blue-950: #002442;
+
+  --color-indigo-50: #f1faff;
+  --color-indigo-100: #dff5fd;
+  --color-indigo-200: #bceafb;
+  --color-indigo-300: #8cdbf6;
+  --color-indigo-400: #4ac7f0;
+  --color-indigo-500: #378fc7;
+  --color-indigo-600: #2b70b5;
+  --color-indigo-700: #235f9b;
+  --color-indigo-800: #174f87;
+  --color-indigo-900: #003361;
+  --color-indigo-950: #002442;
+
+  --color-sky-50: #f1faff;
+  --color-sky-100: #dff5fd;
+  --color-sky-200: #bceafb;
+  --color-sky-300: #8cdbf6;
+  --color-sky-400: #4ac7f0;
+  --color-sky-500: #3bb6e2;
+  --color-sky-600: #2b70b5;
+  --color-sky-700: #235f9b;
+  --color-sky-800: #174f87;
+  --color-sky-900: #003361;
+  --color-sky-950: #002442;
+
+  --color-cyan-50: #f1faff;
+  --color-cyan-100: #dff5fd;
+  --color-cyan-200: #bceafb;
+  --color-cyan-300: #8cdbf6;
+  --color-cyan-400: #4ac7f0;
+  --color-cyan-500: #3bb6e2;
+  --color-cyan-600: #2b70b5;
+  --color-cyan-700: #235f9b;
+  --color-cyan-800: #174f87;
+  --color-cyan-900: #003361;
+  --color-cyan-950: #002442;
+
+  --color-teal-50: #f1faff;
+  --color-teal-100: #dff5fd;
+  --color-teal-200: #bceafb;
+  --color-teal-300: #8cdbf6;
+  --color-teal-400: #4ac7f0;
+  --color-teal-500: #3bb6e2;
+  --color-teal-600: #2b70b5;
+  --color-teal-700: #235f9b;
+  --color-teal-800: #174f87;
+  --color-teal-900: #003361;
+  --color-teal-950: #002442;
+
+  --color-violet-50: #fff9ef;
+  --color-violet-100: #fff0d5;
+  --color-violet-200: #ffe1a8;
+  --color-violet-300: #ffd170;
+  --color-violet-400: #f8b343;
+  --color-violet-500: #f5911f;
+  --color-violet-600: #db7410;
+  --color-violet-700: #b5570d;
+  --color-violet-800: #914412;
+  --color-violet-900: #773913;
+  --color-violet-950: #441b06;
+
+  --color-purple-50: #fff9ef;
+  --color-purple-100: #fff0d5;
+  --color-purple-200: #ffe1a8;
+  --color-purple-300: #ffd170;
+  --color-purple-400: #f8b343;
+  --color-purple-500: #f5911f;
+  --color-purple-600: #db7410;
+  --color-purple-700: #b5570d;
+  --color-purple-800: #914412;
+  --color-purple-900: #773913;
+  --color-purple-950: #441b06;
+
+  --color-fuchsia-50: #fff9ef;
+  --color-fuchsia-100: #fff0d5;
+  --color-fuchsia-200: #ffe1a8;
+  --color-fuchsia-300: #ffd170;
+  --color-fuchsia-400: #f8b343;
+  --color-fuchsia-500: #f5911f;
+  --color-fuchsia-600: #db7410;
+  --color-fuchsia-700: #b5570d;
+  --color-fuchsia-800: #914412;
+  --color-fuchsia-900: #773913;
+  --color-fuchsia-950: #441b06;
+
+  --color-odien-orange: var(--odien-orange);
+  --color-odien-yellow: var(--odien-yellow);
 }
 
 body {
@@ -309,7 +413,7 @@ a {
     background: var(--odoo-surface);
     border: 1px solid var(--odoo-border-strong);
     border-radius: 12px;
-    box-shadow: 0 4px 20px -2px rgba(99, 102, 241, 0.03), 0 2px 6px -1px rgba(99, 102, 241, 0.02);
+    box-shadow: 0 4px 20px -2px rgba(43, 112, 181, 0.05), 0 2px 6px -1px rgba(43, 112, 181, 0.03);
     transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
   }
 
@@ -418,11 +522,11 @@ a {
     background: linear-gradient(135deg, var(--odoo-primary) 0%, var(--odoo-primary-dark) 100%);
     color: #fff;
     border-color: transparent;
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.15);
+    box-shadow: 0 4px 12px rgba(43, 112, 181, 0.18);
   }
   .odoo-btn-primary:hover:not(:disabled) {
     filter: brightness(1.06);
-    box-shadow: 0 6px 16px rgba(99, 102, 241, 0.22);
+    box-shadow: 0 6px 16px rgba(43, 112, 181, 0.24);
   }
   .odoo-btn-secondary {
     background: var(--odoo-surface);
@@ -516,7 +620,7 @@ a {
   .odoo-textarea:focus {
     outline: none;
     border-color: var(--odoo-primary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12);
+    box-shadow: 0 0 0 3px rgba(74, 199, 240, 0.22);
   }
   .odoo-input::placeholder,
   .odoo-textarea::placeholder {
@@ -571,7 +675,7 @@ a {
     transition: background 120ms ease;
   }
   .odoo-table tbody tr:hover {
-    background: rgba(99, 102, 241, 0.03);
+    background: rgba(74, 199, 240, 0.07);
     cursor: pointer;
   }
 
@@ -920,7 +1024,7 @@ a {
     box-shadow: 0 2px 6px rgba(239, 68, 68, 0.15);
   }
   .odoo-pill-info {
-    background: linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%);
+    background: linear-gradient(135deg, #4ac7f0 0%, #2b70b5 100%);
     color: #ffffff;
     box-shadow: 0 2px 6px rgba(14, 165, 233, 0.15);
   }
@@ -2132,7 +2236,7 @@ a {
     align-items: center;
     justify-content: center;
     border-radius: 14px;
-    background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    background: linear-gradient(135deg, #2b70b5, #003361);
     color: #fff;
     font-size: 24px;
     font-weight: 900;
@@ -2175,7 +2279,7 @@ a {
   .settle-header .odoo-btn-secondary:hover {
     background: #eff6ff;
     border-color: #93c5fd;
-    color: #1d4ed8;
+    color: #2b70b5;
   }
   .settle-readonly {
     margin: 14px 20px 0;
@@ -2340,7 +2444,7 @@ a {
     border-radius: 16px;
     background:
       radial-gradient(circle at 92% -10%, rgba(255, 255, 255, 0.18), transparent 38%),
-      linear-gradient(135deg, #1d4ed8 0%, #2563eb 55%, #0f5bc4 100%);
+      linear-gradient(135deg, #003361 0%, #2b70b5 55%, #4ac7f0 100%);
     border: 0;
     padding: 18px 20px;
     color: #ffffff;
@@ -2527,7 +2631,7 @@ a {
     align-items: center;
     justify-content: center;
     border-radius: 999px;
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    background: linear-gradient(135deg, #4ac7f0 0%, #2b70b5 100%);
     color: #fff;
     font-family: var(--font-mono);
     font-size: 12px;
@@ -2605,7 +2709,7 @@ a {
     transform: translateY(-50%);
     border: 0;
     border-radius: 8px;
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    background: linear-gradient(135deg, #4ac7f0 0%, #2b70b5 100%);
     padding: 8px 14px;
     color: #ffffff;
     font-size: 12px;
@@ -2850,7 +2954,7 @@ a {
     font-size: 15px;
     font-weight: 700;
     border-radius: 12px;
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    background: linear-gradient(135deg, #4ac7f0 0%, #2b70b5 100%);
     box-shadow: 0 4px 14px rgba(37, 99, 235, 0.25);
     transition: transform 150ms ease, box-shadow 150ms ease;
   }
@@ -2993,9 +3097,9 @@ a {
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(120% 80% at 0% 0%, rgba(96, 165, 250, 0.55), transparent 60%),
-      radial-gradient(100% 70% at 100% 100%, rgba(14, 165, 233, 0.45), transparent 55%),
-      linear-gradient(135deg, #1e3a8a 0%, #1d4ed8 45%, #2563eb 100%);
+      radial-gradient(120% 80% at 0% 0%, rgba(74, 199, 240, 0.55), transparent 60%),
+      radial-gradient(100% 70% at 100% 100%, rgba(255, 209, 112, 0.24), transparent 55%),
+      linear-gradient(135deg, #003361 0%, #174f87 45%, #2b70b5 100%);
     z-index: -1;
   }
   .login-brand-bg::before,
@@ -3009,14 +3113,14 @@ a {
   .login-brand-bg::before {
     width: 380px;
     height: 380px;
-    background: #c7d2fe;
+    background: #bceafb;
     top: -80px;
     right: -80px;
   }
   .login-brand-bg::after {
     width: 320px;
     height: 320px;
-    background: #38bdf8;
+    background: #4ac7f0;
     bottom: -100px;
     left: -60px;
   }
@@ -3150,7 +3254,7 @@ a {
     .login-panel {
       padding: 32px 18px;
       background:
-        radial-gradient(120% 80% at 0% 0%, rgba(199, 210, 254, 0.5), transparent 55%),
+        radial-gradient(120% 80% at 0% 0%, rgba(188, 234, 251, 0.58), transparent 55%),
         var(--odoo-surface-muted);
     }
   }
@@ -3263,7 +3367,7 @@ a {
   .login-input:focus {
     outline: none;
     border-color: var(--odoo-primary);
-    box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.12);
+    box-shadow: 0 0 0 4px rgba(74, 199, 240, 0.22);
   }
   .login-field-control:focus-within .login-field-icon {
     color: var(--odoo-primary);
@@ -3327,17 +3431,17 @@ a {
     font-weight: 800;
     letter-spacing: 0.02em;
     cursor: pointer;
-    box-shadow: 0 8px 20px rgba(79, 70, 229, 0.28);
+    box-shadow: 0 8px 20px rgba(43, 112, 181, 0.28);
     transition: transform 120ms ease, box-shadow 140ms ease, opacity 140ms ease, filter 140ms ease;
   }
   .login-submit:hover:not(:disabled) {
     filter: brightness(1.04);
-    box-shadow: 0 10px 24px rgba(79, 70, 229, 0.34);
+    box-shadow: 0 10px 24px rgba(43, 112, 181, 0.34);
     transform: translateY(-1px);
   }
   .login-submit:active:not(:disabled) {
     transform: translateY(0);
-    box-shadow: 0 6px 14px rgba(79, 70, 229, 0.28);
+    box-shadow: 0 6px 14px rgba(43, 112, 181, 0.28);
   }
   .login-submit:disabled {
     cursor: not-allowed;
@@ -5196,7 +5300,7 @@ a {
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(circle at 0 0, rgba(37, 99, 235, 0.07), transparent 32%),
+      radial-gradient(circle at 0 0, rgba(74, 199, 240, 0.12), transparent 34%),
       linear-gradient(180deg, #ffffff 0%, #f8faff 100%);
     border-right: 1px solid #e6eaf2;
     z-index: -1;
@@ -5228,7 +5332,7 @@ a {
     border-radius: 12px;
     background: #fff;
     border: 1px solid #e6eaf2;
-    box-shadow: 0 5px 14px rgba(37, 99, 235, 0.08);
+    box-shadow: 0 5px 14px rgba(43, 112, 181, 0.1);
     flex-shrink: 0;
   }
   .sbd-brand-logo img {
@@ -5318,10 +5422,10 @@ a {
   .sbd-item-active,
   .sbd-item-active:hover {
     background: #eaf1ff;
-    color: #1857c9;
+    color: #2b70b5;
     box-shadow:
-      inset 3px 0 0 #2563eb,
-      inset 0 0 0 1px rgba(37, 99, 235, 0.08);
+      inset 3px 0 0 #2b70b5,
+      inset 0 0 0 1px rgba(43, 112, 181, 0.1);
   }
   .sbd-item-icon {
     display: inline-flex;
@@ -5334,7 +5438,7 @@ a {
   }
   .sbd-item:hover .sbd-item-icon,
   .sbd-item-active .sbd-item-icon {
-    color: #2563eb;
+    color: #2b70b5;
   }
   .sbd-item-label {
     flex: 1 1 auto;
@@ -5348,8 +5452,8 @@ a {
     width: 6px;
     height: 6px;
     border-radius: 999px;
-    background: #2563eb;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    background: #4ac7f0;
+    box-shadow: 0 0 0 3px rgba(74, 199, 240, 0.18);
     flex-shrink: 0;
   }
   .sbd-item-chevron {
@@ -5390,7 +5494,7 @@ a {
   .sbd-sub-item-active,
   .sbd-sub-item-active:hover {
     background: #eaf1ff;
-    color: #1857c9;
+    color: #2b70b5;
   }
   .sbd-sub-icon {
     display: inline-flex;
@@ -5403,7 +5507,7 @@ a {
   }
   .sbd-sub-item:hover .sbd-sub-icon,
   .sbd-sub-item-active .sbd-sub-icon {
-    color: #2563eb;
+    color: #2b70b5;
   }
 
   .sbd-foot {
@@ -5427,11 +5531,11 @@ a {
     height: 36px;
     flex-shrink: 0;
     border-radius: 11px;
-    background: linear-gradient(135deg, #2563eb 0%, #4f46e5 100%);
+    background: linear-gradient(135deg, #4ac7f0 0%, #2b70b5 62%, #003361 100%);
     color: #fff;
     font-size: 13px;
     font-weight: 900;
-    box-shadow: 0 5px 12px rgba(37, 99, 235, 0.2);
+    box-shadow: 0 5px 12px rgba(43, 112, 181, 0.22);
   }
   .sbd-avatar-dot {
     position: absolute;
@@ -5689,7 +5793,7 @@ a {
   }
   .pos-mobile-appbar-count strong,
   .pos-mobile-appbar-count span { display: block; }
-  .pos-mobile-appbar-count strong { font: 900 16px/1 ui-monospace, monospace; }
+  .pos-mobile-appbar-count strong { font: 900 16px/1 var(--font-noto-sans-lao), "Noto Sans Lao", sans-serif; }
   .pos-mobile-appbar-count span { margin-top: 3px; font-size: 9px; color: rgba(255,255,255,.7); }
 
   .pt-modern {
@@ -6665,37 +6769,6 @@ a {
 }
 
 /* ============================================================
-   Sidebar font balance — Noto Sans Lao draws Latin glyphs taller
-   than its Lao glyphs at the same px, so mixed-script menu labels
-   (e.g. "Cashier performance", "POS") looked bigger than the Lao
-   ones. Re-declare the Latin subset scaled down so both scripts
-   read as one size. Scoped to the sidebar via font-family below.
-   ============================================================ */
-@font-face {
-  font-family: "SidebarLatinFix";
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-  size-adjust: 85%;
-  src: url(https://fonts.gstatic.com/s/notosanslao/v33/bx6lNx2Ol_ixgdYWLm9BwxM3NW6BOkuf763Clj73CiQ_J1Djx9pidOt4lsHteJkL_L2R2pU4.woff2)
-    format("woff2");
-  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6,
-    U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122,
-    U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
-}
-/* SidebarLatinFix only covers the Latin range, so Lao still uses the app
-   font; only Latin glyphs get the size-adjust. Covers desktop (.sbd-*) and
-   the mobile drawer (.sbd-mnav). */
-.sbd-item,
-.sbd-sub-item,
-.sbd-brand-name,
-.sbd-mnav a,
-.sbd-mnav button {
-  font-family: "SidebarLatinFix", var(--font-noto-sans-lao), "Noto Sans Lao",
-    Arial, Helvetica, sans-serif;
-}
-
-/* ============================================================
    POS cart — mobile card reflow. On phones the 6-column cart
    table is unusable; turn each row into a stacked card so the
    POS is thumb-friendly. Appended last so it wins the cascade.
@@ -6971,7 +7044,7 @@ a {
     color: #94a3b8;
   }
   .pos-mobile-paybar-amount {
-    font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+    font-family: var(--font-noto-sans-lao), "Noto Sans Lao", sans-serif;
     font-size: 18px;
     font-weight: 800;
     color: var(--odoo-primary-dark);
@@ -7552,11 +7625,11 @@ a {
 
 .pr-print-btn {
   position: fixed; right: 16px; top: 16px; z-index: 10;
-  border-radius: 8px; background: #4f46e5; padding: 9px 16px;
+  border-radius: 8px; background: #2b70b5; padding: 9px 16px;
   font-size: 13px; font-weight: 700; color: #fff;
   box-shadow: 0 6px 16px -6px rgba(79, 70, 229, 0.6);
 }
-.pr-print-btn:hover { background: #4338ca; }
+.pr-print-btn:hover { background: #003361; }
 .pr-hint {
   position: fixed; right: 16px; top: 58px; z-index: 10; max-width: 240px;
   border-radius: 8px; border: 1px solid #fde68a; background: #fffbeb;
@@ -7581,7 +7654,7 @@ a {
 .pr-summary span { display: block; font-size: 9px; color: #64748b; }
 .pr-summary b { display: block; margin-top: 2px; font-size: 13px; font-weight: 800; font-variant-numeric: tabular-nums; }
 .pr-summary-accent { background: #eef2ff; border-color: #a5b4fc !important; }
-.pr-summary-accent b { color: #4338ca; }
+.pr-summary-accent b { color: #2b70b5; }
 
 .pr-table { width: 100%; border-collapse: collapse; }
 .pr-table th {
@@ -7593,7 +7666,7 @@ a {
 .pr-table .pr-r { text-align: right; }
 .pr-table .pr-c { text-align: center; }
 .pr-name { font-weight: 700; }
-.pr-code { font-size: 8.5px; color: #94a3b8; font-family: ui-monospace, monospace; }
+.pr-code { font-size: 8.5px; color: #94a3b8; font-family: var(--font-noto-sans-lao), "Noto Sans Lao", sans-serif; }
 .pr-strong { font-weight: 800; }
 .pr-empty { padding: 24px; text-align: center; color: #64748b; }
 .pr-table tfoot td {

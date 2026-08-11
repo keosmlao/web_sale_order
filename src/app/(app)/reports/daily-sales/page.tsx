@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import DateFilter from "./DateFilter";
@@ -142,6 +143,7 @@ export default async function DailySalesReportPage({
  AND (t.doc_no LIKE'CAK%' OR t.doc_no LIKE'INK%')
  AND t.doc_date = ${selectedDate}::date
  AND t.department_code IN (${deptList})
+ AND COALESCE(t.cancel_type, 0) = 0
  ),
  totals AS (
  SELECT
@@ -215,42 +217,49 @@ export default async function DailySalesReportPage({
     const currencyRows: CurrencyTotal[] = payload.currencies ?? [];
     const salesRows: SalespersonTotal[] = payload.salespeople ?? [];
     const rows: Row[] = payload.detail_rows ?? [];
+    const reportYear = selectedDate.slice(0, 4);
+    const reportDateLabel = new Intl.DateTimeFormat("lo-LA", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+    }).format(new Date(`${selectedDate}T00:00:00+07:00`));
+    const topSalespersonTotal = Math.max(...salesRows.map((row) => toNum(row.total_baht)), 0);
 
     return (
         <div className="odoo-page">
-            <div className="odoo-card mb-4 p-5">
-                <div className="flex flex-col items-stretch gap-4 sm:flex-row sm:items-end sm:justify-between">
-                    <div>
-                        <div className="odoo-label">
-                            ລາຍງານຍອດຂາຍປະຈຳວັນ
-                        </div>
-                        <h1 className="odoo-page-title mt-2">
-                            ລາຍງານຍອດຂາຍປະຈຳວັນ
-                        </h1>
-                        <p className="mt-1 text-sm text-odoo-text">
-                            ພະແນກຂາຍໜ້າຮ້ານ ຂົວຫຼວງ · ປີ 2026
+            <section className="relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-br from-odoo-primary-dark via-odoo-primary to-odoo-primary-light p-5 text-white shadow-[0_18px_45px_-20px_rgba(0,51,97,0.55)] sm:p-6">
+                <div className="pointer-events-none absolute -right-16 -top-20 h-56 w-56 rounded-full bg-white/10 blur-2xl" />
+                <div className="relative flex flex-col items-stretch gap-5 lg:flex-row lg:items-end lg:justify-between">
+                    <div className="min-w-0">
+                        <div className="text-[10px] font-black uppercase tracking-[0.18em] text-white/65">DAILY SALES REPORT</div>
+                        <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">ຍອດຂາຍປະຈຳວັນ</h1>
+                        <p className="mt-1 text-sm font-semibold text-white/75">
+                            ພະແນກຂາຍໜ້າຮ້ານ ຂົວຫຼວງ · ປີ {reportYear}
                         </p>
-                        <div className="mt-2 flex flex-wrap gap-1.5">
+                        <div className="mt-4 flex flex-wrap gap-1.5">
                             {INCLUDED_DEPTS.map((d) => (
                                 <span
                                     key={d.code}
-                                    className="inline-flex items-center gap-1.5 rounded-md bg-odoo-surface-muted px-2.5 py-1 text-xs text-odoo-text-strong"
+                                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/15 bg-white/10 px-2.5 py-1.5 text-[11px] font-bold text-white/90 backdrop-blur"
                                 >
-                                    <span className="font-mono text-[10px] text-odoo-text-muted">{d.code}</span>
+                                    <span className="text-[10px] text-odien-yellow">{d.code}</span>
                                     {d.name}
                                 </span>
                             ))}
                         </div>
                     </div>
-                    <DateFilter selectedDate={selectedDate} />
+                    <div className="rounded-xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm">
+                        <div className="mb-2 text-[10px] font-bold text-white/65">{reportDateLabel}</div>
+                        <DateFilter selectedDate={selectedDate} />
+                    </div>
                 </div>
-            </div>
+            </section>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-                <StatCard label="ຈຳນວນເອກະສານ" value={fmtInt(totals.doc_count)} sub={`CAK ${fmtInt(totals.cak_count)} · INK ${fmtInt(totals.ink_count)}`} />
-                <StatCard label="ຍອດຂາຍລວມ (ບາດ)" value={fmtMoney(totals.total)} accent />
-                <StatCard label="ຍອດ CAK (ບາດ)" value={fmtMoney(totals.cak_total)} />
-                <StatCard label="ຍອດ INK (ບາດ)" value={fmtMoney(totals.ink_total)} />
+                <StatCard label="ຍອດຂາຍສຸດທິ" value={fmtMoney(totals.total)} sub="ຫຼັງຕັດໃບຍົກເລີກ · ຫົວໜ່ວຍບາດ" accent />
+                <StatCard label="ຈຳນວນບິນຂາຍ" value={fmtInt(totals.doc_count)} sub={`CAK ${fmtInt(totals.cak_count)} ໃບ · INK ${fmtInt(totals.ink_count)} ໃບ`} />
+                <StatCard label="CAK · ຂາຍໜ້າຮ້ານ" value={fmtMoney(totals.cak_total)} sub={`${fmtInt(totals.cak_count)} ເອກະສານ`} />
+                <StatCard label="INK · ໃບແຈ້ງໜີ້" value={fmtMoney(totals.ink_total)} sub={`${fmtInt(totals.ink_count)} ເອກະສານ`} />
             </div>
 
             <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -301,7 +310,7 @@ export default async function DailySalesReportPage({
             <div className="odoo-card mt-6 overflow-hidden">
                 <div className="border-b border-odoo-border px-4 py-3">
                     <h2 className="text-sm font-semibold text-odoo-text-strong">
-                        ຍອດຕາມພະນັກງານຂາຍ ({fmtInt(salesRows.length)} ຄົນ)
+                        ອັນດັບຍອດຂາຍຕາມພະນັກງານ ({fmtInt(salesRows.length)} ຄົນ)
                     </h2>
                 </div>
                 {salesRows.length === 0 ? (
@@ -311,18 +320,26 @@ export default async function DailySalesReportPage({
                         <table className="odoo-table">
                             <thead>
                                 <tr>
+                                    <th className="w-12 px-4 py-2.5 text-center font-medium">ອັນດັບ</th>
                                     <th className="px-4 py-2.5 font-medium">ລະຫັດ</th>
                                     <th className="px-4 py-2.5 font-medium">ຊື່</th>
                                     <th className="px-4 py-2.5 font-medium">ຫຼິ້ນຊື່</th>
                                     <th className="px-4 py-2.5 text-right font-medium">ຈຳນວນເອກະສານ</th>
+                                    <th className="min-w-40 px-4 py-2.5 font-medium">ສັດສ່ວນຍອດຂາຍ</th>
                                     <th className="px-4 py-2.5 text-right font-medium">ຍອດຂາຍ (ບາດ)</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-odoo-border">
-                                {salesRows.map((s) => {
+                                {salesRows.map((s, index) => {
                                     const unmatched = !s.fullname_lo;
+                                    const salesAmount = toNum(s.total_baht);
+                                    const share = toNum(totals.total) > 0 ? salesAmount / toNum(totals.total) : 0;
+                                    const relativeWidth = topSalespersonTotal > 0 ? salesAmount / topSalespersonTotal : 0;
                                     return (
                                         <tr key={s.sale_code ?? "?"} className={unmatched ? "text-odoo-text-muted" : "text-odoo-text-strong"}>
+                                            <td className="px-4 py-2.5 text-center">
+                                                <span className={"inline-flex h-7 w-7 items-center justify-center rounded-full text-xs font-black " + (index === 0 ? "bg-odien-yellow text-odoo-primary-dark" : "bg-odoo-primary-50 text-odoo-primary")}>{index + 1}</span>
+                                            </td>
                                             <td className="px-4 py-2.5 font-mono text-xs">{s.sale_code ?? "—"}</td>
                                             <td className="px-4 py-2.5">
                                                 {s.fullname_lo ?? <span className="text-xs italic text-odoo-text-soft">ບໍ່ພົບໃນລະບົບ</span>}
@@ -331,6 +348,12 @@ export default async function DailySalesReportPage({
                                                 {s.nickname && s.nickname !== "0" ? s.nickname : "—"}
                                             </td>
                                             <td className="px-4 py-2.5 text-right font-mono">{fmtInt(s.doc_count)}</td>
+                                            <td className="px-4 py-2.5">
+                                                <div className="mb-1 text-[10px] font-bold text-odoo-text-muted">{(share * 100).toFixed(1)}%</div>
+                                                <div className="h-1.5 overflow-hidden rounded-full bg-odoo-primary-100">
+                                                    <div className="h-full rounded-full bg-gradient-to-r from-odoo-primary to-odoo-primary-light" style={{ width: `${Math.max(relativeWidth * 100, salesAmount > 0 ? 3 : 0)}%` }} />
+                                                </div>
+                                            </td>
                                             <td className="px-4 py-2.5 text-right font-mono font-semibold">{fmtMoney(s.total_baht)}</td>
                                         </tr>
                                     );
@@ -360,12 +383,13 @@ export default async function DailySalesReportPage({
                                 <th className="px-4 py-2.5 text-right font-medium">ຮັບແລກ</th>
                                 <th className="px-4 py-2.5 text-right font-medium">≈ ບາດ</th>
                                 <th className="px-4 py-2.5 font-medium">ສະຖານະ</th>
+                                <th className="px-4 py-2.5 text-right font-medium">ລາຍລະອຽດ</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-odoo-border">
                             {rows.length === 0 ? (
                                 <tr>
-                                    <td colSpan={9} className="px-4 py-12 text-center text-sm text-odoo-text-muted">
+                                    <td colSpan={10} className="px-4 py-12 text-center text-sm text-odoo-text-muted">
                                         ບໍ່ມີຂໍ້ມູນສຳລັບວັນທີນີ້
                                     </td>
                                 </tr>
@@ -379,7 +403,9 @@ export default async function DailySalesReportPage({
                                         : r.sale_fullname || r.sale_code || "—";
                                     return (
                                         <tr key={r.doc_no} className={cancelled ? "bg-odoo-surface-muted text-odoo-text-soft line-through" : "text-odoo-text-strong"}>
-                                            <td className="px-4 py-2 font-mono text-xs">{r.doc_no}</td>
+                                            <td className="px-4 py-2 text-xs">
+                                                <Link href={`/reports/daily-sales/${encodeURIComponent(r.doc_no)}?date=${selectedDate}`} className="font-black text-odoo-primary hover:underline">{r.doc_no}</Link>
+                                            </td>
                                             <td className="px-4 py-2 text-odoo-text-muted">{r.doc_time ?? "—"}</td>
                                             <td className="px-4 py-2">
                                                 <div>
@@ -420,6 +446,11 @@ export default async function DailySalesReportPage({
                                                     </span>
                                                 )}
                                             </td>
+                                            <td className="px-4 py-2 text-right">
+                                                <Link href={`/reports/daily-sales/${encodeURIComponent(r.doc_no)}?date=${selectedDate}`} className="odoo-btn odoo-btn-secondary h-8 px-3 text-[11px]">
+                                                    ເບິ່ງລາຍລະອຽດ →
+                                                </Link>
+                                            </td>
                                         </tr>
                                     );
                                 })
@@ -448,20 +479,22 @@ function StatCard({
     return (
         <div
             className={
-                "odoo-card p-5" +
+                "odoo-card relative overflow-hidden p-5" +
                 (accent
-                    ? " border-odoo-primary bg-odoo-primary text-white"
+                    ? " border-odoo-primary bg-gradient-to-br from-odoo-primary-dark via-odoo-primary to-odoo-primary-light text-white shadow-[0_14px_30px_-18px_rgba(0,51,97,0.65)]"
                     : muted
                         ? " bg-odoo-surface-muted"
                         : "")
             }
         >
-            <div className={"text-xs font-medium " + (accent ? "text-white/80" : "text-odoo-text-muted")}>
+            {accent ? <span className="absolute -right-8 -top-10 h-28 w-28 rounded-full bg-white/10" aria-hidden /> : null}
+            <div className={"relative flex items-center gap-2 text-xs font-bold " + (accent ? "text-white/80" : "text-odoo-text-muted")}>
+                <span className={"h-2 w-2 rounded-full " + (accent ? "bg-odien-yellow" : "bg-odoo-primary-light")} aria-hidden />
                 {label}
             </div>
-            <div className="mt-2 font-mono text-2xl font-semibold">{value}</div>
+            <div className="relative mt-2 text-2xl font-black tracking-tight">{value}</div>
             {sub && (
-                <div className={"mt-1 text-xs " + (accent ? "text-white/80" : "text-odoo-text-muted")}>
+                <div className={"relative mt-1 text-[11px] font-semibold " + (accent ? "text-white/75" : "text-odoo-text-muted")}>
                     {sub}
                 </div>
             )}

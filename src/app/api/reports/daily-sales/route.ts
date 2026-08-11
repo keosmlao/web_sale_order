@@ -115,6 +115,7 @@ export async function GET(request: NextRequest) {
         AND (t.doc_no LIKE 'CAK%' OR t.doc_no LIKE 'INK%')
         AND t.doc_date = ${selectedDate}::date
         AND t.department_code IN (${deptList})
+        AND COALESCE(t.cancel_type, 0) = 0
     ),
     totals AS (
       SELECT

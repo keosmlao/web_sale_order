@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import MobileReloadButton from "@/components/MobileReloadButton";
 import { type AppRole, isPrivilegedRole } from "@/lib/roles";
 
 type Tab = { href: string; label: string; icon: ReactNode; match: (p: string) => boolean };
@@ -44,7 +43,6 @@ export default function BottomNav({ role }: { role: AppRole }) {
           </Link>
         );
       })}
-      <MobileReloadButton />
     </nav>
   );
 }
