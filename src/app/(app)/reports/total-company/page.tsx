@@ -2,6 +2,7 @@ import { requireEmployee } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { buildSummaryRows, projectMonth } from "@/lib/company-summary";
 import { fmt, LAO_MONTHS } from "@/lib/incentive-period";
+import { LIVE_SALES_SOURCE, LIVE_SALE_AMOUNT } from "@/lib/live-sales";
 import SummaryTable from "./SummaryTable";
 import YearFilter from "./YearFilter";
 
@@ -56,16 +57,17 @@ export default async function TotalCompanyPage({
   const inProgressMonth = completeThrough + 1;
 
   const [salesRows, targetRows, lastDayRows, freshnessRows, approvedRows] = await Promise.all([
-    // Total Company = every sale line, unfiltered. This is deliberately NOT
-    // the storefront basis in @/lib/sales-basis — that one scopes to branch 01
-    // walk-in retail, while this sheet reports the whole company.
+    // Total Company = every sale line in the ERP, no branch / argroup / item
+    // filter. Deliberately NOT the storefront basis in @/lib/sales-basis, which
+    // scopes to branch 01 walk-in retail; this sheet reports the whole company.
+    // See @/lib/live-sales for why it reads ic_trans rather than the ETL copy.
     prisma.$queryRaw<MonthAmount[]>`
-      SELECT EXTRACT(YEAR FROM doc_date)::int AS y,
-             EXTRACT(MONTH FROM doc_date)::int AS m,
-             COALESCE(SUM(sum_amount), 0) AS amt
-      FROM odg_sale_detail
-      WHERE doc_date >= make_date(${year - 1}, 1, 1)
-        AND doc_date < make_date(${year + 1}, 1, 1)
+      SELECT EXTRACT(YEAR FROM t.doc_date)::int AS y,
+             EXTRACT(MONTH FROM t.doc_date)::int AS m,
+             COALESCE(SUM(${LIVE_SALE_AMOUNT}), 0) AS amt
+      ${LIVE_SALES_SOURCE}
+        AND t.doc_date >= make_date(${year - 1}, 1, 1)
+        AND t.doc_date < make_date(${year + 1}, 1, 1)
       GROUP BY 1, 2
     `,
     prisma.$queryRaw<TargetAmount[]>`
@@ -79,17 +81,16 @@ export default async function TotalCompanyPage({
     // is a day or two behind from reading artificially low.
     inProgressMonth <= 12
       ? prisma.$queryRaw<LastDay[]>`
-          SELECT MAX(doc_date)::date AS last_day
-          FROM odg_sale_detail
-          WHERE doc_date >= make_date(${year}, ${inProgressMonth}, 1)
-            AND doc_date < make_date(${year}, ${inProgressMonth}, 1) + INTERVAL '1 month'
+          SELECT MAX(t.doc_date)::date AS last_day
+          ${LIVE_SALES_SOURCE}
+            AND t.doc_date >= make_date(${year}, ${inProgressMonth}, 1)
+            AND t.doc_date < make_date(${year}, ${inProgressMonth}, 1) + INTERVAL '1 month'
         `
       : Promise.resolve([] as LastDay[]),
-    // odg_sale_detail is an ETL copy refreshed on a cycle, so it trails the
-    // ERP — today's bills land in it tomorrow. Every figure on this page is
-    // only as fresh as this date, so the page says so rather than letting a
-    // reader assume the total is up to the minute.
-    prisma.$queryRaw<LastDay[]>`SELECT MAX(doc_date)::date AS last_day FROM odg_sale_detail`,
+    // Latest day carrying sales anywhere in the ERP. Reading live, this is
+    // today as soon as the first bill is rung up, so the page can say how
+    // current it is rather than leaving the reader to guess.
+    prisma.$queryRaw<LastDay[]>`SELECT MAX(t.doc_date)::date AS last_day ${LIVE_SALES_SOURCE}`,
     // Closed periods finance has signed off — see
     // sql/add-closed-period-actual.sql. odg_sale_detail keeps moving after a
     // period closes, so the approved figure is pinned here instead of drifting.
@@ -212,8 +213,7 @@ export default async function TotalCompanyPage({
         <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-odoo-warning-border bg-odoo-warning-bg px-4 py-3 text-xs font-semibold text-odoo-warning-text">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-px h-4 w-4 shrink-0"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
           <span>
-            odg_sale_detail ອັບເດດຕາມຮອບວຽນ — ຂໍ້ມູນຮອດ {dataThroughLabel} ເທົ່ານັ້ນ
-            ({daysBehind} ວັນຫຼັງ). ບິນຂອງມື້ນີ້ຍັງບໍ່ທັນເຂົ້າ ຈຶ່ງຍັງບໍ່ຖືກນັບໃນຍອດຂ້າງລຸ່ມ.
+            ຍັງບໍ່ມີບິນຂອງມື້ນີ້ໃນລະບົບ — ບິນລ້າສຸດແມ່ນ {dataThroughLabel} ({daysBehind} ວັນຜ່ານມາ).
           </span>
         </div>
       )}
@@ -222,8 +222,8 @@ export default async function TotalCompanyPage({
         <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-odoo-primary-200 bg-odoo-primary-50 px-4 py-3 text-xs font-semibold text-odoo-primary-dark">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-px h-4 w-4 shrink-0"><path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" /></svg>
           <span>
-            {approvedLabels.join(", ")} ໃຊ້ຍອດທີ່ບັນຊີອະນຸມັດ ແທນຍອດສົດຈາກ odg_sale_detail.
-            ແກ້ໄຂໄດ້ໃນຕາຕະລາງ app_closed_period_actual.
+            {approvedLabels.join(", ")} ໃຊ້ຍອດທີ່ບັນຊີອະນຸມັດ ແທນຍອດສົດຈາກ ERP.
+            ແກ້ໄຂ ຫຼື ລຶບອອກໄດ້ໃນຕາຕະລາງ app_closed_period_actual.
           </span>
         </div>
       )}
