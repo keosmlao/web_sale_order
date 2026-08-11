@@ -14,7 +14,7 @@ const num = (value: Num | undefined) => Number(value ?? 0) || 0;
 type MonthAmount = { y: Num; m: Num; amt: Num };
 type TargetAmount = { m: Num; amt: Num };
 type LastDay = { last_day: Date | null };
-type ApprovedMonth = { m: Num; amt: Num; note: string | null };
+type ApprovedPeriod = { period_type: string; period_no: Num; amt: Num };
 
 const FIRST_YEAR = 2025;
 
@@ -90,12 +90,12 @@ export default async function TotalCompanyPage({
     // only as fresh as this date, so the page says so rather than letting a
     // reader assume the total is up to the minute.
     prisma.$queryRaw<LastDay[]>`SELECT MAX(doc_date)::date AS last_day FROM odg_sale_detail`,
-    // Closed months finance has signed off. See sql/add-closed-month-actual.sql
-    // — odg_sale_detail keeps moving after a month closes, so an approved
-    // figure can be pinned here rather than drifting with the ETL.
-    prisma.$queryRaw<ApprovedMonth[]>`
-      SELECT month::int AS m, amount AS amt, note
-      FROM app_closed_month_actual
+    // Closed periods finance has signed off — see
+    // sql/add-closed-period-actual.sql. odg_sale_detail keeps moving after a
+    // period closes, so the approved figure is pinned here instead of drifting.
+    prisma.$queryRaw<ApprovedPeriod[]>`
+      SELECT period_type, period_no::int AS period_no, amount AS amt
+      FROM app_closed_period_actual
       WHERE year = ${year}
     `,
   ]);
@@ -110,17 +110,46 @@ export default async function TotalCompanyPage({
     else if (rowYear === year - 1) lastYear[index] = num(row.amt);
   }
 
-  // Approved figures replace the live total, but only for months that have
+  // Approved figures replace the live total, but only for periods that have
   // actually closed — pinning the in-progress month would freeze a total that
   // is still being earned.
-  const approvedMonths: number[] = [];
+  const closedMonth = (m: number) => m >= 1 && m <= completeThrough;
+  const pinned = new Set<number>();
+  const approvedLabels: string[] = [];
+
   for (const row of approvedRows) {
-    const month = num(row.m);
-    if (month < 1 || month > completeThrough) continue;
+    if (row.period_type !== "month") continue;
+    const month = num(row.period_no);
+    if (!closedMonth(month)) continue;
     act[month - 1] = num(row.amt);
-    approvedMonths.push(month);
+    pinned.add(month);
+    approvedLabels.push(LAO_MONTHS[month - 1]);
   }
-  approvedMonths.sort((a, b) => a - b);
+
+  // A quarter figure is spread over the months it covers in proportion to what
+  // they actually sold, so the quarter total and everything summing across it
+  // match the sheet without anyone having to approve a month split. Months
+  // already pinned individually keep their value and absorb none of the spread.
+  for (const row of approvedRows) {
+    if (row.period_type !== "quarter") continue;
+    const quarter = num(row.period_no);
+    const months = [quarter * 3 - 2, quarter * 3 - 1, quarter * 3];
+    if (!months.every(closedMonth)) continue;
+
+    const free = months.filter((m) => !pinned.has(m));
+    if (free.length === 0) continue;
+    const fixedTotal = months
+      .filter((m) => pinned.has(m))
+      .reduce((sum, m) => sum + act[m - 1], 0);
+    const remainder = num(row.amt) - fixedTotal;
+    const liveTotal = free.reduce((sum, m) => sum + act[m - 1], 0);
+
+    for (const m of free) {
+      act[m - 1] =
+        liveTotal > 0 ? (act[m - 1] / liveTotal) * remainder : remainder / free.length;
+    }
+    approvedLabels.push(`ໄຕມາດ ${quarter}`);
+  }
 
   const target = Array<number>(12).fill(0);
   for (const row of targetRows) {
@@ -189,12 +218,12 @@ export default async function TotalCompanyPage({
         </div>
       )}
 
-      {approvedMonths.length > 0 && (
+      {approvedLabels.length > 0 && (
         <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-odoo-primary-200 bg-odoo-primary-50 px-4 py-3 text-xs font-semibold text-odoo-primary-dark">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-px h-4 w-4 shrink-0"><path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" /></svg>
           <span>
-            ເດືອນ {approvedMonths.map((m) => LAO_MONTHS[m - 1]).join(", ")} ໃຊ້ຍອດທີ່ບັນຊີອະນຸມັດ
-            ແທນຍອດສົດຈາກ odg_sale_detail. ແກ້ໄຂໄດ້ໃນຕາຕະລາງ app_closed_month_actual.
+            {approvedLabels.join(", ")} ໃຊ້ຍອດທີ່ບັນຊີອະນຸມັດ ແທນຍອດສົດຈາກ odg_sale_detail.
+            ແກ້ໄຂໄດ້ໃນຕາຕະລາງ app_closed_period_actual.
           </span>
         </div>
       )}
