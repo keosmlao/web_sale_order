@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
+import { saleBasis } from "@/lib/sales-basis";
 
 type DailyRow = { day: string; points: string | number };
 
@@ -66,7 +67,7 @@ export async function GET(request: NextRequest) {
                    ps0.updated_at DESC
           LIMIT 1
         ) ps ON true
-        WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+        WHERE ${saleBasis("sd")}
           AND sd.doc_date >= make_date(${year}, ${month}, 1)
           AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
           AND sd.salename IN (SELECT sn FROM names)

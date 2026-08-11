@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
+import { saleBasis } from "@/lib/sales-basis";
 
 // Per-salesperson point breakdown for the incentive report's tree view:
 // ພະນັກງານ → ໝວດ (AV/REF/Washer/Air/SDA) → ສິນຄ້າ that earned points.
@@ -103,9 +104,7 @@ export async function GET(request: NextRequest) {
             ORDER BY priority, employee_code
             LIMIT 1
           ) emp ON true
-          WHERE sd.branch_code = '01'
-            AND sd.argroup_main = '101'
-            AND sd.item_code NOT LIKE '97%'
+          WHERE ${saleBasis("sd")}
             AND sd.doc_date >= make_date(${year}, ${month}, 1)
             AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
             AND COALESCE(cat.is_active, true)

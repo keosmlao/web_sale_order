@@ -10,6 +10,7 @@ import ActivePromosCard from "./ActivePromosCard";
 import SpecialRewardCard from "./SpecialRewardCard";
 import LowStockBanner from "./cashier/LowStockBanner";
 import DeliveryTodayCard from "./orders/new/DeliveryTodayCard";
+import { saleBasis } from "@/lib/sales-basis";
 
 export const dynamic = "force-dynamic";
 
@@ -251,7 +252,7 @@ export default async function HomePage() {
           COALESCE(SUM(sd.sum_amount), 0) AS ytd_total,
           COUNT(DISTINCT sd.doc_no) FILTER (WHERE sd.doc_date >= date_trunc('month', CURRENT_DATE)) AS orders
         FROM odg_sale_detail sd
-        WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+        WHERE ${saleBasis("sd")}
           AND sd.doc_date >= date_trunc('year', CURRENT_DATE)
           AND sd.salename IN (
             SELECT emp.fullname_lo WHERE COALESCE(emp.fullname_lo, '') <> ''
@@ -314,8 +315,7 @@ export default async function HomePage() {
         COALESCE(SUM(sum_amount), 0) AS total,
         COUNT(DISTINCT doc_no)::bigint AS orders
       FROM odg_sale_detail
-      WHERE branch_code = '01'
-        AND argroup_main = '101'
+      WHERE ${saleBasis()}
         -- sargable (no ::date cast) so the front-store index range-scans doc_date
         AND doc_date >= CURRENT_DATE - 6
         ${insightFilter}
@@ -340,8 +340,7 @@ export default async function HomePage() {
         COUNT(DISTINCT doc_no) FILTER (WHERE doc_date::date = CURRENT_DATE)::bigint AS today_bills,
         COUNT(DISTINCT doc_no) FILTER (WHERE doc_date::date = CURRENT_DATE - 1)::bigint AS yesterday_bills
       FROM odg_sale_detail
-      WHERE branch_code = '01'
-        AND argroup_main = '101'
+      WHERE ${saleBasis()}
         AND doc_date >= CURRENT_DATE - 1
         ${insightFilter}
     `,
@@ -361,12 +360,12 @@ export default async function HomePage() {
           )
           SELECT
             COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
-              WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+              WHERE ${saleBasis("detail")}
                 AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
                 AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
                 AND detail.salename IN (SELECT salename FROM names)), 0) AS sales,
             COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
-              WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+              WHERE ${saleBasis("detail")}
                 AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
                 AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
                 AND detail.salename IN (SELECT salename FROM names)), 0) AS qty,
@@ -383,12 +382,12 @@ export default async function HomePage() {
           )
           SELECT
             COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
-              WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+              WHERE ${saleBasis("detail")}
                 AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
                 AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
                 AND detail.salename IN (SELECT salename FROM names)), 0) AS sales,
             COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
-              WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+              WHERE ${saleBasis("detail")}
                 AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
                 AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
                 AND detail.salename IN (SELECT salename FROM names)), 0) AS qty,
@@ -403,8 +402,7 @@ export default async function HomePage() {
         COALESCE(SUM(sum_amount), 0) AS month_sales,
         COUNT(DISTINCT doc_no)::bigint AS month_bills
       FROM odg_sale_detail
-      WHERE branch_code = '01'
-        AND argroup_main = '101'
+      WHERE ${saleBasis()}
         AND doc_date >= date_trunc('month', CURRENT_DATE)
         AND doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
         ${insightFilter}
@@ -427,7 +425,7 @@ export default async function HomePage() {
                  COALESCE(SUM(detail.sum_amount), 0) AS sales,
                  COALESCE(SUM(detail.qty), 0) AS qty
           FROM odg_sale_detail detail
-          WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+          WHERE ${saleBasis("detail")}
             AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
             AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
             AND detail.salename IN (SELECT salename FROM names)
@@ -444,7 +442,7 @@ export default async function HomePage() {
                  COALESCE(SUM(detail.sum_amount), 0) AS sales,
                  COALESCE(SUM(detail.qty), 0) AS qty
           FROM odg_sale_detail detail
-          WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+          WHERE ${saleBasis("detail")}
             AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
             AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
             AND detail.salename IN (SELECT salename FROM names)
@@ -466,7 +464,7 @@ export default async function HomePage() {
              COALESCE(SUM(sum_amount), 0) AS amount,
              COALESCE(SUM(qty), 0) AS qty
       FROM odg_sale_detail
-      WHERE branch_code = '01' AND argroup_main = '101'
+      WHERE ${saleBasis()}
         AND doc_date >= date_trunc('month', CURRENT_DATE)
         AND doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
         ${insightFilter}
@@ -479,7 +477,7 @@ export default async function HomePage() {
              COALESCE(SUM(sum_amount), 0) AS amount,
              COALESCE(SUM(qty), 0) AS qty
       FROM odg_sale_detail
-      WHERE branch_code = '01' AND argroup_main = '101'
+      WHERE ${saleBasis()}
         AND doc_date >= date_trunc('month', CURRENT_DATE)
         AND doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
         ${insightFilter}
@@ -493,7 +491,7 @@ export default async function HomePage() {
              COALESCE(SUM(sum_amount), 0) AS amount,
              COUNT(*)::bigint AS items
       FROM odg_sale_detail
-      WHERE branch_code = '01' AND argroup_main = '101'
+      WHERE ${saleBasis()}
         AND doc_date >= CURRENT_DATE - 30
         ${insightFilter}
       GROUP BY doc_no ORDER BY MAX(doc_date) DESC LIMIT 8
@@ -513,7 +511,7 @@ export default async function HomePage() {
           ) q ORDER BY pr, employee_code LIMIT 1
         ) resolved ON true
         LEFT JOIN odg_employee emp ON emp.employee_code = resolved.employee_code
-        WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+        WHERE ${saleBasis("sd")}
           AND sd.doc_date >= LEAST(date_trunc('month', CURRENT_DATE), date_trunc('week', CURRENT_DATE))
           AND resolved.employee_code IS NOT NULL
         GROUP BY emp.employee_code, emp.department_code
@@ -549,7 +547,7 @@ export default async function HomePage() {
                 + (CURRENT_DATE - date_trunc('month', CURRENT_DATE)::date + 1) * INTERVAL '1 day'
             ), 0) AS prev_sales
           FROM odg_sale_detail
-          WHERE branch_code = '01' AND argroup_main = '101'
+          WHERE ${saleBasis()}
             AND doc_date >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
         `
       : Promise.resolve([] as Array<{ cur_sales: string | number | null; prev_sales: string | number | null }>),

@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
+import { saleBasis } from "@/lib/sales-basis";
 
 type Totals = { sales: string | number | null; qty: string | number | null; target: string | number | null };
 type DailyRow = { d: Date; sales: string | number; qty: string | number };
@@ -37,12 +38,12 @@ export async function GET(request: NextRequest) {
         )
         SELECT
           (SELECT COALESCE(SUM(sd.sum_amount), 0) FROM odg_sale_detail sd
-             WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+             WHERE ${saleBasis("sd")}
                AND sd.doc_date >= make_date(${year}, ${month}, 1)
                AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
                AND sd.salename IN (SELECT sn FROM names)) AS sales,
           (SELECT COALESCE(SUM(sd.qty), 0) FROM odg_sale_detail sd
-             WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+             WHERE ${saleBasis("sd")}
                AND sd.doc_date >= make_date(${year}, ${month}, 1)
                AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
                AND sd.salename IN (SELECT sn FROM names)) AS qty,
@@ -57,7 +58,7 @@ export async function GET(request: NextRequest) {
         )
         SELECT sd.doc_date AS d, SUM(sd.sum_amount) AS sales, SUM(sd.qty) AS qty
         FROM odg_sale_detail sd
-        WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+        WHERE ${saleBasis("sd")}
           AND sd.doc_date >= make_date(${year}, ${month}, 1)
           AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
           AND sd.salename IN (SELECT sn FROM names)
@@ -71,7 +72,7 @@ export async function GET(request: NextRequest) {
         SELECT COALESCE(NULLIF(sd.item_category_name, ''), 'ອື່ນໆ') AS name,
                SUM(sd.sum_amount) AS sales, SUM(sd.qty) AS qty
         FROM odg_sale_detail sd
-        WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+        WHERE ${saleBasis("sd")}
           AND sd.doc_date >= make_date(${year}, ${month}, 1)
           AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
           AND sd.salename IN (SELECT sn FROM names)
@@ -92,7 +93,7 @@ export async function GET(request: NextRequest) {
               UNION ALL SELECT e.employee_code, 1 FROM odg_employee e WHERE e.fullname_lo = sd.salename
             ) q ORDER BY pr, employee_code LIMIT 1
           ) emp ON true
-          WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+          WHERE ${saleBasis("sd")}
             AND sd.doc_date >= make_date(${year}, ${month}, 1)
             AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
             AND emp.employee_code IS NOT NULL
@@ -139,12 +140,12 @@ export async function GET(request: NextRequest) {
         )
         SELECT
           COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
-            WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+            WHERE ${saleBasis("detail")}
               AND detail.doc_date >= make_date(${year}, ${month}, 1)
               AND detail.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
               AND detail.salename IN (SELECT salename FROM names)), 0) AS sales,
           COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
-            WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+            WHERE ${saleBasis("detail")}
               AND detail.doc_date >= make_date(${year}, ${month}, 1)
               AND detail.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
               AND detail.salename IN (SELECT salename FROM names)), 0) AS qty,
@@ -167,7 +168,7 @@ export async function GET(request: NextRequest) {
                COALESCE(SUM(detail.sum_amount), 0) AS sales,
                COALESCE(SUM(detail.qty), 0) AS qty
         FROM odg_sale_detail detail
-        WHERE detail.branch_code = '01' AND detail.argroup_main = '101'
+        WHERE ${saleBasis("detail")}
           AND detail.doc_date >= make_date(${year}, ${month}, 1)
           AND detail.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
           AND detail.salename IN (SELECT salename FROM names)

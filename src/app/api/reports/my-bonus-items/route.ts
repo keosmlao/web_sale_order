@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
+import { saleBasis } from "@/lib/sales-basis";
 
 type ItemRow = {
   item_name: string | null;
@@ -80,13 +81,12 @@ export async function GET(request: NextRequest) {
                    ps0.updated_at DESC
           LIMIT 1
         ) ps ON true
-        WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
+        WHERE ${saleBasis("sd")}
           ${dateFilter}
           AND sd.salename IN (SELECT sn FROM names)
-          -- Service / discount pseudo-items are not sellable products; keep
-          -- them out of the got/no-points breakdown entirely.
-          AND sd.item_name NOT LIKE 'ບໍລິການ%'
-          AND sd.item_name NOT LIKE 'ຄ່າບໍລິການ%'
+          -- Discount pseudo-items are not sellable products; keep them out of
+          -- the got/no-points breakdown entirely. (Service lines are already
+          -- out via saleBasis.)
           AND sd.item_name NOT LIKE 'ສ່ວນຫລຸດ%'
           AND sd.item_name NOT LIKE 'ສ່ວນຫຼຸດ%'
       ),

@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
+import { saleBasis } from "@/lib/sales-basis";
 
 type IncentiveRow = {
   employee_code: string;
@@ -222,15 +223,10 @@ export async function GET(request: NextRequest) {
               END AS combo_price
             FROM odg_sale_detail sd
             LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
-            WHERE sd.branch_code = '01'
-              AND sd.argroup_main = '101'
+            WHERE ${saleBasis("sd")}
               AND sd.doc_date >= make_date(${year}, ${month}, 1)
               AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
               AND COALESCE(cat.is_active, true)
-              -- Service/fee lines (item_code 97xxxx = ຄ່າບໍລິການ: installation,
-              -- delivery, deposit/holding, etc.) are not part of the commission-tier
-              -- sales basis. Keep them out of sales, achievement, points, and bonus.
-              AND sd.item_code NOT LIKE '97%'
           ) s
           LEFT JOIN app_incentive_design_token dtok ON dtok.design_name = s.design_name
           LEFT JOIN app_incentive_size_token stok ON stok.size_name = s.size_name
@@ -386,8 +382,7 @@ export async function GET(request: NextRequest) {
           JOIN names n ON n.salename = sd.salename
           LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
           WHERE n.emp_code = r.emp_code
-            AND sd.branch_code = '01'
-            AND sd.argroup_main = '101'
+            AND ${saleBasis("sd")}
             AND sd.doc_date >= make_date(${year}, ${month}, 1)
             AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
             AND sd.item_name !~ '\\[H\\]\\s*$'
@@ -412,12 +407,10 @@ export async function GET(request: NextRequest) {
         SELECT COALESCE(SUM(sd.sum_amount), 0) AS sales_amount
         FROM odg_sale_detail sd
         LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
-        WHERE sd.branch_code = '01'
-          AND sd.argroup_main = '101'
+        WHERE ${saleBasis("sd")}
           AND sd.doc_date >= make_date(${year}, ${month}, 1)
           AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
           AND COALESCE(cat.is_active, true)
-          AND sd.item_code NOT LIKE '97%'
       `,
     ]);
 

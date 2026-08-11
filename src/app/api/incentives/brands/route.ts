@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
+import { saleBasis } from "@/lib/sales-basis";
 
 // Brand suggestions for the incentive editors, split by reward group so the
 // AIR editor offers only air-conditioner brands and CE_SDA offers the rest.
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
       FROM odg_sale_detail sd
       LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
       WHERE COALESCE(sd.item_brand, '') <> ''
-        AND sd.branch_code = '01' AND sd.argroup_main = '101'
+        AND ${saleBasis("sd")}
         AND sd.doc_date >= date_trunc('year', CURRENT_DATE)
       GROUP BY 1
       ORDER BY 1
