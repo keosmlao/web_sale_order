@@ -14,7 +14,6 @@ const num = (value: Num | undefined) => Number(value ?? 0) || 0;
 type MonthAmount = { y: Num; m: Num; amt: Num };
 type TargetAmount = { m: Num; amt: Num };
 type LastDay = { last_day: Date | null };
-type ApprovedPeriod = { period_type: string; period_no: Num; amt: Num };
 
 const FIRST_YEAR = 2025;
 
@@ -55,7 +54,7 @@ export default async function TotalCompanyPage({
     year < today.year ? 12 : year > today.year ? 0 : Math.max(0, today.month - 1);
   const inProgressMonth = completeThrough + 1;
 
-  const [salesRows, targetRows, lastDayRows, freshnessRows, approvedRows] = await Promise.all([
+  const [salesRows, targetRows, lastDayRows, freshnessRows] = await Promise.all([
     // Total Company = every sale line, unfiltered. This is deliberately NOT
     // the storefront basis in @/lib/sales-basis — that one scopes to branch 01
     // walk-in retail, while this sheet reports the whole company.
@@ -63,8 +62,7 @@ export default async function TotalCompanyPage({
     // Read from odg_sale_detail by choice, not by default. It is an ETL copy
     // that trails the ERP by about a day and lets closed months drift (March
     // 2026 sat 2,631 light, August 72,770), so a figure here can move after a
-    // month is signed off — app_closed_period_actual is the answer to that,
-    // not swapping the source.
+    // month is signed off.
     //
     // If anyone does reach for ic_trans to read live, three rules are needed or
     // the total comes out ~2% high: trans_flag 44 is a sale and 48 a credit
@@ -106,14 +104,6 @@ export default async function TotalCompanyPage({
     // only as fresh as this date, so the page says so rather than letting a
     // reader assume the total is up to the minute.
     prisma.$queryRaw<LastDay[]>`SELECT MAX(doc_date)::date AS last_day FROM odg_sale_detail`,
-    // Closed periods finance has signed off — see
-    // sql/add-closed-period-actual.sql. odg_sale_detail keeps moving after a
-    // period closes, so the approved figure is pinned here instead of drifting.
-    prisma.$queryRaw<ApprovedPeriod[]>`
-      SELECT period_type, period_no::int AS period_no, amount AS amt
-      FROM app_closed_period_actual
-      WHERE year = ${year}
-    `,
   ]);
 
   const act = Array<number>(12).fill(0);
@@ -124,47 +114,6 @@ export default async function TotalCompanyPage({
     if (index < 0 || index > 11) continue;
     if (rowYear === year) act[index] = num(row.amt);
     else if (rowYear === year - 1) lastYear[index] = num(row.amt);
-  }
-
-  // Approved figures replace the live total, but only for periods that have
-  // actually closed — pinning the in-progress month would freeze a total that
-  // is still being earned.
-  const closedMonth = (m: number) => m >= 1 && m <= completeThrough;
-  const pinned = new Set<number>();
-  const approvedLabels: string[] = [];
-
-  for (const row of approvedRows) {
-    if (row.period_type !== "month") continue;
-    const month = num(row.period_no);
-    if (!closedMonth(month)) continue;
-    act[month - 1] = num(row.amt);
-    pinned.add(month);
-    approvedLabels.push(LAO_MONTHS[month - 1]);
-  }
-
-  // A quarter figure is spread over the months it covers in proportion to what
-  // they actually sold, so the quarter total and everything summing across it
-  // match the sheet without anyone having to approve a month split. Months
-  // already pinned individually keep their value and absorb none of the spread.
-  for (const row of approvedRows) {
-    if (row.period_type !== "quarter") continue;
-    const quarter = num(row.period_no);
-    const months = [quarter * 3 - 2, quarter * 3 - 1, quarter * 3];
-    if (!months.every(closedMonth)) continue;
-
-    const free = months.filter((m) => !pinned.has(m));
-    if (free.length === 0) continue;
-    const fixedTotal = months
-      .filter((m) => pinned.has(m))
-      .reduce((sum, m) => sum + act[m - 1], 0);
-    const remainder = num(row.amt) - fixedTotal;
-    const liveTotal = free.reduce((sum, m) => sum + act[m - 1], 0);
-
-    for (const m of free) {
-      act[m - 1] =
-        liveTotal > 0 ? (act[m - 1] / liveTotal) * remainder : remainder / free.length;
-    }
-    approvedLabels.push(`ໄຕມາດ ${quarter}`);
   }
 
   const target = Array<number>(12).fill(0);
@@ -234,15 +183,6 @@ export default async function TotalCompanyPage({
         </div>
       )}
 
-      {approvedLabels.length > 0 && (
-        <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-odoo-primary-200 bg-odoo-primary-50 px-4 py-3 text-xs font-semibold text-odoo-primary-dark">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-px h-4 w-4 shrink-0"><path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" /></svg>
-          <span>
-            {approvedLabels.join(", ")} ໃຊ້ຍອດທີ່ບັນຊີອະນຸມັດ ແທນຍອດສົດຈາກ odg_sale_detail.
-            ແກ້ໄຂໄດ້ໃນຕາຕະລາງ app_closed_period_actual.
-          </span>
-        </div>
-      )}
 
       {!hasTargets && (
         <div className="odoo-alert-danger mb-4">
