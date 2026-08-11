@@ -25,6 +25,24 @@ type WatchItem = {
   openRequestQty: number | null;
 };
 
+// One item the shop actually sold in the window, with the stock behind it.
+// Unlike WatchItem this needs no (min, target) rule to exist — it is derived
+// from the sales themselves.
+type DailySalesItem = {
+  itemCode: string;
+  itemName: string;
+  unitName: string | null;
+  qtySold: number;
+  daysSold: number;
+  avgPerDay: number;
+  currentStock: number;
+  /** Stock ÷ avg sold per day. null when the rate is unmeasurable. */
+  daysCover: number | null;
+  suggestedQty: number;
+  lastSoldAt: string | null;
+  status: "out" | "critical" | "low" | "ok";
+};
+
 type RefillRequest = {
   id: string;
   warehouseCode: string | null;
@@ -79,6 +97,11 @@ export default function StockRefillClient({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [requestModal, setRequestModal] = useState<WatchItem | null>(null);
+  const [dailyItems, setDailyItems] = useState<DailySalesItem[]>([]);
+  const [dailyDays, setDailyDays] = useState(30);
+  const [dailyLoading, setDailyLoading] = useState(true);
+  /** Items that moved in the window — may exceed the rows the API returns. */
+  const [dailyTotal, setDailyTotal] = useState(0);
   const [decideModal, setDecideModal] = useState<{
     request: RefillRequest;
     action: "approve" | "reject" | "fulfill" | "cancel";
@@ -106,6 +129,30 @@ export default function StockRefillClient({
     [warehouseCode, filter],
   );
 
+  // Kept separate from load() — the sales scan walks a month of odg_sale_detail
+  // and is slower than the watchlist, so the two panels resolve independently
+  // instead of the whole page waiting on the slower one.
+  const loadDaily = useCallback(
+    async (wh = warehouseCode, days = dailyDays) => {
+      setDailyLoading(true);
+      try {
+        const params = new URLSearchParams({ days: String(days) });
+        if (wh) params.set("warehouse", wh);
+        const res = await fetch(`/api/reports/stock-daily-sales?${params.toString()}`);
+        if (!res.ok) throw new Error(`stock-daily-sales ${res.status}`);
+        const data = await res.json();
+        setDailyItems((data.items ?? []) as DailySalesItem[]);
+        setDailyTotal(Number(data.total ?? 0));
+      } catch {
+        setDailyItems([]);
+        setDailyTotal(0);
+      } finally {
+        setDailyLoading(false);
+      }
+    },
+    [warehouseCode, dailyDays],
+  );
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -121,6 +168,7 @@ export default function StockRefillClient({
         setWarehouses(rows);
         const first = rows[0]?.code ?? "";
         setWarehouseCode(first);
+        void loadDaily(first, dailyDays);
         await load(first, filter);
       } catch (err) {
         if (!cancelled) {
@@ -149,6 +197,39 @@ export default function StockRefillClient({
       : s === "below_target"
         ? "bg-amber-50 text-amber-700 border-amber-200"
         : "bg-emerald-50 text-emerald-700 border-emerald-200";
+
+  const coverLabel = (it: DailySalesItem) => {
+    if (it.status === "out") return "ບໍ່ມີ stock";
+    if (it.daysCover === null) return "—";
+    return `${qtyFmt.format(Math.round(it.daysCover))} ວັນ`;
+  };
+
+  const coverClass = (s: DailySalesItem["status"]) =>
+    s === "out" || s === "critical"
+      ? "bg-rose-50 text-rose-700 border-rose-200"
+      : s === "low"
+        ? "bg-amber-50 text-amber-700 border-amber-200"
+        : "bg-emerald-50 text-emerald-700 border-emerald-200";
+
+  // The refill dialog speaks WatchItem. A sales-derived row has no configured
+  // threshold, so the 14-day buffer it was ranked by stands in as the target.
+  const asWatchItem = (it: DailySalesItem): WatchItem => ({
+    scope: warehouseCode ? "warehouse" : "sales_agg",
+    warehouseCode: warehouseCode || null,
+    warehouseName:
+      warehouses.find((w) => w.code === warehouseCode)?.name ?? warehouseCode ?? null,
+    itemCode: it.itemCode,
+    itemName: it.itemName,
+    unitName: it.unitName,
+    minQty: 0,
+    targetQty: Math.ceil(it.avgPerDay * 14),
+    currentStock: it.currentStock,
+    suggestedQty: it.suggestedQty,
+    status: it.status === "out" ? "out" : it.status === "critical" ? "low" : "below_target",
+    openRequestId: null,
+    openRequestStatus: null,
+    openRequestQty: null,
+  });
 
   const requestStatusClass = (s: RefillRequest["status"]) =>
     s === "pending"
@@ -213,6 +294,7 @@ export default function StockRefillClient({
                 const next = e.target.value;
                 setWarehouseCode(next);
                 void load(next, filter);
+                void loadDaily(next, dailyDays);
               }}
               className="odoo-input h-9 w-full sm:min-w-48 sm:w-auto"
             >
@@ -241,7 +323,10 @@ export default function StockRefillClient({
           </label>
           <button
             type="button"
-            onClick={() => void load()}
+            onClick={() => {
+              void load();
+              void loadDaily();
+            }}
             className="odoo-btn odoo-btn-secondary h-9"
           >
             ໂຫລດໃໝ່
@@ -353,6 +438,123 @@ export default function StockRefillClient({
                         <button
                           type="button"
                           onClick={() => setRequestModal(it)}
+                          className="odoo-btn odoo-btn-primary text-xs"
+                        >
+                          ຂໍເຕີມ
+                        </button>
+                      ) : (
+                        <span className="text-xs text-odoo-text-muted">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      {/* Items that actually move — derived from sales, needs no config */}
+      <section className="mb-6 rounded-md border border-odoo-border bg-odoo-surface">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-odoo-border px-4 py-3">
+          <div>
+            <div className="text-sm font-bold text-odoo-text-strong">
+              ສິນຄ້າຂາຍປະຈຳວັນ ({dailyItems.length}
+              {dailyTotal > dailyItems.length ? ` / ${dailyTotal}` : ""})
+            </div>
+            <div className="text-xs text-odoo-text-muted">
+              ສິນຄ້າທີ່ຂາຍຈິງໃນ {dailyDays} ວັນຜ່ານມາ ພ້ອມ stock ທີ່ຍັງເຫຼືອ — ຮຽງຕາມ
+              ວັນທີ່ພຽງພໍ (stock ÷ ສະເລ່ຍຂາຍ/ວັນ) ໜ້ອຍສຸດກ່ອນ. ບໍ່ລວມ ບໍລິການ (97xxxx)
+              ແລະ ຂອງແຖມ.
+              {dailyTotal > dailyItems.length
+                ? ` ສະແດງ ${dailyItems.length} ລາຍການດ່ວນສຸດ ຈາກ ${dailyTotal}.`
+                : ""}
+            </div>
+          </div>
+          <label className="grid gap-1">
+            <span className="odoo-label">ໄລຍະ</span>
+            <select
+              value={dailyDays}
+              onChange={(e) => {
+                const next = Number(e.target.value);
+                setDailyDays(next);
+                void loadDaily(warehouseCode, next);
+              }}
+              className="odoo-input h-9"
+            >
+              <option value={7}>7 ວັນ</option>
+              <option value={30}>30 ວັນ</option>
+              <option value={90}>90 ວັນ</option>
+            </select>
+          </label>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="odoo-table min-w-[820px]">
+            <thead className="bg-odoo-surface-muted text-left text-xs font-bold uppercase tracking-wider text-odoo-text-muted">
+              <tr>
+                <th className="px-4 py-3">ສິນຄ້າ</th>
+                <th className="px-4 py-3 text-right">ຂາຍ {dailyDays} ວັນ</th>
+                <th className="px-4 py-3 text-right">ວັນທີ່ຂາຍ</th>
+                <th className="px-4 py-3 text-right">ສະເລ່ຍ/ວັນ</th>
+                <th className="px-4 py-3 text-right">Stock</th>
+                <th className="px-4 py-3">ພຽງພໍອີກ</th>
+                <th className="px-4 py-3"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {dailyLoading ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-odoo-text-muted">
+                    ກຳລັງໂຫລດ...
+                  </td>
+                </tr>
+              ) : dailyItems.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-8 text-center text-odoo-text-muted">
+                    ບໍ່ມີການຂາຍໃນສາງນີ້ພາຍໃນ {dailyDays} ວັນຜ່ານມາ
+                  </td>
+                </tr>
+              ) : (
+                dailyItems.map((it) => (
+                  <tr key={it.itemCode} className="border-t border-odoo-border">
+                    <td className="px-4 py-3">
+                      <div className="font-bold text-odoo-text-strong">{it.itemCode}</div>
+                      <div className="text-xs text-odoo-text-muted">
+                        {it.itemName} {it.unitName ? `· ${it.unitName}` : ""}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono font-semibold">
+                      {qtyFmt.format(it.qtySold)}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-odoo-text-muted">
+                      {it.daysSold}
+                    </td>
+                    <td className="px-4 py-3 text-right font-mono text-odoo-text-muted">
+                      {qtyFmt.format(it.avgPerDay)}
+                    </td>
+                    <td
+                      className={
+                        "px-4 py-3 text-right font-mono font-bold " +
+                        (it.currentStock <= 0 ? "text-rose-700" : "text-odoo-text-strong")
+                      }
+                    >
+                      {qtyFmt.format(it.currentStock)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={
+                          "inline-flex rounded-full border px-2 py-1 text-xs font-bold " +
+                          coverClass(it.status)
+                        }
+                      >
+                        {coverLabel(it)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {canCreate && it.status !== "ok" ? (
+                        <button
+                          type="button"
+                          onClick={() => setRequestModal(asWatchItem(it))}
                           className="odoo-btn odoo-btn-primary text-xs"
                         >
                           ຂໍເຕີມ

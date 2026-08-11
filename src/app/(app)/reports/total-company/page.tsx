@@ -114,18 +114,26 @@ export default async function TotalCompanyPage({
   const runRateRows = buildSummaryRows({ ...base, currentMonthEstimate: runRate });
 
   const hasTargets = target.some((value) => value > 0);
+  const banked = workbookRows.find((row) => row.key === "banked");
+  const fullYear = workbookRows.find((row) => row.key === "full-year");
+  const currentEstimate = runRateRows.find((row) => row.key === "est-this");
+  const targetAchievement = banked && banked.target > 0 ? (banked.act / banked.target) * 100 : 0;
+  const forecastAchievement = fullYear && fullYear.target > 0 ? (fullYear.act / fullYear.target) * 100 : 0;
+  const yearGrowth = fullYear && fullYear.lastYear > 0 ? ((fullYear.act / fullYear.lastYear) - 1) * 100 : 0;
 
   return (
-    <div className="odoo-page">
-      <div className="odoo-page-header">
-        <div>
-          <h1 className="odoo-page-title">Total Company</h1>
-          <p className="odoo-page-subtitle">
-            ສະຫລຸບຍອດຂາຍທັງບໍລິສັດ ທຽບເປົ້າ ແລະ ປີ {year - 1}
-          </p>
+    <div className="odoo-page max-w-[1600px]">
+      <section className="relative mb-5 overflow-hidden rounded-2xl bg-gradient-to-br from-odoo-primary-dark via-odoo-primary to-odoo-primary-light p-5 text-white shadow-[0_18px_45px_-20px_rgba(0,51,97,0.55)] sm:p-6">
+        <div className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-white/10 blur-2xl" />
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <div className="text-[10px] font-black uppercase tracking-[0.2em] text-white/60">EXECUTIVE SALES OVERVIEW</div>
+            <h1 className="mt-2 text-2xl font-black tracking-tight sm:text-3xl">ພາບລວມຍອດຂາຍທັງບໍລິສັດ</h1>
+            <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-white/72">ຕິດຕາມຍອດຈິງ, ເປົ້າໝາຍ, ການຄາດຄະເນ ແລະການເຕີບໂຕທຽບກັບປີ {year - 1}</p>
+          </div>
+          <div className="rounded-xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm"><YearFilter year={year} years={years} /></div>
         </div>
-        <YearFilter year={year} years={years} />
-      </div>
+      </section>
 
       {!hasTargets && (
         <div className="odoo-alert-danger mb-4">
@@ -133,33 +141,62 @@ export default async function TotalCompanyPage({
         </div>
       )}
 
-      <div className="odoo-card mb-5">
-        <div className="odoo-card-header">
-          <div>
-            <span className="font-semibold">ແບບ Excel</span>
-            <span className="ml-2 text-xs text-odoo-text-muted">
-              ເດືອນທີ່ຍັງບໍ່ປິດ ໃຊ້ Target ເປັນ Est. (ຄືກັບຊີດ)
-            </span>
-          </div>
+      <section className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <KpiCard label="ຍອດຈິງສະສົມ" value={fmt.format(Math.round(banked?.act ?? 0))} sub={`ຮອດ ${LAO_MONTHS[Math.max(completeThrough - 1, 0)] ?? "—"} ${year}`} tone="primary" />
+        <KpiCard label="ບັນລຸເປົ້າປະຈຳປີ" value={`${targetAchievement.toFixed(1)}%`} sub={`ເປົ້າ ${fmt.format(Math.round(banked?.target ?? 0))}`} tone={targetAchievement >= 100 ? "success" : "warning"} progress={targetAchievement} />
+        <KpiCard label="ຄາດຄະເນເຕັມປີ" value={fmt.format(Math.round(fullYear?.act ?? 0))} sub={`${forecastAchievement.toFixed(1)}% ຂອງເປົ້າ`} tone="sky" progress={forecastAchievement} />
+        <KpiCard label="ເຕີບໂຕທຽບປີກ່ອນ" value={`${yearGrowth >= 0 ? "+" : ""}${yearGrowth.toFixed(1)}%`} sub={`ປີ ${year - 1}: ${fmt.format(Math.round(fullYear?.lastYear ?? 0))}`} tone={yearGrowth >= 0 ? "success" : "danger"} />
+      </section>
+
+      <section className="mb-5 grid gap-3 lg:grid-cols-[1fr_auto]">
+        <div className="odoo-card flex items-center gap-4 p-4">
+          <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-odoo-primary-50 text-odoo-primary">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="h-5 w-5"><path d="M3 17l6-6 4 4 8-9"/><path d="M15 6h6v6"/></svg>
+          </span>
+          <div className="min-w-0"><div className="text-[10px] font-black text-odoo-text-muted">RUN-RATE ເດືອນປັດຈຸບັນ</div><div className="mt-1 text-sm font-black text-odoo-text-strong">{currentEstimate ? `${fmt.format(Math.round(currentEstimate.act))} ກີບ` : "ຍັງບໍ່ມີຍອດພຽງພໍສຳລັບຄາດຄະເນ"}</div><div className="mt-0.5 text-[11px] text-odoo-text-muted">ຄຳນວນຈາກຂໍ້ມູນ {daysWithData}/{daysInMonth} ວັນ</div></div>
+        </div>
+        <div className="odoo-card flex items-center gap-6 px-5 py-4"><MiniMetric label="ເດືອນປິດແລ້ວ" value={`${completeThrough}/12`} /><MiniMetric label="ປີລາຍງານ" value={String(year)} /></div>
+      </section>
+
+      <div className="odoo-card mb-5 overflow-hidden">
+        <div className="flex flex-col gap-1 border-b border-odoo-border bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div><h2 className="text-sm font-black text-odoo-text-strong">ມຸມມອງຕາມແຜນ Excel</h2><p className="mt-1 text-[11px] text-odoo-text-muted">ເດືອນທີ່ຍັງບໍ່ປິດ ໃຊ້ Target ເປັນຄ່າຄາດຄະເນ</p></div>
+          <span className="self-start rounded-full bg-odoo-primary-50 px-3 py-1 text-[10px] font-black text-odoo-primary">OFFICIAL PLAN</span>
         </div>
         <SummaryTable rows={workbookRows} year={year} />
       </div>
 
-      <div className="odoo-card">
-        <div className="odoo-card-header">
-          <div>
-            <span className="font-semibold">ແບບ run-rate</span>
-            <span className="ml-2 text-xs text-odoo-text-muted">
+      <div className="odoo-card overflow-hidden">
+        <div className="flex flex-col gap-1 border-b border-odoo-border bg-white px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div><h2 className="text-sm font-black text-odoo-text-strong">ມຸມມອງຄາດຄະເນຕາມ Run-rate</h2><p className="mt-1 text-[11px] text-odoo-text-muted">
               {runRate !== null
                 ? `ເດືອນ ${LAO_MONTHS[inProgressMonth - 1]} ຄາດຄະເນຈາກຍອດຈິງ ${fmt.format(
                     Math.round(act[inProgressMonth - 1] ?? 0),
                   )} ໃນ ${daysWithData}/${daysInMonth} ວັນ = ${fmt.format(Math.round(runRate))}`
                 : "ຍັງບໍ່ມີຍອດຈິງໃນເດືອນນີ້ — ຄືກັບຕາຕະລາງເທິງ"}
-            </span>
-          </div>
+            </p></div>
+          <span className="self-start rounded-full bg-odoo-warning-bg px-3 py-1 text-[10px] font-black text-odoo-warning-text">LIVE FORECAST</span>
         </div>
         <SummaryTable rows={runRateRows} year={year} />
       </div>
     </div>
   );
+}
+
+type KpiTone = "primary" | "sky" | "success" | "warning" | "danger";
+const KPI_TONE: Record<KpiTone, string> = {
+  primary: "border-odoo-primary bg-gradient-to-br from-odoo-primary-dark to-odoo-primary text-white",
+  sky: "border-odoo-primary-200 bg-odoo-primary-50 text-odoo-text-strong",
+  success: "border-odoo-success-border bg-odoo-success-bg text-odoo-text-strong",
+  warning: "border-odoo-warning-border bg-odoo-warning-bg text-odoo-text-strong",
+  danger: "border-odoo-danger-border bg-odoo-danger-bg text-odoo-text-strong",
+};
+
+function KpiCard({ label, value, sub, tone, progress }: { label: string; value: string; sub: string; tone: KpiTone; progress?: number }) {
+  const dark = tone === "primary";
+  return <article className={`relative overflow-hidden rounded-2xl border p-4 shadow-sm ${KPI_TONE[tone]}`}><div className={`text-[10px] font-black ${dark ? "text-white/65" : "text-odoo-text-muted"}`}>{label}</div><div className="mt-2 truncate text-2xl font-black tracking-tight">{value}</div><div className={`mt-1 truncate text-[10px] font-semibold ${dark ? "text-white/65" : "text-odoo-text-muted"}`}>{sub}</div>{progress !== undefined ? <div className={`mt-3 h-1.5 overflow-hidden rounded-full ${dark ? "bg-white/15" : "bg-white/75"}`}><div className="h-full rounded-full bg-gradient-to-r from-odien-orange to-odien-yellow" style={{ width: `${Math.min(Math.max(progress, 0), 100)}%` }} /></div> : null}</article>;
+}
+
+function MiniMetric({ label, value }: { label: string; value: string }) {
+  return <div><div className="text-[9px] font-bold text-odoo-text-muted">{label}</div><div className="mt-1 text-lg font-black text-odoo-primary-dark">{value}</div></div>;
 }

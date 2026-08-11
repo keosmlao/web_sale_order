@@ -18,12 +18,12 @@ export default function YearFilter({
   return (
     <div className="flex items-end gap-2">
       <div>
-        <label htmlFor="year" className="odoo-label">
+        <label htmlFor="year" className="mb-1 block text-[10px] font-bold text-white/65">
           ປີ
         </label>
         <select
           id="year"
-          className="odoo-select"
+          className="h-10 min-w-28 rounded-lg border border-white/20 bg-white px-3 text-sm font-black text-odoo-primary-dark outline-none transition focus:border-odien-yellow focus:ring-2 focus:ring-odien-yellow/30"
           defaultValue={String(year)}
           onChange={(event) => {
             const value = event.target.value;
@@ -42,7 +42,7 @@ export default function YearFilter({
       <span
         aria-live="polite"
         className={
-          "inline-flex items-center gap-1.5 pb-2 text-xs text-odoo-text-muted transition-opacity " +
+          "inline-flex items-center gap-1.5 pb-2 text-xs text-white/75 transition-opacity " +
           (pending ? "opacity-100" : "opacity-0")
         }
       >
