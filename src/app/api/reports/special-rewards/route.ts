@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
+import { saleBasis } from "@/lib/sales-basis";
 import { targetSalesScope } from "@/lib/sales-scope";
 
 // Special department rewards (workbook "🎁 ລາງວັນພິເສດ") with the department's
@@ -96,6 +97,9 @@ export async function GET(request: NextRequest) {
           t.emp_code,
           CASE WHEN t.product_group = 'AC' THEN 'AIR' ELSE 'CE_SDA' END AS group_code
         FROM odg_retail_target_employee t
+        -- Storefront only, same roster the incentives report pays on.
+        JOIN odg_employee re ON re.employee_code = t.emp_code
+          AND re.department_code = '205'
         WHERE t.year = ${year.toString()}
           AND LPAD(t.month, 2, '0') = LPAD(${month.toString()}, 2, '0')
         ORDER BY t.emp_code, t.roworder DESC
@@ -134,12 +138,15 @@ export async function GET(request: NextRequest) {
         SELECT SUM(sd.sum_amount) AS amount
         FROM odg_sale_detail sd
         JOIN names n ON n.salename = sd.salename
+        LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
         WHERE n.emp_code = r.emp_code
-          AND sd.branch_code = '01'
-          AND sd.argroup_main = '101'
+          AND ${saleBasis("sd")}
           ${salesScope}
           AND sd.doc_date >= make_date(${year}, ${month}, 1)
           AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+          -- Same basis as the residual query below, so the members and the
+          -- progress bar on this card always add up.
+          AND COALESCE(cat.is_active, true)
           AND (
             COALESCE(rw.brand_code, '') = ''
             OR UPPER(COALESCE(sd.item_brand, '')) = UPPER(rw.brand_code)
@@ -157,6 +164,9 @@ export async function GET(request: NextRequest) {
           t.emp_code,
           CASE WHEN t.product_group = 'AC' THEN 'AIR' ELSE 'CE_SDA' END AS group_code
         FROM odg_retail_target_employee t
+        -- Storefront only, same roster the incentives report pays on.
+        JOIN odg_employee re ON re.employee_code = t.emp_code
+          AND re.department_code = '205'
         WHERE t.year = ${year.toString()}
           AND LPAD(t.month, 2, '0') = LPAD(${month.toString()}, 2, '0')
         ORDER BY t.emp_code, t.roworder DESC
@@ -199,8 +209,7 @@ export async function GET(request: NextRequest) {
         JOIN names n ON n.salename = sd.salename
         LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
         WHERE n.emp_code = r.emp_code
-          AND sd.branch_code = '01'
-          AND sd.argroup_main = '101'
+          AND ${saleBasis("sd")}
           AND sd.doc_date >= make_date(${year}, ${month}, 1)
           AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
           AND sd.item_name !~ '\\[H\\]\\s*$'
@@ -238,11 +247,14 @@ export async function GET(request: NextRequest) {
       )
       SELECT COALESCE(SUM(sd.sum_amount), 0) AS amount
       FROM odg_sale_detail sd
-      WHERE sd.branch_code = '01'
-        AND sd.argroup_main = '101'
+      LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
+      WHERE ${saleBasis("sd")}
         ${salesScope}
         AND sd.doc_date >= make_date(${year}, ${month}, 1)
         AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+        -- Same basis as the member query above, so a department-wide reward's
+        -- members plus this residual add up to the progress bar.
+        AND COALESCE(cat.is_active, true)
         AND (sd.salename IS NULL OR sd.salename NOT IN (SELECT salename FROM names))
     `,
     ]);
