@@ -17,15 +17,17 @@ type LastDay = { last_day: Date | null };
 
 const FIRST_YEAR = 2025;
 
-function vientianeToday(): { year: number; month: number } {
+function vientianeToday(): { year: number; month: number; day: number } {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Vientiane",
     year: "numeric",
     month: "numeric",
+    day: "numeric",
   }).formatToParts(new Date());
   return {
     year: Number(parts.find((p) => p.type === "year")?.value),
     month: Number(parts.find((p) => p.type === "month")?.value),
+    day: Number(parts.find((p) => p.type === "day")?.value),
   };
 }
 
@@ -52,7 +54,7 @@ export default async function TotalCompanyPage({
     year < today.year ? 12 : year > today.year ? 0 : Math.max(0, today.month - 1);
   const inProgressMonth = completeThrough + 1;
 
-  const [salesRows, targetRows, lastDayRows] = await Promise.all([
+  const [salesRows, targetRows, lastDayRows, freshnessRows] = await Promise.all([
     // Total Company = every sale line, unfiltered. This is deliberately NOT
     // the storefront basis in @/lib/sales-basis — that one scopes to branch 01
     // walk-in retail, while this sheet reports the whole company.
@@ -82,6 +84,11 @@ export default async function TotalCompanyPage({
             AND doc_date < make_date(${year}, ${inProgressMonth}, 1) + INTERVAL '1 month'
         `
       : Promise.resolve([] as LastDay[]),
+    // odg_sale_detail is an ETL copy refreshed on a cycle, so it trails the
+    // ERP — today's bills land in it tomorrow. Every figure on this page is
+    // only as fresh as this date, so the page says so rather than letting a
+    // reader assume the total is up to the minute.
+    prisma.$queryRaw<LastDay[]>`SELECT MAX(doc_date)::date AS last_day FROM odg_sale_detail`,
   ]);
 
   const act = Array<number>(12).fill(0);
@@ -109,6 +116,22 @@ export default async function TotalCompanyPage({
       ? projectMonth(act[inProgressMonth - 1] ?? 0, daysWithData, daysInMonth)
       : null;
 
+  // Freshness of the whole page, and how far behind Vientiane "today" it is.
+  const dataThrough = freshnessRows[0]?.last_day ?? null;
+  const dataThroughLabel = dataThrough
+    ? `${String(dataThrough.getUTCDate()).padStart(2, "0")}/${String(
+        dataThrough.getUTCMonth() + 1,
+      ).padStart(2, "0")}/${dataThrough.getUTCFullYear()}`
+    : "—";
+  const daysBehind = dataThrough
+    ? Math.max(
+        0,
+        Math.round(
+          (Date.UTC(today.year, today.month - 1, today.day) - dataThrough.getTime()) / 86_400_000,
+        ),
+      )
+    : 0;
+
   const base = { year, act, lastYear, target, completeThrough };
   const workbookRows = buildSummaryRows({ ...base, currentMonthEstimate: null });
   const runRateRows = buildSummaryRows({ ...base, currentMonthEstimate: runRate });
@@ -135,6 +158,16 @@ export default async function TotalCompanyPage({
         </div>
       </section>
 
+      {daysBehind > 0 && (
+        <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-odoo-warning-border bg-odoo-warning-bg px-4 py-3 text-xs font-semibold text-odoo-warning-text">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-px h-4 w-4 shrink-0"><circle cx="12" cy="12" r="9" /><path d="M12 7v5l3 2" /></svg>
+          <span>
+            odg_sale_detail ອັບເດດຕາມຮອບວຽນ — ຂໍ້ມູນຮອດ {dataThroughLabel} ເທົ່ານັ້ນ
+            ({daysBehind} ວັນຫຼັງ). ບິນຂອງມື້ນີ້ຍັງບໍ່ທັນເຂົ້າ ຈຶ່ງຍັງບໍ່ຖືກນັບໃນຍອດຂ້າງລຸ່ມ.
+          </span>
+        </div>
+      )}
+
       {!hasTargets && (
         <div className="odoo-alert-danger mb-4">
           ບໍ່ມີເປົ້າໝາຍປີ {year} ໃນ odg_sales_target — ຖັນ Target ແລະ % ຈະເປັນ 0.
@@ -155,7 +188,7 @@ export default async function TotalCompanyPage({
           </span>
           <div className="min-w-0"><div className="text-[10px] font-black text-odoo-text-muted">RUN-RATE ເດືອນປັດຈຸບັນ</div><div className="mt-1 text-sm font-black text-odoo-text-strong">{currentEstimate ? `${fmt.format(Math.round(currentEstimate.act))} ກີບ` : "ຍັງບໍ່ມີຍອດພຽງພໍສຳລັບຄາດຄະເນ"}</div><div className="mt-0.5 text-[11px] text-odoo-text-muted">ຄຳນວນຈາກຂໍ້ມູນ {daysWithData}/{daysInMonth} ວັນ</div></div>
         </div>
-        <div className="odoo-card flex items-center gap-6 px-5 py-4"><MiniMetric label="ເດືອນປິດແລ້ວ" value={`${completeThrough}/12`} /><MiniMetric label="ປີລາຍງານ" value={String(year)} /></div>
+        <div className="odoo-card flex items-center gap-6 px-5 py-4"><MiniMetric label="ຂໍ້ມູນຮອດ" value={dataThroughLabel} /><MiniMetric label="ເດືອນປິດແລ້ວ" value={`${completeThrough}/12`} /><MiniMetric label="ປີລາຍງານ" value={String(year)} /></div>
       </section>
 
       <div className="odoo-card mb-5 overflow-hidden">

@@ -5,7 +5,7 @@ import { getEmployeeFromRequest } from "@/lib/auth";
 
 // GET /api/tms/deliveries/<billNo>
 //
-// One app bill's (CAKAP) delivery detail + full lifecycle timeline:
+// One storefront delivery bill's detail + full lifecycle timeline:
 //   ເປີດບິນ → (ນັດສົ່ງ) → ຈັດຖ້ຽວແລ້ວ → ຮັບຖ້ຽວ/ເບີກເຄື່ອງ → ເລີ່ມຈັດສົ່ງ →
 //   ຈັດສົ່ງສຳເລັດ / ຍົກເລີກ. Works before TMS picks the bill up (shows only the
 //   ເປີດບິນ step in that case).
@@ -63,7 +63,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
       ld.status AS d_status,
       pb.scheduled_date,
       pb.delivery_round_code AS scheduled_round,
-      ld.lat, ld.lng
+      COALESCE(NULLIF(ld.lat, ''), ship.latitude::text) AS lat,
+      COALESCE(NULLIF(ld.lng, ''), ship.longitude::text) AS lng
     FROM ic_trans t
     LEFT JOIN ar_customer ar ON ar.code = t.cust_code
     LEFT JOIN odg_employee emp ON emp.employee_code = NULLIF(t.sale_code, '')
@@ -81,22 +82,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
       SELECT p.scheduled_date, p.delivery_round_code
       FROM odg_tms_pending_bill p WHERE p.bill_no = t.doc_no LIMIT 1
     ) pb ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT s.latitude, s.longitude
+      FROM ic_trans_shipment s
+      WHERE s.doc_no = t.doc_no
+      ORDER BY s.roworder DESC
+      LIMIT 1
+    ) ship ON TRUE
     LEFT JOIN odg_tms_delivery_round dr ON dr.code = COALESCE(ld.round_code, pb.delivery_round_code)
     LEFT JOIN odg_tms_delivery_route rt ON rt.code = ld.route_code
     LEFT JOIN odg_tms_car car ON car.code = ld.car
     LEFT JOIN odg_tms_driver drv ON drv.code = ld.driver
     WHERE t.doc_no = ${bill}
-      AND (
-        t.doc_format_code = 'CAKAP'
-        OR (
-          t.doc_format_code <> 'SOK'
-          AND NULLIF(t.cust_code, '') IS NOT NULL
-          AND EXISTS (
-            SELECT 1 FROM ic_trans_detail td
-            WHERE td.doc_no = t.doc_no AND td.wh_code = '1101'
-          )
-        )
-      )
+      AND t.trans_flag = 44
+      AND t.doc_no ~ '^(CAK|INK)'
+      AND EXISTS (SELECT 1 FROM ic_trans_shipment s WHERE s.doc_no = t.doc_no)
     LIMIT 1
   `;
 

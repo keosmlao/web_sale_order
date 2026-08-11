@@ -17,6 +17,7 @@ export type Truck = {
   engineState: string | null;
   recordedAt: string | null;
   address: string | null;
+  billNos?: string[];
 };
 
 export type MapFocus = { lat: number; lng: number; label?: string } | null;
@@ -80,14 +81,18 @@ export default function DeliveryMap({
         const pts: Array<[number, number]> = [];
         for (const t of trucks) {
           const moving = (t.speed ?? 0) > 2;
+          const billLabel = t.billNos?.length ? ` · ${t.billNos.length} ບິນ` : "";
           const icon = L.divIcon({
             className: "",
-            html: `<div style="background:${moving ? "#059669" : "#64748b"};color:#fff;border-radius:9999px;padding:2px 6px;font-size:11px;font-weight:800;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.4)">🚚 ${t.carName}</div>`,
+            html: `<div style="background:${moving ? "#059669" : "#64748b"};color:#fff;border:2px solid #fff;border-radius:6px;padding:3px 7px;font-size:11px;font-weight:800;white-space:nowrap;box-shadow:0 2px 6px rgba(15,23,42,.28)">${t.carName}${billLabel}</div>`,
             iconAnchor: [10, 10],
           });
+          const bills = t.billNos?.length
+            ? `<br/><b>ບິນທີ່ກຳລັງສົ່ງ:</b><br/>${t.billNos.join("<br/>")}`
+            : "";
           L.marker([t.lat, t.lng], { icon })
             .bindPopup(
-              `<b>${t.carName}</b><br/>${t.address ?? ""}<br/>${t.speed ?? 0} km/h · ${t.recordedAt ?? ""}`,
+              `<b>${t.carName}</b>${bills}<br/>${t.address ?? ""}<br/>${t.speed ?? 0} km/h · ${t.recordedAt ?? ""}`,
             )
             .addTo(truckLayerRef.current);
           pts.push([t.lat, t.lng]);
@@ -107,8 +112,9 @@ export default function DeliveryMap({
   // Pan to a focused bill location.
   useEffect(() => {
     const L = getL();
-    if (!focus || !mapRef.current || !L) return;
     if (focusLayerRef.current) focusLayerRef.current.remove();
+    focusLayerRef.current = null;
+    if (!focus || !mapRef.current || !L) return;
     focusLayerRef.current = L.circleMarker([focus.lat, focus.lng], {
       radius: 9,
       color: "#dc2626",

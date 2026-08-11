@@ -15,6 +15,7 @@ type BillItem = {
   roundCode: string | null;
   roundName: string;
   timeLabel: string | null;
+  carCode: string | null;
   car: string;
   driverName: string;
   driverTel: string | null;
@@ -83,14 +84,15 @@ export default function DeliveryTrackingClient({
 }) {
   const [date, setDate] = useState(todayLocal());
   const [round, setRound] = useState("");
-  const [scope, setScope] = useState<"own" | "all">("own");
+  // Managers open the shared delivery queue by default. Storefront bills may
+  // belong to another cashier, so defaulting to "own" hid valid delivery jobs.
+  const [scope, setScope] = useState<"own" | "all">(canSeeAll ? "all" : "own");
   const [q, setQ] = useState("");
   const [data, setData] = useState<ListResp | null>(null);
   const [loading, setLoading] = useState(true);
   const [trucks, setTrucks] = useState<Truck[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<BillDetail | null>(null);
-  const [focus, setFocus] = useState<MapFocus>(null);
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -139,9 +141,6 @@ export default function DeliveryTrackingClient({
       if (res.ok) {
         const d = (await res.json()) as BillDetail;
         setDetail(d);
-        if (d.lat != null && d.lng != null) {
-          setFocus({ lat: d.lat, lng: d.lng, label: `${d.billNo} · ${d.customerName}` });
-        }
       }
     } catch {
       /* ignore */
@@ -157,6 +156,50 @@ export default function DeliveryTrackingClient({
   }, [data]);
 
   const s = data?.summary;
+  const waitingBills = useMemo(
+    () => (data?.items ?? []).filter(
+      (item) => item.status === "opened" || item.status === "scheduled",
+    ),
+    [data],
+  );
+
+  // The map is an operational view: only vehicles assigned to bills that are
+  // currently on a delivery trip are visible. Open/scheduled/completed bills
+  // must not make unrelated fleet vehicles appear here.
+  const activeCarCodes = useMemo(
+    () => new Set(
+      (data?.items ?? [])
+        .filter((item) => item.status === "inprogress" && item.carCode)
+        .map((item) => item.carCode!.trim()),
+    ),
+    [data],
+  );
+  const activeTrucks = useMemo(
+    () => trucks
+      .filter((truck) => truck.carCode && activeCarCodes.has(truck.carCode.trim()))
+      .map((truck) => ({
+        ...truck,
+        billNos: (data?.items ?? [])
+          .filter(
+            (item) => item.status === "inprogress"
+              && item.carCode?.trim() === truck.carCode?.trim(),
+          )
+          .map((item) => item.billNo),
+      })),
+    [trucks, activeCarCodes, data],
+  );
+  const focus = useMemo<MapFocus>(() => {
+    if (!selected) return null;
+    const bill = data?.items.find((item) => item.billNo === selected);
+    if (!bill?.carCode || bill.status !== "inprogress") return null;
+    const truck = activeTrucks.find((item) => item.carCode?.trim() === bill.carCode?.trim());
+    if (!truck) return null;
+    return {
+      lat: truck.lat,
+      lng: truck.lng,
+      label: `${bill.billNo} · ${truck.carName}`,
+    };
+  }, [activeTrucks, data, selected]);
 
   return (
     <div className="px-4 py-6 sm:px-6">
@@ -220,79 +263,76 @@ export default function DeliveryTrackingClient({
         </button>
       </div>
 
-      {/* Summary */}
       {s ? (
-        <div className="mb-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
-          <SummaryChip label="ທັງໝົດ" value={s.total} cls="text-odoo-text-strong" />
-          <SummaryChip label="ເປີດບິນ" value={s.opened} cls="text-slate-500" />
-          <SummaryChip label="ນັດສົ່ງ" value={s.scheduled} cls="text-sky-600" />
-          <SummaryChip label="ກຳລັງສົ່ງ" value={s.inprogress} cls="text-amber-600" />
-          <SummaryChip label="ສຳເລັດ" value={s.done} cls="text-emerald-600" />
-          <SummaryChip label="ຍົກເລີກ" value={s.cancelled} cls="text-rose-600" />
+        <div className="mb-5 grid grid-cols-2 overflow-hidden rounded-lg border border-odoo-border bg-odoo-border lg:grid-cols-4">
+          <SummaryChip label="ບິນຄ້າງສົ່ງ" value={s.total} cls="text-odoo-text-strong" />
+          <SummaryChip label="ລົດກຳລັງແລ່ນ" value={activeTrucks.length} cls="text-emerald-600" />
+          <SummaryChip label="ບິນກຳລັງສົ່ງ" value={s.inprogress} cls="text-amber-600" />
+          <SummaryChip label="ລໍຖ້າຈັດສົ່ງ" value={s.opened + s.scheduled} cls="text-sky-600" />
         </div>
       ) : null}
 
-      <div className="grid gap-4 lg:grid-cols-[1fr_minmax(0,460px)]">
-        {/* Bill list */}
-        <div className="rounded-md border border-odoo-border bg-odoo-surface">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-odoo-surface-muted text-left text-xs font-bold uppercase text-odoo-text-muted">
-                <tr>
-                  <th className="px-3 py-2">ບິນ / ລູກຄ້າ</th>
-                  <th className="px-3 py-2">ຮອບ / ລົດ</th>
-                  <th className="px-3 py-2 text-right">ສະຖານະ</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan={3} className="px-3 py-8 text-center text-odoo-text-muted">
-                      ກຳລັງໂຫຼດ...
-                    </td>
-                  </tr>
-                ) : (data?.items.length ?? 0) === 0 ? (
-                  <tr>
-                    <td colSpan={3} className="px-3 py-8 text-center text-odoo-text-muted">
-                      ບໍ່ມີຂໍ້ມູນຂົນສົ່ງ
-                    </td>
-                  </tr>
-                ) : (
-                  data!.items.map((it) => (
-                    <tr
-                      key={it.billNo}
-                      onClick={() => void openBill(it.billNo)}
-                      className={`cursor-pointer border-t border-odoo-border hover:bg-odoo-primary-50 ${selected === it.billNo ? "bg-odoo-primary-50" : ""}`}
-                    >
-                      <td className="px-3 py-2">
-                        <div className="font-mono text-xs font-bold text-odoo-text-strong">{it.billNo}</div>
-                        <div className="text-odoo-text">{it.customerName}</div>
-                      </td>
-                      <td className="px-3 py-2 text-xs text-odoo-text-muted">
-                        <div>{it.roundName}</div>
-                        <div>{it.car} · {it.driverName}</div>
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <span className={`inline-block rounded border px-2 py-0.5 text-[11px] font-bold ${STATUS[it.status].cls}`}>
-                          {STATUS[it.status].label}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+      {/* Live operations: vehicle list controls the large GPS map. */}
+      <section className="mb-5 overflow-hidden rounded-xl border border-odoo-border bg-odoo-surface shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-odoo-border px-4 py-3">
+          <div>
+            <h2 className="font-black text-odoo-text-strong">ຕຳແໜ່ງລົດກຳລັງຈັດສົ່ງ</h2>
+            <p className="text-xs text-odoo-text-muted">ອັບເດດຕຳແໜ່ງ GPS ອັດຕະໂນມັດທຸກ 30 ວິນາທີ</p>
+          </div>
+          <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-500" />
+            LIVE · {activeTrucks.length} ຄັນ
+          </span>
+        </div>
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_380px]">
+          <div className="relative h-[440px] border-b border-odoo-border bg-odoo-surface-muted lg:h-[560px] lg:border-b-0 lg:border-r">
+            <DeliveryMap trucks={activeTrucks} focus={focus} />
+          </div>
+          <div className="flex h-[560px] flex-col">
+            <div className="flex items-center justify-between border-b border-odoo-border px-4 py-3">
+              <div>
+                <h3 className="text-sm font-black text-odoo-text-strong">ບິນຄ້າງສົ່ງ</h3>
+                <p className="text-xs text-odoo-text-muted">ລໍຖ້າ {waitingBills.length} · ກຳລັງສົ່ງ {s?.inprogress ?? 0}</p>
+              </div>
+              <span className="font-mono text-lg font-black text-odoo-primary">{data?.items.length ?? 0}</span>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              {loading ? (
+                <div className="py-12 text-center text-sm text-odoo-text-muted">ກຳລັງໂຫຼດ...</div>
+              ) : (data?.items.length ?? 0) === 0 ? (
+                <div className="py-12 text-center text-sm text-odoo-text-muted">ບໍ່ມີບິນຄ້າງສົ່ງ</div>
+              ) : (
+                data!.items.map((bill) => (
+                  <button
+                    key={bill.billNo}
+                    type="button"
+                    onClick={() => void openBill(bill.billNo)}
+                    className={`flex w-full items-start gap-3 border-b border-odoo-border px-4 py-3 text-left transition hover:bg-odoo-surface-muted ${selected === bill.billNo ? "bg-odoo-primary-50" : ""}`}
+                  >
+                    <span className={`mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full ${bill.status === "inprogress" ? "bg-emerald-500" : bill.status === "scheduled" ? "bg-sky-500" : "bg-slate-300"}`} />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center justify-between gap-2">
+                        <span className="font-mono text-xs font-black text-odoo-text-strong">{bill.billNo}</span>
+                        <span className="shrink-0 text-[10px] font-bold text-odoo-text-muted">{STATUS[bill.status].label}</span>
+                      </span>
+                      <span className="mt-0.5 block truncate text-sm font-bold text-odoo-text">{bill.customerName}</span>
+                      <span className="mt-1 flex justify-between gap-2 text-[11px] text-odoo-text-muted">
+                        <span>{bill.status === "inprogress" ? `${bill.car} · ${bill.driverName}` : bill.roundName}</span>
+                        <span>{bill.billDate || "—"}</span>
+                      </span>
+                    </span>
+                  </button>
+                ))
+              )}
+            </div>
           </div>
         </div>
+      </section>
 
-        {/* Map + timeline */}
-        <div className="flex flex-col gap-4">
-          <div className="h-[320px] overflow-hidden rounded-md border border-odoo-border bg-odoo-surface-muted">
-            <DeliveryMap trucks={trucks} focus={focus} />
-          </div>
-
+      <div>
+        <aside>
           {selected ? (
-            <div className="rounded-md border border-odoo-border bg-odoo-surface p-4">
+            <div className="rounded-xl border border-odoo-border bg-odoo-surface p-4 shadow-sm">
               {!detail ? (
                 <div className="py-6 text-center text-odoo-text-muted">ກຳລັງໂຫຼດ...</div>
               ) : (
@@ -328,8 +368,13 @@ export default function DeliveryTrackingClient({
                 </>
               )}
             </div>
-          ) : null}
-        </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-odoo-border bg-odoo-surface-muted p-6 text-center">
+              <div className="font-bold text-odoo-text-strong">ເລືອກບິນຈັດສົ່ງ</div>
+              <p className="mt-1 text-xs text-odoo-text-muted">ລາຍລະອຽດຖ້ຽວລົດ ແລະ timeline ຈະສະແດງຢູ່ນີ້</p>
+            </div>
+          )}
+        </aside>
       </div>
     </div>
   );
@@ -337,9 +382,9 @@ export default function DeliveryTrackingClient({
 
 function SummaryChip({ label, value, cls }: { label: string; value: number; cls: string }) {
   return (
-    <div className="rounded-md border border-odoo-border bg-odoo-surface px-3 py-2">
-      <div className="text-[11px] font-bold uppercase text-odoo-text-muted">{label}</div>
-      <div className={`font-mono text-xl font-black ${cls}`}>{value}</div>
+    <div className="bg-odoo-surface px-4 py-3">
+      <div className="text-xs font-bold text-odoo-text-muted">{label}</div>
+      <div className={`mt-1 font-mono text-2xl font-black ${cls}`}>{value}</div>
     </div>
   );
 }

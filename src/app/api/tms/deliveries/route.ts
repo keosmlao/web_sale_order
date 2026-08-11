@@ -7,9 +7,10 @@ import { roleFromEmployee } from "@/lib/roles";
 
 // GET /api/tms/deliveries?date=YYYY-MM-DD&round=R001&scope=own|all&q=...
 //
-// Delivery tracking for THIS app's bills only (doc_format_code = 'CAKAP'). The
-// list is based on the app's bills so each appears the moment it's opened, then
-// shows its delivery stage as TMS picks it up:
+// Outstanding storefront deliveries. A storefront bill is considered a
+// delivery only when it has an ic_trans_shipment row; this avoids treating all
+// sales from warehouse 1101 as delivery jobs. Completed/cancelled TMS jobs are
+// intentionally excluded from this work queue.
 //   opened     — bill issued, not yet scheduled/dispatched
 //   scheduled  — in odg_tms_pending_bill (nat a round, not on a truck)
 //   inprogress — on a trip (odg_tms_detail) but not finished
@@ -37,6 +38,7 @@ type Row = {
   round_code: string | null;
   round_name: string | null;
   time_label: string | null;
+  car_code: string | null;
   car_label: string | null;
   driver_name: string | null;
   driver_tel: string | null;
@@ -81,22 +83,16 @@ export async function GET(request: NextRequest) {
   const scopeOwn = !(wantAll && allowAll);
   const myCode = employee.employeeCode ?? "";
 
-  // Bills tracked here: (a) this app's own receipts (CAKAP), plus (b) customer
-  // bills opened at the Khualuang storefront — warehouse 1101 on a detail line,
-  // with a customer (so internal stock transfers FT/FR/WEOH are excluded).
+  // CAK/INK are storefront sale/invoice documents. Shipment existence is the
+  // source of truth that the customer requested delivery.
   const filters: Prisma.Sql[] = [
-    Prisma.sql`(
-      t.doc_format_code = 'CAKAP'
-      OR (
-        t.doc_format_code <> 'SOK'
-        AND NULLIF(t.cust_code, '') IS NOT NULL
-        AND EXISTS (
-          SELECT 1 FROM ic_trans_detail td
-          WHERE td.doc_no = t.doc_no AND td.wh_code = '1101'
-        )
-      )
-    )`,
-    Prisma.sql`t.doc_date = ${date}::date`,
+    Prisma.sql`t.trans_flag = 44`,
+    Prisma.sql`t.doc_no ~ '^(CAK|INK)'`,
+    Prisma.sql`COALESCE(t.cancel_type, 0) = 0`,
+    Prisma.sql`COALESCE(t.is_cancel, 0) = 0`,
+    Prisma.sql`EXISTS (SELECT 1 FROM ic_trans_shipment ship WHERE ship.doc_no = t.doc_no)`,
+    Prisma.sql`(ld.status IS NULL OR ld.status NOT IN (1, 2))`,
+    Prisma.sql`COALESCE(ld.trip_date, pb.scheduled_date, t.doc_date) = ${date}::date`,
   ];
   if (scopeOwn) filters.push(Prisma.sql`t.sale_code = ${myCode}`);
   if (round) filters.push(Prisma.sql`COALESCE(ld.round_code, pb.delivery_round_code) = ${round}`);
@@ -120,6 +116,7 @@ export async function GET(request: NextRequest) {
       COALESCE(ld.round_code, pb.delivery_round_code) AS round_code,
       dr.name AS round_name,
       dr.time_label,
+      NULLIF(ld.car, '') AS car_code,
       COALESCE(NULLIF(car.plate_no, ''), NULLIF(car.name_1, ''), NULLIF(ld.car, '')) AS car_label,
       drv.name_1 AS driver_name,
       drv.tel AS driver_tel,
@@ -128,13 +125,15 @@ export async function GET(request: NextRequest) {
       (pb.bill_no IS NOT NULL) AS has_pending,
       TO_CHAR(ld.sent_end, 'DD/MM/YYYY HH24:MI') AS sent_end,
       ld.job_no,
-      ld.lat, ld.lng
+      COALESCE(NULLIF(ld.lat, ''), ship.latitude::text) AS lat,
+      COALESCE(NULLIF(ld.lng, ''), ship.longitude::text) AS lng
     FROM ic_trans t
     LEFT JOIN ar_customer ar ON ar.code = t.cust_code
     LEFT JOIN odg_employee emp ON emp.employee_code = NULLIF(t.sale_code, '')
     LEFT JOIN LATERAL (
       SELECT d.bill_no, d.status, d.sent_end, d.telephone, d.lat, d.lng,
-             h.delivery_round_code AS round_code, h.car, h.driver, h.doc_no AS job_no
+             h.delivery_round_code AS round_code, h.car, h.driver, h.doc_no AS job_no,
+             h.doc_date AS trip_date
       FROM odg_tms_detail d
       JOIN odg_tms h ON h.doc_no = d.doc_no
       WHERE d.bill_no = t.doc_no
@@ -142,11 +141,18 @@ export async function GET(request: NextRequest) {
       LIMIT 1
     ) ld ON TRUE
     LEFT JOIN LATERAL (
-      SELECT p.bill_no, p.delivery_round_code
+      SELECT p.bill_no, p.delivery_round_code, p.scheduled_date
       FROM odg_tms_pending_bill p
       WHERE p.bill_no = t.doc_no
       LIMIT 1
     ) pb ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT s.latitude, s.longitude
+      FROM ic_trans_shipment s
+      WHERE s.doc_no = t.doc_no
+      ORDER BY s.roworder DESC
+      LIMIT 1
+    ) ship ON TRUE
     LEFT JOIN odg_tms_delivery_round dr ON dr.code = COALESCE(ld.round_code, pb.delivery_round_code)
     LEFT JOIN odg_tms_car car ON car.code = ld.car
     LEFT JOIN odg_tms_driver drv ON drv.code = ld.driver
@@ -165,6 +171,7 @@ export async function GET(request: NextRequest) {
     roundCode: r.round_code,
     roundName: r.round_name?.trim() || (r.round_code ?? "—"),
     timeLabel: r.time_label?.trim() || null,
+    carCode: r.car_code?.trim() || null,
     car: r.car_label?.trim() || "—",
     driverName: r.driver_name?.trim() || "—",
     driverTel: r.driver_tel?.trim() || null,
