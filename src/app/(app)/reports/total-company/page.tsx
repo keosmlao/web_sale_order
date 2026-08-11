@@ -14,6 +14,7 @@ const num = (value: Num | undefined) => Number(value ?? 0) || 0;
 type MonthAmount = { y: Num; m: Num; amt: Num };
 type TargetAmount = { m: Num; amt: Num };
 type LastDay = { last_day: Date | null };
+type ApprovedMonth = { m: Num; amt: Num; note: string | null };
 
 const FIRST_YEAR = 2025;
 
@@ -54,7 +55,7 @@ export default async function TotalCompanyPage({
     year < today.year ? 12 : year > today.year ? 0 : Math.max(0, today.month - 1);
   const inProgressMonth = completeThrough + 1;
 
-  const [salesRows, targetRows, lastDayRows, freshnessRows] = await Promise.all([
+  const [salesRows, targetRows, lastDayRows, freshnessRows, approvedRows] = await Promise.all([
     // Total Company = every sale line, unfiltered. This is deliberately NOT
     // the storefront basis in @/lib/sales-basis — that one scopes to branch 01
     // walk-in retail, while this sheet reports the whole company.
@@ -89,6 +90,14 @@ export default async function TotalCompanyPage({
     // only as fresh as this date, so the page says so rather than letting a
     // reader assume the total is up to the minute.
     prisma.$queryRaw<LastDay[]>`SELECT MAX(doc_date)::date AS last_day FROM odg_sale_detail`,
+    // Closed months finance has signed off. See sql/add-closed-month-actual.sql
+    // — odg_sale_detail keeps moving after a month closes, so an approved
+    // figure can be pinned here rather than drifting with the ETL.
+    prisma.$queryRaw<ApprovedMonth[]>`
+      SELECT month::int AS m, amount AS amt, note
+      FROM app_closed_month_actual
+      WHERE year = ${year}
+    `,
   ]);
 
   const act = Array<number>(12).fill(0);
@@ -100,6 +109,18 @@ export default async function TotalCompanyPage({
     if (rowYear === year) act[index] = num(row.amt);
     else if (rowYear === year - 1) lastYear[index] = num(row.amt);
   }
+
+  // Approved figures replace the live total, but only for months that have
+  // actually closed — pinning the in-progress month would freeze a total that
+  // is still being earned.
+  const approvedMonths: number[] = [];
+  for (const row of approvedRows) {
+    const month = num(row.m);
+    if (month < 1 || month > completeThrough) continue;
+    act[month - 1] = num(row.amt);
+    approvedMonths.push(month);
+  }
+  approvedMonths.sort((a, b) => a - b);
 
   const target = Array<number>(12).fill(0);
   for (const row of targetRows) {
@@ -164,6 +185,16 @@ export default async function TotalCompanyPage({
           <span>
             odg_sale_detail ອັບເດດຕາມຮອບວຽນ — ຂໍ້ມູນຮອດ {dataThroughLabel} ເທົ່ານັ້ນ
             ({daysBehind} ວັນຫຼັງ). ບິນຂອງມື້ນີ້ຍັງບໍ່ທັນເຂົ້າ ຈຶ່ງຍັງບໍ່ຖືກນັບໃນຍອດຂ້າງລຸ່ມ.
+          </span>
+        </div>
+      )}
+
+      {approvedMonths.length > 0 && (
+        <div className="mb-4 flex items-start gap-2.5 rounded-xl border border-odoo-primary-200 bg-odoo-primary-50 px-4 py-3 text-xs font-semibold text-odoo-primary-dark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="mt-px h-4 w-4 shrink-0"><path d="M9 12l2 2 4-4" /><circle cx="12" cy="12" r="9" /></svg>
+          <span>
+            ເດືອນ {approvedMonths.map((m) => LAO_MONTHS[m - 1]).join(", ")} ໃຊ້ຍອດທີ່ບັນຊີອະນຸມັດ
+            ແທນຍອດສົດຈາກ odg_sale_detail. ແກ້ໄຂໄດ້ໃນຕາຕະລາງ app_closed_month_actual.
           </span>
         </div>
       )}

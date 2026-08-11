@@ -90,7 +90,7 @@ export function buildSummaryRows(input: SummaryInput): SummaryRow[] {
 
   if (closed >= 1) {
     push("prev-month", `PreviousMonth_${closed}/${year}`, "actual", span(closed, closed));
-    push("ytd", `YTD 1_${closed}/${year}`, "actual", span(1, closed));
+    push("ytd", `YTD ເດືອນປິດ 1_${closed}/${year}`, "actual", span(1, closed));
   }
 
   if (thisMonth <= MONTHS) {
@@ -110,9 +110,8 @@ export function buildSummaryRows(input: SummaryInput): SummaryRow[] {
 
   push("full-year", `FULL year 1_12/${year}`, "annual", span(1, MONTHS));
 
-  // The one row that is NOT forecast: real money banked so far, measured
-  // against the whole year's target. Answers "how much of the year is paid
-  // for already", so it deliberately ignores the estimates above.
+  // The one row that is NOT forecast: real money in closed months, measured
+  // against the whole year's target. The in-progress month remains forecast.
   push("banked", "ຍອດຂາຍສະສົມ/ເປົ້າປີ", "annual", {
     act: total(act, 1, closed),
     target: total(target, 1, MONTHS),
