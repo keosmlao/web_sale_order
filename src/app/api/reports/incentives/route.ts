@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
 import { saleBasis } from "@/lib/sales-basis";
+import { saleReportDate, saleReportMonth } from "@/lib/sale-month";
 import { targetSalesScope } from "@/lib/sales-scope";
 
 type IncentiveRow = {
@@ -224,7 +225,7 @@ export async function GET(request: NextRequest) {
             -- not explicitly mapped defaults to SDA/OTH (the workbook's catch-all bucket);
             -- brand gating in the point map keeps non-bonus items at zero.
             SELECT
-              sd.doc_date, sd.doc_no, sd.salename, sd.qty, sd.sum_amount AS sales_amount, sd.price, sd.item_name,
+              ${saleReportDate("sd")} AS doc_date, sd.doc_no, sd.salename, sd.qty, sd.sum_amount AS sales_amount, sd.price, sd.item_name,
               sd.item_category, sd.design_name, sd.size_name, sd.item_code,
               UPPER(COALESCE(sd.item_brand, '')) AS brand,
               COALESCE(cat.pointmap_category, 'SDA') AS pcat,
@@ -241,8 +242,7 @@ export async function GET(request: NextRequest) {
             FROM odg_sale_detail sd
             LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
             WHERE ${saleBasis("sd")}
-              AND sd.doc_date >= make_date(${year}, ${month}, 1)
-              AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+              AND ${saleReportMonth("sd", year, month)}
               AND COALESCE(cat.is_active, true)
           ) s
           LEFT JOIN app_incentive_design_token dtok ON dtok.design_name = s.design_name
@@ -402,8 +402,7 @@ export async function GET(request: NextRequest) {
           LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
           WHERE n.emp_code = r.emp_code
             AND ${saleBasis("sd")}
-            AND sd.doc_date >= make_date(${year}, ${month}, 1)
-            AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+            AND ${saleReportMonth("sd", year, month)}
             AND sd.item_name !~ '\\[H\\]\\s*$'
             AND (
               CASE
@@ -433,8 +432,7 @@ export async function GET(request: NextRequest) {
         LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
         WHERE ${saleBasis("sd")}
           ${targetSalesScope("sd")}
-          AND sd.doc_date >= make_date(${year}, ${month}, 1)
-          AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+          AND ${saleReportMonth("sd", year, month)}
           AND COALESCE(cat.is_active, true)
       `,
     ]);

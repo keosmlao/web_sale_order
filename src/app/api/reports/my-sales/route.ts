@@ -5,6 +5,7 @@ import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
 import { saleBasis } from "@/lib/sales-basis";
 import { targetSalesScope } from "@/lib/sales-scope";
+import { saleReportDate, saleReportMonth } from "@/lib/sale-month";
 
 type Totals = { sales: string | number | null; qty: string | number | null; target: string | number | null };
 type DailyRow = { d: Date; sales: string | number; qty: string | number };
@@ -46,14 +47,12 @@ export async function GET(request: NextRequest) {
           (SELECT COALESCE(SUM(sd.sum_amount), 0) FROM odg_sale_detail sd
              WHERE ${saleBasis("sd")}
                ${scopeSd}
-               AND sd.doc_date >= make_date(${year}, ${month}, 1)
-               AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+               AND ${saleReportMonth("sd", year, month)}
                AND sd.salename IN (SELECT sn FROM names)) AS sales,
           (SELECT COALESCE(SUM(sd.qty), 0) FROM odg_sale_detail sd
              WHERE ${saleBasis("sd")}
                ${scopeSd}
-               AND sd.doc_date >= make_date(${year}, ${month}, 1)
-               AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+               AND ${saleReportMonth("sd", year, month)}
                AND sd.salename IN (SELECT sn FROM names)) AS qty,
           (SELECT COALESCE(SUM(target), 0) FROM odg_retail_target_employee
              WHERE emp_code = ${empCode} AND year = ${year.toString()}
@@ -64,14 +63,13 @@ export async function GET(request: NextRequest) {
           SELECT fullname_lo AS sn FROM odg_employee WHERE employee_code = ${empCode} AND COALESCE(fullname_lo, '') <> ''
           UNION SELECT salename FROM app_incentive_sale_alias WHERE employee_code = ${empCode}
         )
-        SELECT sd.doc_date AS d, SUM(sd.sum_amount) AS sales, SUM(sd.qty) AS qty
+        SELECT ${saleReportDate("sd")} AS d, SUM(sd.sum_amount) AS sales, SUM(sd.qty) AS qty
         FROM odg_sale_detail sd
         WHERE ${saleBasis("sd")}
           ${scopeSd}
-          AND sd.doc_date >= make_date(${year}, ${month}, 1)
-          AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+          AND ${saleReportMonth("sd", year, month)}
           AND sd.salename IN (SELECT sn FROM names)
-        GROUP BY sd.doc_date ORDER BY sd.doc_date
+        GROUP BY 1 ORDER BY 1
       `,
       prisma.$queryRaw<CategoryRow[]>`
         WITH names AS (
@@ -83,8 +81,7 @@ export async function GET(request: NextRequest) {
         FROM odg_sale_detail sd
         WHERE ${saleBasis("sd")}
           ${scopeSd}
-          AND sd.doc_date >= make_date(${year}, ${month}, 1)
-          AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+          AND ${saleReportMonth("sd", year, month)}
           AND sd.salename IN (SELECT sn FROM names)
         GROUP BY 1 ORDER BY sales DESC LIMIT 15
       `,
@@ -105,8 +102,7 @@ export async function GET(request: NextRequest) {
           ) emp ON true
           WHERE ${saleBasis("sd")}
             ${scopeSd}
-            AND sd.doc_date >= make_date(${year}, ${month}, 1)
-            AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+            AND ${saleReportMonth("sd", year, month)}
             AND emp.employee_code IS NOT NULL
           GROUP BY emp.employee_code
         ),
@@ -143,26 +139,23 @@ export async function GET(request: NextRequest) {
           COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
             WHERE ${saleBasis("detail")}
               ${scopeDetail}
-              AND detail.doc_date >= make_date(${year}, ${month}, 1)
-              AND detail.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'), 0) AS sales,
+              AND ${saleReportMonth("detail", year, month)}), 0) AS sales,
           COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
             WHERE ${saleBasis("detail")}
               ${scopeDetail}
-              AND detail.doc_date >= make_date(${year}, ${month}, 1)
-              AND detail.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'), 0) AS qty,
+              AND ${saleReportMonth("detail", year, month)}), 0) AS qty,
           COALESCE((SELECT SUM(employee_target.target) FROM odg_retail_target_employee employee_target
             WHERE employee_target.year = ${year.toString()}
               AND LPAD(employee_target.month, 2, '0') = LPAD(${month.toString()}, 2, '0')), 0) AS target
       `, prisma.$queryRaw<DailyRow[]>`
-        SELECT detail.doc_date::date AS d,
+        SELECT ${saleReportDate("detail")}::date AS d,
                COALESCE(SUM(detail.sum_amount), 0) AS sales,
                COALESCE(SUM(detail.qty), 0) AS qty
         FROM odg_sale_detail detail
         WHERE ${saleBasis("detail")}
           ${scopeDetail}
-          AND detail.doc_date >= make_date(${year}, ${month}, 1)
-          AND detail.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
-        GROUP BY detail.doc_date::date ORDER BY d
+          AND ${saleReportMonth("detail", year, month)}
+        GROUP BY 1 ORDER BY d
       `]);
       const team = teamRows[0];
       sales = num(team?.sales);

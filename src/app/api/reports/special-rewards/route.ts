@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
 import { saleBasis } from "@/lib/sales-basis";
+import { saleReportMonth } from "@/lib/sale-month";
 import { targetSalesScope } from "@/lib/sales-scope";
 
 // Special department rewards (workbook "🎁 ລາງວັນພິເສດ") with the department's
@@ -142,8 +143,7 @@ export async function GET(request: NextRequest) {
         WHERE n.emp_code = r.emp_code
           AND ${saleBasis("sd")}
           ${salesScope}
-          AND sd.doc_date >= make_date(${year}, ${month}, 1)
-          AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+          AND ${saleReportMonth("sd", year, month)}
           -- Same basis as the residual query below, so the members and the
           -- progress bar on this card always add up.
           AND COALESCE(cat.is_active, true)
@@ -210,8 +210,7 @@ export async function GET(request: NextRequest) {
         LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
         WHERE n.emp_code = r.emp_code
           AND ${saleBasis("sd")}
-          AND sd.doc_date >= make_date(${year}, ${month}, 1)
-          AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+          AND ${saleReportMonth("sd", year, month)}
           AND sd.item_name !~ '\\[H\\]\\s*$'
           AND (
             CASE
@@ -250,8 +249,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
       WHERE ${saleBasis("sd")}
         ${salesScope}
-        AND sd.doc_date >= make_date(${year}, ${month}, 1)
-        AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+        AND ${saleReportMonth("sd", year, month)}
         -- Same basis as the member query above, so a department-wide reward's
         -- members plus this residual add up to the progress bar.
         AND COALESCE(cat.is_active, true)

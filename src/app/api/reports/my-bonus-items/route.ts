@@ -4,6 +4,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { saleBasis } from "@/lib/sales-basis";
+import { saleReportDate, saleReportMonth } from "@/lib/sale-month";
 
 type ItemRow = {
   item_name: string | null;
@@ -37,8 +38,7 @@ export async function GET(request: NextRequest) {
   const dateFilter =
     url.searchParams.get("scope") === "today"
       ? Prisma.sql`AND sd.doc_date::date = CURRENT_DATE`
-      : Prisma.sql`AND sd.doc_date >= make_date(${year}, ${month}, 1)
-          AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'`;
+      : Prisma.sql`AND ${saleReportMonth("sd", year, month)}`;
 
   try {
     // Per-item bonus points for this employee — mirrors the incentive report's
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
       ),
       lines AS (
         SELECT
-          sd.doc_date, sd.item_name, UPPER(COALESCE(sd.item_brand, '')) AS brand, sd.item_category_name AS category,
+          ${saleReportDate("sd")} AS doc_date, sd.item_name, UPPER(COALESCE(sd.item_brand, '')) AS brand, sd.item_category_name AS category,
           sd.qty, sd.price, sd.item_name AS iname, ps.status_code,
           COALESCE(cat.pointmap_category, 'SDA') AS pcat,
           CASE COALESCE(cat.pointmap_category, 'SDA')
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
           SELECT ps0.status_code
           FROM app_incentive_product_status_rule ps0
           WHERE ps0.item_code = sd.item_code
-            AND sd.doc_date::date BETWEEN ps0.effective_from AND ps0.effective_to
+            AND ${saleReportDate("sd")}::date BETWEEN ps0.effective_from AND ps0.effective_to
           ORDER BY (ps0.effective_to - ps0.effective_from) ASC,
                    ps0.updated_at DESC
           LIMIT 1

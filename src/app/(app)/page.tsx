@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { requireEmployee } from "@/lib/auth";
 import { roleFromEmployee, canApprovePriceRequests } from "@/lib/roles";
 import { targetSalesScope } from "@/lib/sales-scope";
+import { saleReportDate, saleReportCurrentMonth } from "@/lib/sale-month";
 import MyTargetCard, { type TargetDashboard } from "./MyTargetCard";
 import MyBonusCard from "./MyBonusCard";
 import ActivePromosCard from "./ActivePromosCard";
@@ -262,9 +263,13 @@ export default async function HomePage() {
           -- "ຍອດຂາຍ" — today only, matching the ຍອດຂາຍມື້ນີ້ card and the
           -- ສະຫລຸບເປົ້າ ODG table. Reads 0 until the day's first bill lands.
           COALESCE(SUM(sd.sum_amount) FILTER (WHERE sd.doc_date = CURRENT_DATE), 0) AS day_total,
-          COALESCE(SUM(sd.sum_amount) FILTER (WHERE sd.doc_date >= date_trunc('month', CURRENT_DATE)), 0) AS month_total,
+          -- Month-to-date follows the credited month (a bill moved back a
+          -- month drops out here and lands in that month's report). The year
+          -- window below stays physical, so this cannot follow a move across
+          -- a year boundary — none exist, and ytd_target could not follow one.
+          COALESCE(SUM(sd.sum_amount) FILTER (WHERE ${saleReportDate("sd")} >= date_trunc('month', CURRENT_DATE)), 0) AS month_total,
           COALESCE(SUM(sd.sum_amount), 0) AS ytd_total,
-          COUNT(DISTINCT sd.doc_no) FILTER (WHERE sd.doc_date >= date_trunc('month', CURRENT_DATE)) AS orders
+          COUNT(DISTINCT sd.doc_no) FILTER (WHERE ${saleReportDate("sd")} >= date_trunc('month', CURRENT_DATE)) AS orders
         FROM odg_sale_detail sd
         WHERE ${saleBasis("sd")}
           ${targetSalesScope("sd")}
@@ -370,13 +375,11 @@ export default async function HomePage() {
             COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
               WHERE ${saleBasis("detail")}
                 ${targetSalesScope("detail")}
-                AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
-                AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'), 0) AS sales,
+                AND ${saleReportCurrentMonth("detail")}), 0) AS sales,
             COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
               WHERE ${saleBasis("detail")}
                 ${targetSalesScope("detail")}
-                AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
-                AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'), 0) AS qty,
+                AND ${saleReportCurrentMonth("detail")}), 0) AS qty,
             COALESCE((SELECT SUM(employee_target.target) FROM odg_retail_target_employee employee_target
               WHERE employee_target.year = to_char(CURRENT_DATE, 'YYYY')
                 AND LPAD(employee_target.month, 2, '0') = to_char(CURRENT_DATE, 'MM')), 0) AS target
@@ -392,14 +395,12 @@ export default async function HomePage() {
             COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
               WHERE ${saleBasis("detail")}
                 ${targetSalesScope("detail")}
-                AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
-                AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+                AND ${saleReportCurrentMonth("detail")}
                 AND detail.salename IN (SELECT salename FROM names)), 0) AS sales,
             COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
               WHERE ${saleBasis("detail")}
                 ${targetSalesScope("detail")}
-                AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
-                AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+                AND ${saleReportCurrentMonth("detail")}
                 AND detail.salename IN (SELECT salename FROM names)), 0) AS qty,
             COALESCE((SELECT SUM(target) FROM odg_retail_target_employee
               WHERE emp_code = ${me.employeeCode ?? ""}
@@ -414,21 +415,19 @@ export default async function HomePage() {
       FROM odg_sale_detail
       WHERE ${saleBasis()}
         ${targetSalesScope("odg_sale_detail")}
-        AND doc_date >= date_trunc('month', CURRENT_DATE)
-        AND doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+        AND ${saleReportCurrentMonth("odg_sale_detail")}
         ${insightFilter}
     `,
     role === "manager" || role === "head"
       ? prisma.$queryRaw<HomeTargetDailyRow[]>`
-          SELECT detail.doc_date::date AS day,
+          SELECT ${saleReportDate("detail")}::date AS day,
                  COALESCE(SUM(detail.sum_amount), 0) AS sales,
                  COALESCE(SUM(detail.qty), 0) AS qty
           FROM odg_sale_detail detail
           WHERE ${saleBasis("detail")}
             ${targetSalesScope("detail")}
-            AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
-            AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
-          GROUP BY detail.doc_date::date ORDER BY day
+            AND ${saleReportCurrentMonth("detail")}
+          GROUP BY 1 ORDER BY day
         `
       : prisma.$queryRaw<HomeTargetDailyRow[]>`
           WITH names AS (
@@ -437,16 +436,15 @@ export default async function HomePage() {
             UNION SELECT salename FROM app_incentive_sale_alias
             WHERE employee_code = ${me.employeeCode ?? ""}
           )
-          SELECT detail.doc_date::date AS day,
+          SELECT ${saleReportDate("detail")}::date AS day,
                  COALESCE(SUM(detail.sum_amount), 0) AS sales,
                  COALESCE(SUM(detail.qty), 0) AS qty
           FROM odg_sale_detail detail
           WHERE ${saleBasis("detail")}
             ${targetSalesScope("detail")}
-            AND detail.doc_date >= date_trunc('month', CURRENT_DATE)
-            AND detail.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+            AND ${saleReportCurrentMonth("detail")}
             AND detail.salename IN (SELECT salename FROM names)
-          GROUP BY detail.doc_date::date ORDER BY day
+          GROUP BY 1 ORDER BY day
         `,
     // Cashier queue — SOK bills still awaiting settlement (front-store).
     prisma.$queryRaw<Array<{ count: bigint; amount: string | number | null }>>`
@@ -465,8 +463,7 @@ export default async function HomePage() {
              COALESCE(SUM(qty), 0) AS qty
       FROM odg_sale_detail
       WHERE ${saleBasis()}
-        AND doc_date >= date_trunc('month', CURRENT_DATE)
-        AND doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+        AND ${saleReportCurrentMonth("odg_sale_detail")}
         ${insightFilter}
       GROUP BY 1 ORDER BY amount DESC LIMIT 8
     `,
@@ -478,8 +475,7 @@ export default async function HomePage() {
              COALESCE(SUM(qty), 0) AS qty
       FROM odg_sale_detail
       WHERE ${saleBasis()}
-        AND doc_date >= date_trunc('month', CURRENT_DATE)
-        AND doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+        AND ${saleReportCurrentMonth("odg_sale_detail")}
         ${insightFilter}
       GROUP BY item_name ORDER BY amount DESC LIMIT 5
     `,
@@ -502,7 +498,7 @@ export default async function HomePage() {
         SELECT emp.employee_code, emp.department_code,
           COALESCE(SUM(sd.sum_amount) FILTER (WHERE sd.doc_date::date = CURRENT_DATE), 0) AS day_sales,
           COALESCE(SUM(sd.sum_amount) FILTER (WHERE sd.doc_date >= date_trunc('week', CURRENT_DATE)), 0) AS week_sales,
-          COALESCE(SUM(sd.sum_amount) FILTER (WHERE sd.doc_date >= date_trunc('month', CURRENT_DATE)), 0) AS month_sales
+          COALESCE(SUM(sd.sum_amount) FILTER (WHERE ${saleReportDate("sd")} >= date_trunc('month', CURRENT_DATE)), 0) AS month_sales
         FROM odg_sale_detail sd
         LEFT JOIN LATERAL (
           SELECT employee_code FROM (
@@ -512,7 +508,10 @@ export default async function HomePage() {
         ) resolved ON true
         LEFT JOIN odg_employee emp ON emp.employee_code = resolved.employee_code
         WHERE ${saleBasis("sd")}
-          AND sd.doc_date >= LEAST(date_trunc('month', CURRENT_DATE), date_trunc('week', CURRENT_DATE))
+          -- One month of slack on the scan window so a bill credited into
+          -- this month from the previous one is still reachable; the FILTERs
+          -- above decide what actually counts.
+          AND sd.doc_date >= LEAST(date_trunc('month', CURRENT_DATE), date_trunc('week', CURRENT_DATE)) - INTERVAL '1 month'
           AND resolved.employee_code IS NOT NULL
         GROUP BY emp.employee_code, emp.department_code
       ),
@@ -540,16 +539,17 @@ export default async function HomePage() {
     role === "manager" || role === "head"
       ? prisma.$queryRaw<Array<{ cur_sales: string | number | null; prev_sales: string | number | null }>>`
           SELECT
-            COALESCE(SUM(sum_amount) FILTER (WHERE doc_date >= date_trunc('month', CURRENT_DATE)), 0) AS cur_sales,
+            COALESCE(SUM(sum_amount) FILTER (WHERE ${saleReportDate("odg_sale_detail")} >= date_trunc('month', CURRENT_DATE)), 0) AS cur_sales,
             COALESCE(SUM(sum_amount) FILTER (WHERE
-              doc_date >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
-              AND doc_date < date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
+              ${saleReportDate("odg_sale_detail")} >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
+              AND ${saleReportDate("odg_sale_detail")} < date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
                 + (CURRENT_DATE - date_trunc('month', CURRENT_DATE)::date + 1) * INTERVAL '1 day'
             ), 0) AS prev_sales
           FROM odg_sale_detail
           WHERE ${saleBasis()}
             ${targetSalesScope("odg_sale_detail")}
-            AND doc_date >= date_trunc('month', CURRENT_DATE) - INTERVAL '1 month'
+            -- Slack for the same reason as the rank query above.
+            AND doc_date >= date_trunc('month', CURRENT_DATE) - INTERVAL '2 month'
         `
       : Promise.resolve([] as Array<{ cur_sales: string | number | null; prev_sales: string | number | null }>),
     // New loyalty members registered this month (managers/heads).
@@ -570,12 +570,11 @@ export default async function HomePage() {
       ? prisma.$queryRaw<TargetGroupRow[]>`
           WITH scope AS (
             SELECT CASE WHEN sd.itemmaingroup = 'ແອ' THEN 'AC' ELSE 'CE' END AS grp,
-                   sd.doc_date, sd.sum_amount
+                   ${saleReportDate("sd")} AS doc_date, sd.sum_amount
             FROM odg_sale_detail sd
             WHERE sd.branch_code = '01' AND sd.argroup_main = '101'
               ${targetSalesScope("sd")}
-              AND sd.doc_date >= date_trunc('month', CURRENT_DATE)
-              AND sd.doc_date < date_trunc('month', CURRENT_DATE) + INTERVAL '1 month'
+              AND ${saleReportCurrentMonth("sd")}
           ), sales AS (
             -- "ລາຍວັນ" is today and only today. Reading back to the newest day
             -- that has rows would quietly show yesterday's sales under a

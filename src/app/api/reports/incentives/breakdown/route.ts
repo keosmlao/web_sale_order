@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
 import { saleBasis } from "@/lib/sales-basis";
+import { saleReportDate, saleReportMonth } from "@/lib/sale-month";
 
 // Per-salesperson point breakdown for the incentive report's tree view:
 // ພະນັກງານ → ໝວດ (AV/REF/Washer/Air/SDA) → ສິນຄ້າ that earned points.
@@ -86,7 +87,7 @@ export async function GET(request: NextRequest) {
           END AS size_token
         FROM (
           SELECT
-            sd.doc_date, sd.doc_no, sd.qty, sd.sum_amount, sd.price, sd.item_name,
+            ${saleReportDate("sd")} AS doc_date, sd.doc_no, sd.qty, sd.sum_amount, sd.price, sd.item_name,
             sd.item_category, sd.design_name, sd.size_name, sd.item_code,
             UPPER(COALESCE(sd.item_brand, '')) AS brand,
             COALESCE(cat.pointmap_category, 'SDA') AS pcat,
@@ -105,8 +106,7 @@ export async function GET(request: NextRequest) {
             LIMIT 1
           ) emp ON true
           WHERE ${saleBasis("sd")}
-            AND sd.doc_date >= make_date(${year}, ${month}, 1)
-            AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+            AND ${saleReportMonth("sd", year, month)}
             AND COALESCE(cat.is_active, true)
             AND emp.employee_code = ${emp}
         ) s

@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { saleBasis } from "@/lib/sales-basis";
+import { saleReportDate, saleReportMonth } from "@/lib/sale-month";
 
 type DailyRow = { day: string; points: string | number };
 
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
       ),
       lines AS (
         SELECT
-          sd.doc_date, sd.qty, sd.price, sd.item_name, ps.status_code,
+          ${saleReportDate("sd")} AS doc_date, sd.qty, sd.price, sd.item_name, ps.status_code,
           UPPER(COALESCE(sd.item_brand, '')) AS brand,
           COALESCE(cat.pointmap_category, 'SDA') AS pcat,
           CASE COALESCE(cat.pointmap_category, 'SDA')
@@ -62,14 +63,13 @@ export async function GET(request: NextRequest) {
           SELECT ps0.status_code
           FROM app_incentive_product_status_rule ps0
           WHERE ps0.item_code = sd.item_code
-            AND sd.doc_date::date BETWEEN ps0.effective_from AND ps0.effective_to
+            AND ${saleReportDate("sd")}::date BETWEEN ps0.effective_from AND ps0.effective_to
           ORDER BY (ps0.effective_to - ps0.effective_from) ASC,
                    ps0.updated_at DESC
           LIMIT 1
         ) ps ON true
         WHERE ${saleBasis("sd")}
-          AND sd.doc_date >= make_date(${year}, ${month}, 1)
-          AND sd.doc_date < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
+          AND ${saleReportMonth("sd", year, month)}
           AND sd.salename IN (SELECT sn FROM names)
       ),
       scored AS (
