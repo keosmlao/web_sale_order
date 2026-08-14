@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
+import { incentiveBandPrice, incentivePointQuantity, incentiveWasherSizeBand } from "@/lib/incentive-scoring";
 import { saleBasis } from "@/lib/sales-basis";
 import { saleReportDate, saleReportMonth } from "@/lib/sale-month";
 import { targetSalesScope } from "@/lib/sales-scope";
@@ -137,14 +139,14 @@ export async function GET(request: NextRequest) {
       prisma.$queryRaw<ConfigRow[]>`
         SELECT currency_code, low_max_pct, standard_max_pct,
                low_multiplier, standard_multiplier, high_multiplier, commission_base
-        FROM app_incentive_config WHERE id = 1
+        FROM app_incentive_config ORDER BY id LIMIT 1
       `,
       // Configurable commission-rate rule. Best-effort — columns ship in
       // sql/add-incentive-commission-rule.sql; falls back to the defaults
       // (0.80 / 0.05 / 1.00) until the migration is applied.
       prisma.$queryRaw<Array<{ commission_min_pct: string | number; commission_round_step: string | number; commission_pivot_pct: string | number }>>`
         SELECT commission_min_pct, commission_round_step, commission_pivot_pct
-        FROM app_incentive_config WHERE id = 1
+        FROM app_incentive_config ORDER BY id LIMIT 1
       `.catch(() => []),
       // Per-position commission tiers. Best-effort — ships in
       // sql/add-incentive-commission-tier.sql; empty array falls back to the
@@ -186,10 +188,7 @@ export async function GET(request: NextRequest) {
             s.qty,
             s.sales_amount,
             s.brand,
-            CASE
-              WHEN s.pcat = 'Air' AND s.item_name ~ '\\[H\\]\\s*$' THEN 0
-              ELSE s.qty
-            END AS point_qty,
+            ${incentivePointQuantity("s", Prisma.sql`s.pcat`)} AS point_qty,
             ps.status_code AS status_code,
             -- Design dimension (workbook Bonus_Maps). SDA=subtype, Air=inverter/on-off,
             -- REF=door type and Washer=load type both from ic_design (Top/Front/Twin Tub);
@@ -204,7 +203,8 @@ export async function GET(request: NextRequest) {
             -- Size dimension. REF=cuft, Washer=kg, TV(008)=inch from size_name;
             -- Air/AV-audio=price band (THB 10k/20k), SDA=price band (500/1k/2k/5k).
             CASE
-              WHEN s.pcat IN ('REF', 'Washer') THEN COALESCE(stok.size_token, '')
+              WHEN s.pcat = 'REF' THEN COALESCE(stok.size_token, '')
+              WHEN s.pcat = 'Washer' THEN COALESCE(stok.size_token, ${incentiveWasherSizeBand("s")})
               WHEN s.pcat = 'AV' AND s.item_category = '008' THEN COALESCE(stok.size_token, '')
               WHEN s.pcat IN ('AV', 'Air') THEN
                 CASE WHEN s.combo_price <= 10000 THEN '<=10000'
@@ -231,14 +231,10 @@ export async function GET(request: NextRequest) {
               COALESCE(cat.pointmap_category, 'SDA') AS pcat,
               COALESCE(cat.sda_subtype, 'OTH') AS sda_subtype,
               COALESCE(cat.group_code, 'CE_SDA') AS group_code,
-              CASE
-                WHEN COALESCE(cat.pointmap_category, 'SDA') = 'Air' THEN
-                  SUM(sd.price) OVER (
-                    PARTITION BY sd.doc_no, sd.salename,
-                                 UPPER(COALESCE(sd.item_brand, '')), sd.qty, sd.price
-                  )
-                ELSE sd.price
-              END AS combo_price
+              ${incentiveBandPrice(
+                "sd",
+                Prisma.sql`COALESCE(cat.pointmap_category, 'SDA')`,
+              )} AS combo_price
             FROM odg_sale_detail sd
             LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
             WHERE ${saleBasis("sd")}
@@ -270,7 +266,10 @@ export async function GET(request: NextRequest) {
               * COALESCE(sm.multiplier, 1)
               * l.point_qty AS line_bonus
           FROM lines l
-          CROSS JOIN app_incentive_config cfg
+          -- Pin the single config row. An unfiltered CROSS JOIN would duplicate
+          -- every sale line once per config row, multiplying the whole
+          -- department's bonus, the moment a second row is inserted.
+          CROSS JOIN (SELECT base_amount FROM app_incentive_config ORDER BY id LIMIT 1) cfg
           -- Point map is defined per month with carry-forward: the newest
           -- effect_month <= the report month wins per combination.
           LEFT JOIN LATERAL (
@@ -304,13 +303,16 @@ export async function GET(request: NextRequest) {
             SUM(sold.line_points) AS bonus_points,
             SUM(sold.line_bonus) AS normal_bonus
           FROM sold
+          -- btrim on both sides: the ERP stores some salenames with trailing
+          -- spaces, and an exact match silently dropped those rows from the
+          -- seller's bonus while the management report still counted them.
           LEFT JOIN LATERAL (
             SELECT employee_code FROM (
               SELECT alias.employee_code, 0 AS priority
-              FROM app_incentive_sale_alias alias WHERE alias.salename = sold.salename
+              FROM app_incentive_sale_alias alias WHERE btrim(alias.salename) = btrim(sold.salename)
               UNION ALL
               SELECT e.employee_code, 1 AS priority
-              FROM odg_employee e WHERE e.fullname_lo = sold.salename
+              FROM odg_employee e WHERE btrim(e.fullname_lo) = btrim(sold.salename)
             ) resolved
             ORDER BY priority, employee_code
             LIMIT 1
@@ -379,12 +381,12 @@ export async function GET(request: NextRequest) {
           ORDER BY t.emp_code, t.roworder DESC
         ),
         names AS (
-          SELECT r.emp_code, e.fullname_lo AS salename
+          SELECT r.emp_code, btrim(e.fullname_lo) AS salename
           FROM roster r
           JOIN odg_employee e ON e.employee_code = r.emp_code
           WHERE COALESCE(e.fullname_lo, '') <> ''
           UNION
-          SELECT r.emp_code, a.salename
+          SELECT r.emp_code, btrim(a.salename)
           FROM roster r
           JOIN app_incentive_sale_alias a ON a.employee_code = r.emp_code
         )
@@ -398,7 +400,7 @@ export async function GET(request: NextRequest) {
         LEFT JOIN LATERAL (
           SELECT SUM(sd.qty) AS units
           FROM odg_sale_detail sd
-          JOIN names n ON n.salename = sd.salename
+          JOIN names n ON btrim(n.salename) = btrim(sd.salename)
           LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
           WHERE n.emp_code = r.emp_code
             AND ${saleBasis("sd")}

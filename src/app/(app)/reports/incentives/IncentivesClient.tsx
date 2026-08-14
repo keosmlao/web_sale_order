@@ -62,6 +62,7 @@ type BreakdownItem = {
   unitPoints: number;
   points: number;
   salesAmount: number;
+  noPointReason: string | null;
 };
 type BreakdownBrand = {
   brand: string;
@@ -80,9 +81,43 @@ type BreakdownCategory = {
 };
 type Breakdown = {
   employeeCode: string;
+  totalBills: number;
+  totalLines: number;
+  totalSales: number;
   totalPoints: number;
   categories: BreakdownCategory[];
 };
+
+type BreakdownBill = {
+  docNo: string | null;
+  docDate: string;
+  qty: number;
+  salesAmount: number;
+  points: number;
+  items: BreakdownItem[];
+};
+
+/**
+ * Group a brand's lines back into the bills they were sold on — the level the
+ * management report's drill-down stops at, so a point total can be traced to a
+ * bill in either app.
+ */
+function billsOf(items: BreakdownItem[]): BreakdownBill[] {
+  const bills = new Map<string, BreakdownBill>();
+  for (const item of items) {
+    const key = item.docNo ?? "—";
+    const bill = bills.get(key)
+      ?? { docNo: item.docNo, docDate: item.docDate, qty: 0, salesAmount: 0, points: 0, items: [] };
+    bill.qty += item.qty;
+    bill.salesAmount += item.salesAmount;
+    bill.points += item.points;
+    bill.items.push(item);
+    bills.set(key, bill);
+  }
+  return [...bills.values()].sort(
+    (a, b) => a.docDate.localeCompare(b.docDate) || (a.docNo ?? "").localeCompare(b.docNo ?? ""),
+  );
+}
 
 type Report = {
   year: number;
@@ -476,7 +511,9 @@ const CAT_CHIP: Record<string, string> = {
   SDA: "bg-amber-100 text-amber-700",
 };
 
-// Tree view: ພະນັກງານ → ໝວດ (category) → ຍີ່ຫໍ້ (brand) → ສິນຄ້າ that earned points.
+// Bill audit: every qualifying line behind the employee's incentive row,
+// including zero-point products. Sorting by date/bill keeps multi-line bills
+// together and makes the detail directly reconcilable to the sales total.
 function BreakdownTree({
   data,
   loading,
@@ -490,91 +527,106 @@ function BreakdownTree({
   specialLines?: SpecialLine[];
   specialTotal?: number;
 }) {
-  const [openKeys, setOpenKeys] = useState<Set<string>>(new Set());
   if (loading && !data) return <div className="px-10 py-4 text-sm text-odoo-text-muted">ກຳລັງໂຫລດລາຍລະອຽດ…</div>;
   if (!data) return null;
-  if (data.categories.length === 0) return <div className="px-10 py-4 text-sm text-odoo-text-muted">ບໍ່ມີສິນຄ້າທີ່ໄດ້ຄະແນນໃນເດືອນນີ້</div>;
-  const toggle = (key: string) =>
-    setOpenKeys((prev) => {
-      const n = new Set(prev);
-      if (n.has(key)) n.delete(key);
-      else n.add(key);
-      return n;
-    });
+  const hasItems = data.categories.some((cat) => cat.brands.some((brand) => brand.items.length > 0));
+  if (!hasItems) return <div className="px-10 py-4 text-sm text-odoo-text-muted">ບໍ່ມີບິນໃນເດືອນນີ້</div>;
   return (
-    <div className="border-l-2 border-odoo-primary/30 py-2 pl-8 pr-4">
-      {data.categories.map((cat) => {
-        const catKey = `c:${cat.category}`;
-        const catOpen = openKeys.has(catKey);
-        return (
-          <div key={cat.category} className="border-b border-odoo-border/60 last:border-0">
-            <button
-              type="button"
-              onClick={() => toggle(catKey)}
-              className="flex w-full items-center gap-2 py-2 text-left"
-            >
-              <Chevron open={catOpen} />
-              <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${CAT_CHIP[cat.category] ?? "bg-slate-100 text-slate-700"}`}>
+    <div className="border-l-2 border-odoo-primary/30 py-3 pl-8 pr-4">
+      <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+        <span className="font-bold text-odoo-text-strong">ທຸກບິນທີ່ນຳມາຄຳນວນ</span>
+        <span className="text-odoo-text-muted">{numberFmt.format(data.totalBills)} ບິນ</span>
+        <span className="text-odoo-text-muted">{numberFmt.format(data.totalLines)} ລາຍການ</span>
+        <span className="ml-auto font-mono font-bold text-odoo-text-strong">
+          ຍອດຂາຍ {numberFmt.format(data.totalSales)} {currency}
+        </span>
+      </div>
+      {/* ໝວດ → ຍີ່ຫໍ້ → ບິນ → ລາຍການ, the same drill-down the management
+          report uses, so a figure can be traced the same way in both. */}
+      <div className="max-h-[520px] space-y-1 overflow-auto rounded border border-odoo-border bg-white p-2">
+        {data.categories.map((cat) => (
+          <details key={cat.category} className="rounded border border-odoo-border/60">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-2 py-1.5 text-xs hover:bg-odoo-surface-muted">
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${CAT_CHIP[cat.category] ?? "bg-slate-100 text-slate-700"}`}>
                 {cat.label}
               </span>
-              <span className="text-xs text-odoo-text-muted">{cat.brands.length} ຍີ່ຫໍ້ · {numberFmt.format(cat.qty)} ໜ່ວຍ</span>
-              <span className="ml-auto font-mono text-sm font-bold text-odoo-text-strong">{numberFmt.format(cat.points)} ຄະແນນ</span>
-            </button>
-            {catOpen ? (
-              <div className="pl-6">
-                {cat.brands.map((brand) => {
-                  const brandKey = `b:${cat.category}:${brand.brand}`;
-                  const brandOpen = openKeys.has(brandKey);
-                  return (
-                    <div key={brand.brand} className="border-t border-odoo-border/40">
-                      <button
-                        type="button"
-                        onClick={() => toggle(brandKey)}
-                        className="flex w-full items-center gap-2 py-1.5 text-left"
-                      >
-                        <Chevron open={brandOpen} />
-                        <span className="text-xs font-bold text-odoo-text-strong">{brand.brand}</span>
-                        <span className="text-[11px] text-odoo-text-muted">{brand.items.length} ລາຍການ · {numberFmt.format(brand.qty)} ໜ່ວຍ</span>
-                        <span className="ml-auto font-mono text-xs font-bold text-odoo-text-strong">{numberFmt.format(brand.points)} ຄະແນນ</span>
-                      </button>
-                      {brandOpen ? (
-                        <div className="overflow-x-auto pb-2">
-                          <table className="w-full min-w-[640px] text-xs">
-                            <thead>
-                              <tr className="text-odoo-text-muted">
-                                <th className="px-2 py-1 text-left font-semibold">ວັນທີ</th>
-                                <th className="px-2 py-1 text-left font-semibold">ບິນ</th>
-                                <th className="px-2 py-1 text-left font-semibold">ສິນຄ້າ</th>
-                                <th className="px-2 py-1 text-right font-semibold">ຈຳນວນ</th>
-                                <th className="px-2 py-1 text-right font-semibold">ຄະແນນ/ໜ່ວຍ</th>
-                                <th className="px-2 py-1 text-right font-semibold">ຄະແນນ</th>
-                                <th className="px-2 py-1 text-right font-semibold">ຍອດຂາຍ</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-odoo-border/50">
-                              {brand.items.map((it, i) => (
-                                <tr key={`${it.docNo}-${i}`} className="text-odoo-text-strong">
-                                  <td className="whitespace-nowrap px-2 py-1 font-mono">{it.docDate}</td>
-                                  <td className="whitespace-nowrap px-2 py-1 font-mono text-odoo-text-muted">{it.docNo}</td>
-                                  <td className="px-2 py-1">{it.itemName}</td>
-                                  <td className="px-2 py-1 text-right font-mono">{numberFmt.format(it.qty)}</td>
-                                  <td className="px-2 py-1 text-right font-mono text-odoo-text-muted">{numberFmt.format(it.unitPoints)}</td>
-                                  <td className="px-2 py-1 text-right font-mono font-bold">{numberFmt.format(it.points)}</td>
-                                  <td className="px-2 py-1 text-right font-mono">{numberFmt.format(it.salesAmount)}</td>
+              <span className="font-mono text-odoo-text-muted">
+                {cat.brands.length} ຍີ່ຫໍ້ · {numberFmt.format(cat.qty)} ໜ່ວຍ
+              </span>
+              <span className="ml-auto font-mono font-bold text-odoo-primary">
+                {numberFmt.format(cat.points)} ຄະແນນ
+              </span>
+            </summary>
+            <div className="space-y-1 border-t border-odoo-border/60 p-1.5 pl-4">
+              {cat.brands.map((brand) => {
+                const bills = billsOf(brand.items);
+                return (
+                  <details key={brand.brand} className="rounded border border-odoo-border/40">
+                    <summary className="flex cursor-pointer list-none items-center gap-2 px-2 py-1.5 text-xs hover:bg-odoo-surface-muted">
+                      <span className="font-semibold text-odoo-text-strong">{brand.brand}</span>
+                      <span className="font-mono text-odoo-text-muted">
+                        {bills.length} ບິນ · {brand.items.length} ລາຍການ · {numberFmt.format(brand.qty)} ໜ່ວຍ
+                      </span>
+                      <span className="ml-auto font-mono font-bold text-odoo-primary">
+                        {numberFmt.format(brand.points)} ຄະແນນ
+                      </span>
+                    </summary>
+                    <div className="space-y-1 border-t border-odoo-border/40 p-1.5 pl-4">
+                      {bills.map((bill) => (
+                        <details key={bill.docNo} className="rounded border border-odoo-border/30">
+                          <summary className="flex cursor-pointer list-none items-center gap-2 px-2 py-1.5 text-xs hover:bg-odoo-surface-muted">
+                            <span className="font-mono text-odoo-text-muted">{bill.docDate}</span>
+                            <span className="font-mono font-semibold text-odoo-text-strong">{bill.docNo ?? "—"}</span>
+                            <span className="font-mono text-odoo-text-muted">
+                              {bill.items.length} ລາຍການ · {numberFmt.format(bill.qty)} ໜ່ວຍ · {numberFmt.format(bill.salesAmount)}
+                            </span>
+                            <span className="ml-auto font-mono font-bold text-odoo-primary">
+                              {numberFmt.format(bill.points)} ຄະແນນ
+                            </span>
+                          </summary>
+                          <div className="overflow-x-auto border-t border-odoo-border/30">
+                            <table className="w-full min-w-[720px] text-xs">
+                              <thead className="bg-odoo-surface-muted text-odoo-text-muted">
+                                <tr>
+                                  <th className="px-2 py-1.5 text-left font-semibold">ສິນຄ້າ</th>
+                                  <th className="px-2 py-1.5 text-right font-semibold">ຈຳນວນ</th>
+                                  <th className="px-2 py-1.5 text-right font-semibold">ຄະແນນ/ໜ່ວຍ</th>
+                                  <th className="px-2 py-1.5 text-right font-semibold">ຄະແນນ</th>
+                                  <th className="px-2 py-1.5 text-left font-semibold">ເຫດຜົນບໍ່ໄດ້ຄະແນນ</th>
+                                  <th className="px-2 py-1.5 text-right font-semibold">ຍອດຂາຍ</th>
                                 </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      ) : null}
+                              </thead>
+                              <tbody className="divide-y divide-odoo-border/50">
+                                {bill.items.map((item, index) => (
+                                  <tr
+                                    key={`${item.docNo}-${item.itemName}-${index}`}
+                                    className={item.points === 0 ? "bg-slate-50 text-odoo-text-muted" : "text-odoo-text-strong"}
+                                  >
+                                    <td className="px-2 py-1.5">{item.itemName ?? "—"}</td>
+                                    <td className="px-2 py-1.5 text-right font-mono">{numberFmt.format(item.qty)}</td>
+                                    <td className="px-2 py-1.5 text-right font-mono">{numberFmt.format(item.unitPoints)}</td>
+                                    <td className={`px-2 py-1.5 text-right font-mono font-bold ${item.points === 0 ? "text-slate-400" : "text-odoo-primary"}`}>
+                                      {numberFmt.format(item.points)}
+                                    </td>
+                                    <td className={`max-w-[360px] px-2 py-1.5 ${item.noPointReason ? "text-amber-700" : "text-slate-300"}`}>
+                                      {item.noPointReason ?? "—"}
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right font-mono">{numberFmt.format(item.salesAmount)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </details>
+                      ))}
                     </div>
-                  );
-                })}
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
+                  </details>
+                );
+              })}
+            </div>
+          </details>
+        ))}
+      </div>
       <div className="flex items-center justify-end gap-2 pt-2 text-sm">
         <span className="text-odoo-text-muted">ລວມຄະແນນ:</span>
         <span className="font-mono font-black text-odoo-primary">{numberFmt.format(data.totalPoints)}</span>

@@ -1,7 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
+import { incentiveBandPrice, incentivePointQuantity, incentiveWasherSizeBand } from "@/lib/incentive-scoring";
 import { saleBasis } from "@/lib/sales-basis";
 import { saleReportDate, saleReportMonth } from "@/lib/sale-month";
 
@@ -37,7 +39,12 @@ export async function GET(request: NextRequest) {
       ),
       lines AS (
         SELECT
-          ${saleReportDate("sd")} AS doc_date, sd.qty, sd.price, sd.item_name, ps.status_code,
+          ${saleReportDate("sd")} AS doc_date, sd.qty,
+          ${incentivePointQuantity(
+            "sd",
+            Prisma.sql`COALESCE(cat.pointmap_category, 'SDA')`,
+          )} AS point_qty,
+          sd.price, sd.item_name, ps.status_code,
           UPPER(COALESCE(sd.item_brand, '')) AS brand,
           COALESCE(cat.pointmap_category, 'SDA') AS pcat,
           CASE COALESCE(cat.pointmap_category, 'SDA')
@@ -47,10 +54,15 @@ export async function GET(request: NextRequest) {
             ELSE COALESCE(dtok.design_token, '')
           END AS design_token,
           CASE
-            WHEN COALESCE(cat.pointmap_category, 'SDA') IN ('REF', 'Washer') THEN COALESCE(stok.size_token, '')
+            WHEN COALESCE(cat.pointmap_category, 'SDA') = 'REF' THEN COALESCE(stok.size_token, '')
+            WHEN COALESCE(cat.pointmap_category, 'SDA') = 'Washer' THEN COALESCE(stok.size_token, ${incentiveWasherSizeBand("sd")})
             WHEN COALESCE(cat.pointmap_category, 'SDA') = 'AV' AND sd.item_category = '008' THEN COALESCE(stok.size_token, '')
             WHEN COALESCE(cat.pointmap_category, 'SDA') IN ('AV', 'Air') THEN
-              CASE WHEN sd.price <= 10000 THEN '<=10000' WHEN sd.price <= 20000 THEN '10001-20000' ELSE '>20000' END
+              CASE
+                WHEN ${incentiveBandPrice("sd", Prisma.sql`COALESCE(cat.pointmap_category, 'SDA')`)} <= 10000 THEN '<=10000'
+                WHEN ${incentiveBandPrice("sd", Prisma.sql`COALESCE(cat.pointmap_category, 'SDA')`)} <= 20000 THEN '10001-20000'
+                ELSE '>20000'
+              END
             WHEN COALESCE(cat.pointmap_category, 'SDA') = 'SDA' THEN
               CASE WHEN sd.price <= 500 THEN '<=500' WHEN sd.price <= 1000 THEN '<=1000' WHEN sd.price <= 2000 THEN '<=2000' WHEN sd.price <= 5000 THEN '<=5000' ELSE '>5000' END
             ELSE ''
@@ -74,7 +86,7 @@ export async function GET(request: NextRequest) {
       ),
       scored AS (
         SELECT l.doc_date,
-               COALESCE(pm.points, 0) * COALESCE(sm.multiplier, 1) * l.qty AS pts
+               COALESCE(pm.points, 0) * COALESCE(sm.multiplier, 1) * l.point_qty AS pts
         FROM lines l
         -- Monthly point map with carry-forward (newest effect_month <= report month).
         LEFT JOIN LATERAL (

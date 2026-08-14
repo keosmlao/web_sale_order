@@ -109,11 +109,27 @@ try {
 
   const combo = await pool.query(`
     WITH air AS (
-      SELECT sd.qty, sd.item_name,
-             COUNT(*) OVER (
-               PARTITION BY sd.doc_no, sd.salename,
-                            UPPER(COALESCE(sd.item_brand, '')), sd.qty, sd.price
-             ) AS pair_lines
+      SELECT sd.doc_no, sd.qty, sd.price, sd.item_name,
+             CASE
+               WHEN sd.item_name ~ '\\[[CH]\\]\\s*$'
+                 AND EXISTS (
+                   SELECT 1
+                   FROM odg_sale_detail pair
+                   WHERE pair.doc_no = sd.doc_no
+                     AND pair.branch_code IS NOT DISTINCT FROM sd.branch_code
+                     AND pair.salename IS NOT DISTINCT FROM sd.salename
+                     AND UPPER(COALESCE(pair.item_brand, '')) = UPPER(COALESCE(sd.item_brand, ''))
+                     AND pair.qty IS NOT DISTINCT FROM sd.qty
+                     AND pair.price IS NOT DISTINCT FROM sd.price
+                     AND (
+                       (sd.item_name ~ '\\[C\\]\\s*$' AND pair.item_name ~ '\\[H\\]\\s*$')
+                       OR
+                       (sd.item_name ~ '\\[H\\]\\s*$' AND pair.item_name ~ '\\[C\\]\\s*$')
+                     )
+                 )
+                 THEN sd.price * 2
+               ELSE sd.price
+             END AS band_price
       FROM odg_sale_detail sd
       LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
       WHERE sd.branch_code = '01'
@@ -124,12 +140,14 @@ try {
     )
     SELECT SUM(qty) AS line_qty,
            SUM(CASE WHEN item_name ~ '\\[H\\]\\s*$' THEN 0 ELSE qty END) AS set_qty,
-           COUNT(*) FILTER (WHERE pair_lines > 2) AS ambiguous_rows
+           MAX(band_price / NULLIF(price, 0)) AS max_component_multiplier,
+           MAX(band_price) FILTER (WHERE doc_no = 'CAK26009303') AS repeated_set_price
     FROM air
   `);
   const shape = combo.rows[0];
   assert(Number(shape?.set_qty) <= Number(shape?.line_qty), "AIR set count cannot exceed component-line quantity");
-  assert(Number(shape?.ambiguous_rows) === 0, "AIR combo pairing has ambiguous same-price rows");
+  assert(Number(shape?.max_component_multiplier) <= 2, "AIR price band must use at most one C/H pair");
+  assert(Number(shape?.repeated_set_price) === 14_510.412, "Repeated MIDEA sets must keep their per-set price band");
 
   console.log(JSON.stringify({
     julyAirRules: points.rowCount,
@@ -138,6 +156,7 @@ try {
     departmentReward: `${department.target_amount} / ${department.reward_amount}`,
     airComponentQty: Number(shape.line_qty),
     airSetQty: Number(shape.set_qty),
+    repeatedAirSetPrice: Number(shape.repeated_set_price),
     status: "ok",
   }, null, 2));
 } finally {

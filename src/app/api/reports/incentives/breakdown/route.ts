@@ -1,16 +1,21 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
+import { incentiveBandPrice, incentivePointQuantity, incentiveWasherSizeBand } from "@/lib/incentive-scoring";
 import { saleBasis } from "@/lib/sales-basis";
 import { saleReportDate, saleReportMonth } from "@/lib/sale-month";
 
-// Per-salesperson point breakdown for the incentive report's tree view:
-// ພະນັກງານ → ໝວດ (AV/REF/Washer/Air/SDA) → ສິນຄ້າ that earned points.
+// Per-salesperson bill breakdown for the incentive report:
+// every qualifying sale line is returned, including zero-point products and
+// the non-scoring [H] half of an AIR set, so the detail sales total can be
+// reconciled to the employee's report row bill by bill.
 // Lazy-loaded per employee when a row is expanded, so the main report stays light.
-// Reproduces the exact line-level scoring of the main report's `lines`/`sold` CTEs
-// (walk-in only, services excluded, newest-effective point rule, status multiplier).
+// Reproduces the exact line-level scoring of the main report's `lines`/`sold`
+// CTEs (walk-in only, services excluded, newest-effective point rule, status
+// multiplier). A zero score is data to display, not a reason to hide the line.
 
 type LineRow = {
   pcat: string;
@@ -23,12 +28,19 @@ type LineRow = {
   unit_points: string | number | null;
   line_points: string | number | null;
   sales_amount: string | number | null;
+  point_qty: string | number | null;
+  design_token: string | null;
+  size_token: string | null;
+  configured_points: string | number | null;
+  status_code: string | null;
+  status_note: string | null;
+  status_multiplier: string | number | null;
 };
 
 const number = (value: string | number | null | undefined) => Number(value ?? 0) || 0;
 
-// Same label mapping the client chips use, kept here so the tree groups read the
-// same as the workbook's Bonus_Summary columns.
+// Same label mapping the client chips use, kept here so the bill audit reads
+// the same as the workbook's Bonus_Summary columns.
 const CATEGORY_LABELS: Record<string, string> = {
   AV: "AV",
   REF: "ຕູ້ເຢັນ",
@@ -61,8 +73,9 @@ export async function GET(request: NextRequest) {
     const rows = await prisma.$queryRaw<LineRow[]>`
       WITH lines AS (
         SELECT
-          s.doc_date, s.doc_no, s.brand, s.item_name, s.qty, s.price, s.pcat,
+          s.doc_date, s.doc_no, s.brand, s.item_name, s.qty, s.point_qty, s.price, s.pcat,
           ps.status_code AS status_code,
+          ps.note AS status_note,
           s.sum_amount AS sales_amount,
           CASE s.pcat
             WHEN 'SDA' THEN s.sda_subtype
@@ -71,11 +84,12 @@ export async function GET(request: NextRequest) {
             ELSE COALESCE(dtok.design_token, '')
           END AS design_token,
           CASE
-            WHEN s.pcat IN ('REF', 'Washer') THEN COALESCE(stok.size_token, '')
+            WHEN s.pcat = 'REF' THEN COALESCE(stok.size_token, '')
+            WHEN s.pcat = 'Washer' THEN COALESCE(stok.size_token, ${incentiveWasherSizeBand("s")})
             WHEN s.pcat = 'AV' AND s.item_category = '008' THEN COALESCE(stok.size_token, '')
             WHEN s.pcat IN ('AV', 'Air') THEN
-              CASE WHEN s.price <= 10000 THEN '<=10000'
-                   WHEN s.price <= 20000 THEN '10001-20000'
+              CASE WHEN s.combo_price <= 10000 THEN '<=10000'
+                   WHEN s.combo_price <= 20000 THEN '10001-20000'
                    ELSE '>20000' END
             WHEN s.pcat = 'SDA' THEN
               CASE WHEN s.price <= 500  THEN '<=500'
@@ -87,7 +101,16 @@ export async function GET(request: NextRequest) {
           END AS size_token
         FROM (
           SELECT
-            ${saleReportDate("sd")} AS doc_date, sd.doc_no, sd.qty, sd.sum_amount, sd.price, sd.item_name,
+            ${saleReportDate("sd")} AS doc_date, sd.doc_no, sd.qty,
+            ${incentivePointQuantity(
+              "sd",
+              Prisma.sql`COALESCE(cat.pointmap_category, 'SDA')`,
+            )} AS point_qty,
+            ${incentiveBandPrice(
+              "sd",
+              Prisma.sql`COALESCE(cat.pointmap_category, 'SDA')`,
+            )} AS combo_price,
+            sd.sum_amount, sd.price, sd.item_name,
             sd.item_category, sd.design_name, sd.size_name, sd.item_code,
             UPPER(COALESCE(sd.item_brand, '')) AS brand,
             COALESCE(cat.pointmap_category, 'SDA') AS pcat,
@@ -97,10 +120,10 @@ export async function GET(request: NextRequest) {
           LEFT JOIN LATERAL (
             SELECT employee_code FROM (
               SELECT alias.employee_code, 0 AS priority
-              FROM app_incentive_sale_alias alias WHERE alias.salename = sd.salename
+              FROM app_incentive_sale_alias alias WHERE btrim(alias.salename) = btrim(sd.salename)
               UNION ALL
               SELECT e.employee_code, 1 AS priority
-              FROM odg_employee e WHERE e.fullname_lo = sd.salename
+              FROM odg_employee e WHERE btrim(e.fullname_lo) = btrim(sd.salename)
             ) resolved
             ORDER BY priority, employee_code
             LIMIT 1
@@ -113,7 +136,7 @@ export async function GET(request: NextRequest) {
         LEFT JOIN app_incentive_design_token dtok ON dtok.design_name = s.design_name
         LEFT JOIN app_incentive_size_token stok ON stok.size_name = s.size_name
         LEFT JOIN LATERAL (
-          SELECT ps0.status_code
+          SELECT ps0.status_code, ps0.note
           FROM app_incentive_product_status_rule ps0
           WHERE ps0.item_code = s.item_code
             AND s.doc_date::date BETWEEN ps0.effective_from AND ps0.effective_to
@@ -123,9 +146,12 @@ export async function GET(request: NextRequest) {
         ) ps ON true
       )
       SELECT
-        l.pcat, l.doc_date, l.doc_no, l.brand, l.item_name, l.qty, l.price, l.sales_amount,
+        l.pcat, to_char(l.doc_date::date, 'YYYY-MM-DD') AS doc_date,
+        l.doc_no, l.brand, l.item_name, l.qty, l.point_qty, l.price, l.sales_amount,
+        l.design_token, l.size_token, l.status_code, l.status_note,
+        pm.points AS configured_points, sm.multiplier AS status_multiplier,
         COALESCE(pm.points, 0) * COALESCE(sm.multiplier, 1) AS unit_points,
-        COALESCE(pm.points, 0) * COALESCE(sm.multiplier, 1) * l.qty AS line_points
+        COALESCE(pm.points, 0) * COALESCE(sm.multiplier, 1) * l.point_qty AS line_points
       FROM lines l
       LEFT JOIN LATERAL (
         SELECT pm0.points
@@ -141,14 +167,15 @@ export async function GET(request: NextRequest) {
         LIMIT 1
       ) pm ON true
       LEFT JOIN app_incentive_status_multiplier sm ON sm.status_code = l.status_code
-      WHERE COALESCE(pm.points, 0) <> 0
-      ORDER BY l.pcat, l.doc_date, l.doc_no
+      ORDER BY l.doc_date, l.doc_no, l.pcat, l.brand, l.item_name
     `;
 
-    // Group into the tree: category → brand → items.
+    // Keep category/brand buckets in the response for totals and PDF use; the
+    // on-screen audit flattens their items back into bill order.
     type Item = {
       docDate: string; docNo: string | null; itemName: string | null;
       qty: number; price: number; unitPoints: number; points: number; salesAmount: number;
+      noPointReason: string | null;
     };
     type Brand = { brand: string; points: number; salesAmount: number; qty: number; items: Item[] };
     type Cat = { category: string; label: string; points: number; salesAmount: number; qty: number; brands: Map<string, Brand> };
@@ -169,6 +196,30 @@ export async function GET(request: NextRequest) {
       const points = number(r.line_points);
       const sales = number(r.sales_amount);
       const qty = number(r.qty);
+      let noPointReason: string | null = null;
+      if (points === 0) {
+        if (r.pcat === "Air" && number(r.point_qty) === 0 && r.item_name?.match(/\[H\]\s*$/)) {
+          noPointReason = "ສ່ວນ [H] ຂອງຊຸດ AIR — ຄະແນນຖືກນັບຢູ່ສ່ວນ [C]";
+        } else if (r.status_multiplier != null && number(r.status_multiplier) === 0) {
+          noPointReason = r.status_note?.trim()
+            ? `ຕັ້ງຄ່າບໍ່ໃຫ້ໂບນັດ: ${r.status_note.trim()}`
+            : `ສະຖານະ ${r.status_code ?? "no-bonus"} ບໍ່ໃຫ້ຄະແນນ`;
+        } else if (r.configured_points == null) {
+          const dimensions = [
+            r.pcat || "SDA",
+            (r.brand ?? "").trim() || "ບໍ່ມີຍີ່ຫໍ້",
+            (r.design_token ?? "").trim() || "—",
+            (r.size_token ?? "").trim() || "—",
+          ].join(" / ");
+          noPointReason = `ບໍ່ມີກົດຄະແນນທີ່ກົງ: ${dimensions}`;
+        } else if (number(r.configured_points) === 0) {
+          noPointReason = "ກົດ Incentive ຂອງເດືອນນີ້ກຳນົດເປັນ 0 ຄະແນນ";
+        } else if (qty === 0) {
+          noPointReason = "ຈຳນວນໃນລາຍການເປັນ 0";
+        } else {
+          noPointReason = "ຜົນຄຳນວນຄະແນນເປັນ 0";
+        }
+      }
       c.points += points; c.salesAmount += sales; c.qty += qty;
       b.points += points; b.salesAmount += sales; b.qty += qty;
       b.items.push({
@@ -180,6 +231,7 @@ export async function GET(request: NextRequest) {
         unitPoints: number(r.unit_points),
         points,
         salesAmount: sales,
+        noPointReason,
       });
     }
 
@@ -195,8 +247,21 @@ export async function GET(request: NextRequest) {
         brands: [...c.brands.values()].sort((x, y) => y.points - x.points),
       }));
     const totalPoints = categories.reduce((s, c) => s + c.points, 0);
+    const totalSales = rows.reduce((s, r) => s + number(r.sales_amount), 0);
+    const totalBills = new Set(
+      rows.map((r) => r.doc_no?.trim()).filter((docNo): docNo is string => !!docNo),
+    ).size;
 
-    return NextResponse.json({ employeeCode: emp, year, month, totalPoints, categories });
+    return NextResponse.json({
+      employeeCode: emp,
+      year,
+      month,
+      totalBills,
+      totalLines: rows.length,
+      totalSales,
+      totalPoints,
+      categories,
+    });
   } catch (error) {
     console.error("GET /api/reports/incentives/breakdown failed", error);
     return NextResponse.json({ error: "breakdown failed" }, { status: 503 });
