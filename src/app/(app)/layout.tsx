@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
@@ -13,6 +14,7 @@ import {
 } from "@/lib/roles";
 import { getHiddenMenuKeys } from "@/lib/menu-visibility";
 import Sidebar from "@/components/Sidebar";
+import EmbedMode from "@/components/EmbedMode";
 import BottomNav from "@/components/BottomNav";
 import OrderNotifier from "@/components/OrderNotifier";
 import { logoutAction } from "@/app/login/actions";
@@ -137,11 +139,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
     return (
       <div className="min-h-screen bg-background text-odoo-text md:flex">
+        <Suspense fallback={null}>
+          <EmbedMode />
+        </Suspense>
         {/* The register gets its own slim sidebar. It had no desktop nav at
             all before — just two position:fixed buttons that floated over
             whatever the page rendered at the top. */}
         {isRegisterUser ? (
-          <aside className="hidden w-[212px] shrink-0 flex-col border-r border-odoo-border bg-white md:flex md:h-screen">
+          <aside className="app-chrome hidden w-[212px] shrink-0 flex-col border-r border-odoo-border bg-white md:flex md:h-screen">
             <div className="flex items-center gap-2 px-4 py-4">
               <span className="inline-flex h-9 w-9 items-center justify-center rounded-[11px] bg-odoo-primary text-[9px] font-black text-white">
                 ODG
@@ -225,7 +230,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </div>
           </aside>
         ) : (
-          <form action={logoutAction} className="fixed right-3 top-3 z-50">
+          <form action={logoutAction} className="app-chrome fixed right-3 top-3 z-50">
             <button
               type="submit"
               title={`${displayName} · ອອກຈາກລະບົບ`}
@@ -245,7 +250,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {children}
         </main>
 
-        <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-odoo-border bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_10px_rgba(0,0,0,0.06)] md:hidden">
+        <nav className="app-chrome fixed inset-x-0 bottom-0 z-40 flex border-t border-odoo-border bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_10px_rgba(0,0,0,0.06)] md:hidden">
           {isRegisterUser ? (
             <>
               <a href="/cashier" className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-bold ${pathname === "/cashier" ? "text-odoo-primary" : "text-odoo-text-muted"}`}>
@@ -280,7 +285,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     >
       {/* Desktop: sidebar. Mobile: hidden entirely (no drawer / no top bar) — the
           bottom navigation + profile page replace it. */}
-      <div className="hidden md:contents">
+      <Suspense fallback={null}>
+        <EmbedMode />
+      </Suspense>
+      <div className="app-chrome hidden md:contents">
         <Sidebar
           side={side}
           displayName={displayName}
@@ -291,7 +299,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         />
       </div>
       <main className="min-w-0 flex-1 pb-20 md:h-screen md:overflow-y-auto md:pb-0">{children}</main>
-      <BottomNav role={role} side={side} />
+      <div className="app-chrome contents">
+        <BottomNav role={role} side={side} />
+      </div>
       <OrderNotifier selfEmployeeCode={employee.employeeCode ?? null} />
     </div>
   );

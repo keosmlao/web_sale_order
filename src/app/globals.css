@@ -9368,3 +9368,17 @@ a {
   font-weight: 800;
   white-space: nowrap;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Embed mode — the page inside the Flutter app's sales tab (?embed=1)
+   The app draws its own navigation rail, so the site's sidebar, logout
+   button and bottom nav would be a second set of the same controls
+   wrapped around the POS. See components/EmbedMode.tsx.
+   ═══════════════════════════════════════════════════════════════════ */
+[data-embed="1"] .app-chrome {
+  display: none !important;
+}
+/* The bottom nav reserved space for itself on every page. */
+[data-embed="1"] main {
+  padding-bottom: 0 !important;
+}
