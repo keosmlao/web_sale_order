@@ -13,6 +13,11 @@ import { getEmployeeFromRequest } from "@/lib/auth";
 // odg_ecom.product_images holds the ordering and the public path
 // (/uploads/products/<code>/<uuid>.jpg); the bytes are keyed by that
 // path split in two, subdir + filename.
+//
+// The filename is taken with regexp_replace rather than split_part(url,
+// '/', -1): this server is PostgreSQL 11, where a negative field position
+// is an error, not the last field. 2,471 of the 2,509 image rows resolve
+// to bytes this way.
 
 type RouteContext = {
   params: Promise<{ code: string }>;
@@ -40,7 +45,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
     FROM odg_ecom.product_images p
     JOIN odg_ecom.upload_blobs b
       ON b.subdir = 'products/' || p.product_code
-     AND b.filename = split_part(p.url, '/', -1)
+     AND b.filename = regexp_replace(p.url, '^.*/', '')
     WHERE p.product_code = ${code}
     ORDER BY p.sort_order, p.id
     LIMIT 1
