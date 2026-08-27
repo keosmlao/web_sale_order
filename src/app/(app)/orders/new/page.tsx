@@ -2325,6 +2325,13 @@ function PosScreen({
                           alt=""
                           loading="lazy"
                           decoding="async"
+                          // A handful of image rows point at bytes that
+                          // are not there (38 of 2,509). Drop the element
+                          // so the tile falls back to the empty frame
+                          // instead of showing a torn-paper icon.
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
                         />
                       ) : (
                         <span className="pos-ctile-photo-none" aria-hidden>
