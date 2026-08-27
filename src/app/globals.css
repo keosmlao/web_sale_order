@@ -7709,6 +7709,9 @@ a {
    1180px nothing changes (search-first flow, as before).
    ═══════════════════════════════════════════════════════════════════ */
 
+/* Below the tablet breakpoint — a phone — the catalogue column is off and
+   the search-first flow takes over. Tablet portrait gets it back as a row
+   instead of a column; see "Tablet portrait" below. */
 .pos-catalog-col { display: none; }
 
 @media (min-width: 1180px) {
@@ -9505,4 +9508,72 @@ a {
   background: var(--odoo-warning-bg);
   border-color: var(--odoo-warning-border);
   color: var(--odoo-warning-text);
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Tablet portrait — the same two panes, stacked
+   Held upright the tablet is ~800px wide, under the 1180px the shell
+   splits at, so it used to fall back to the phone flow: no catalogue,
+   wizard back, one step at a time. But there is plenty of screen here —
+   it is the wrong way round, not too small. The panes stack instead:
+   products above, the sale below, each scrolling on its own.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (min-width: 768px) and (max-width: 1179px) {
+  .pos-shell2.pos-has-catalog {
+    grid-template-columns: minmax(0, 1fr);
+    /* The catalogue takes the larger share: it is what is being browsed,
+       and the sale rail is mostly a short list plus a total. */
+    grid-template-rows: minmax(0, 1.25fr) minmax(0, 1fr);
+  }
+
+  .pos-shell2.pos-has-catalog .pos-catalog-col {
+    display: flex;
+    border-right: 0;
+    border-bottom: 1px solid #e6ebf2;
+  }
+
+  .pos-shell2.pos-has-catalog .pos-sale-rail {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+    background: #eef2f7;
+  }
+  .pos-shell2.pos-has-catalog .pos-sale-rail .pos-order-left {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    max-height: none;
+    border-right: 0;
+  }
+  .pos-shell2.pos-has-catalog .pos-sale-rail .pos-checkout-col {
+    flex: 0 0 auto;
+    max-height: none;
+    overflow: visible;
+    padding: 0 12px 12px;
+  }
+
+  /* Same reasons as the wide layout: with both panes on screen the
+     wizard only costs height, and the grid is the one results surface. */
+  .pos-shell2.pos-has-catalog .pos-flow-panel,
+  .pos-shell2.pos-has-catalog .pos-quick-results,
+  .pos-shell2.pos-has-catalog .pos-search-bar,
+  .pos-shell2.pos-has-catalog .pos-add-big,
+  .pos-shell2.pos-has-catalog .pos-scan-hint {
+    display: none;
+  }
+  .pos-shell2.pos-has-catalog .pos-add-bar {
+    justify-content: flex-start;
+  }
+
+  /* Nothing in the cart, so the catalogue gets the whole screen. */
+  .pos-shell2.pos-has-catalog.pos-cart-empty {
+    grid-template-rows: minmax(0, 1fr);
+  }
+  .pos-shell2.pos-has-catalog.pos-cart-empty .pos-sale-rail {
+    display: none;
+  }
+  .pos-shell2.pos-has-catalog.pos-cart-empty .pos-catalog-col {
+    border-bottom-color: transparent;
+  }
 }
