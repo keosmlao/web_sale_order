@@ -10,6 +10,7 @@ import {
   isPrivilegedRole,
   SELF_SERVE_HREFS,
   isHrefAllowedForSide,
+  isSelfServeForSide,
 } from "@/lib/roles";
 
 type NavLeaf = {
@@ -465,7 +466,9 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
     const allowed = (leaf: NavLeaf) =>
       (!leaf.roles || leaf.roles.includes(role)) &&
       !hiddenSet.has(leaf.href) &&
-      (privileged || SELF_SERVE_HREFS.includes(leaf.href)) &&
+      (privileged ||
+        SELF_SERVE_HREFS.includes(leaf.href) ||
+        isSelfServeForSide(side, leaf.href)) &&
       isHrefAllowedForSide(side, leaf.href);
     return sections
       .map((s) => ({

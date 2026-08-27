@@ -4,7 +4,7 @@ import { requireEmployee } from "@/lib/auth";
 import {
   roleFromEmployee,
   isPrivilegedRole,
-  isSelfServePath,
+  isSelfServeForSide,
   counterSide,
   isPathAllowedForSide,
   homePathForSide,
@@ -50,7 +50,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
   const posAllowed =
     !pathname ||
-    (isSelfServePath(pathname) && isPathAllowedForSide(side, pathname));
+    (isSelfServeForSide(side, pathname) && isPathAllowedForSide(side, pathname));
   if (posOnly && pathname && !posAllowed) {
     redirect(roleHome);
   }
@@ -65,7 +65,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     !privileged &&
     !posOnly &&
     pathname &&
-    (!isSelfServePath(pathname) || !isPathAllowedForSide(side, pathname))
+    (!isSelfServeForSide(side, pathname) || !isPathAllowedForSide(side, pathname))
   ) {
     redirect(roleHome);
   }
@@ -78,6 +78,20 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // for them so they don't get a ping for the bill they just rang up.
     return (
       <div className="min-h-screen bg-background text-odoo-text">
+        {/* These roles get no sidebar on desktop, so anything outside their
+            one work screen needs a link here or it is unreachable. The
+            register closes its till against the daily takings report. */}
+        {isRegisterUser ? (
+          <a
+            href="/reports/daily-payments"
+            className="fixed right-3 top-14 z-50 inline-flex items-center gap-2 rounded-md border border-odoo-border bg-white px-3 py-1.5 text-xs font-semibold text-odoo-text-strong shadow-sm transition hover:bg-odoo-surface-muted md:top-3 md:right-44"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+              <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
+            </svg>
+            <span>ສະຫຼຸບການຮັບເງິນ</span>
+          </a>
+        ) : null}
         <form
           action={logoutAction}
           className="fixed right-3 top-3 z-50"

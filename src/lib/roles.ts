@@ -207,6 +207,21 @@ export function isPathAllowedForSide(
   return true;
 }
 
+// Closing the till is part of working the register, so the daily takings
+// report counts as one of that side's own screens. It stays off-limits to
+// the sales floor, who have no business reading the shop's cash position.
+const REGISTER_EXTRA_PATHS = ["/reports/daily-payments"] as const;
+
+export function isSelfServeForSide(
+  side: CounterSide | null,
+  pathname: string,
+): boolean {
+  if (side === "register" && matchesAny(pathname, REGISTER_EXTRA_PATHS)) {
+    return true;
+  }
+  return isSelfServePath(pathname);
+}
+
 // Menu counterpart — Sidebar / BottomNav filter their links through this so a
 // link a user cannot open is never shown in the first place.
 export function isHrefAllowedForSide(
