@@ -8642,7 +8642,7 @@ a {
     grid-template-areas:
       "title title total"
       "meta  meta  meta"
-      "qty   .     del";
+      "qty   act   del";
     align-items: center;
     gap: 5px 10px;
     padding: 9px 12px;
@@ -8656,7 +8656,12 @@ a {
   .pos-sale-rail .pos-cline-qty   { grid-area: qty; }
   .pos-sale-rail .pos-cline-chips { grid-area: meta; }
   .pos-sale-rail .pos-cline-del   { grid-area: del; }
-  .pos-sale-rail .pos-cline-actions { grid-column: 1 / -1; }
+  /* Beside the stepper, not under it — the row already has the width. */
+  .pos-sale-rail .pos-cline-actions {
+    grid-area: act;
+    justify-self: start;
+    margin: 0;
+  }
 
   .pos-sale-rail .pos-cline-money {
     flex-direction: row;
@@ -9289,7 +9294,6 @@ a {
   .pos-sale-rail .pos-cline-chips button svg { opacity: 0.7; }
 
   .pos-sale-rail .pos-cline-del { align-self: center; }
-  .pos-sale-rail .pos-cline-actions { margin-top: 2px; }
 }
 
 /* Cart line: close the bands up. The three rows were spaced as if each
