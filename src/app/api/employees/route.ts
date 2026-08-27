@@ -21,11 +21,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Only employees the admin has explicitly opted into the app via
-  // /employees (app_employee_access). Role + position come from that table
-  // so an admin can override what odg_employee shows. Anyone not in the
-  // table is invisible to the salesperson picker, even if their HR record
-  // is ACTIVE — that's the whole point of the access list.
+  // The roster is odg_employee; app_employee_access is an override on top
+  // of it, not the gate into it. Driving this off the access table meant
+  // the four rows in it were the only salespeople the app could name — so
+  // every cart line credited to anyone else showed a bare employee code,
+  // and the "change salesperson" picker offered four people out of 193.
+  // Access still decides what someone may DO (see roles.ts); it does not
+  // decide whether they exist.
   const rows = await prisma.$queryRaw<Row[]>`
     SELECT
       e.employee_id,
@@ -36,10 +38,11 @@ export async function GET(request: NextRequest) {
       e.position_code,
       a.position_code AS access_position_code,
       a.app_role
-    FROM app_employee_access a
-    JOIN odg_employee e ON e.employee_code = a.employee_code
-    WHERE a.is_active = true
-      AND e.employee_code IS NOT NULL
+    FROM odg_employee e
+    LEFT JOIN app_employee_access a
+      ON a.employee_code = e.employee_code AND a.is_active = true
+    WHERE e.employee_code IS NOT NULL
+      AND COALESCE(e.fullname_lo, e.fullname_en, '') <> ''
     ORDER BY e.fullname_lo NULLS LAST, e.employee_code
     LIMIT 5000
   `;
