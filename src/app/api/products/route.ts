@@ -253,6 +253,14 @@ async function queryCatalogPage(
         -- they are built from components, not stocked as a unit.
         AND (
           i.code = ANY(string_to_array(${inStockList}, ','))
+          OR EXISTS (
+            SELECT 1 FROM ic_inventory_barcode b
+            WHERE b.ic_code = i.code AND b.barcode = ${q}
+          )
+          OR EXISTS (
+            SELECT 1 FROM sn_inventory sn
+            WHERE sn.item_code = i.code AND sn.sn = ${q}
+          )
           OR (
             (i.item_category = '032' OR i.group_main = '12')
             AND sc.ic_set_code IS NOT NULL
@@ -269,11 +277,24 @@ async function queryCatalogPage(
           ${category} = ''
           OR COALESCE(NULLIF(TRIM(i.group_main), ''), TRIM(i.item_category)) = ${category}
         )
+        -- Typed search reaches the same places a scanner does: the item
+        -- code, the name and brand, and — on an exact match — the barcode
+        -- and the serial number. Partial matching is deliberately not
+        -- offered on those two: nobody types half a serial, and matching
+        -- fragments of 165k serials would be slow and mostly wrong.
         AND (
           ${pattern} = ''
           OR i.code ILIKE ${pattern}
           OR COALESCE(i.name_1, '') ILIKE ${pattern}
           OR COALESCE(i.item_brand, '') ILIKE ${pattern}
+          OR EXISTS (
+            SELECT 1 FROM ic_inventory_barcode b
+            WHERE b.ic_code = i.code AND b.barcode = ${q}
+          )
+          OR EXISTS (
+            SELECT 1 FROM sn_inventory sn
+            WHERE sn.item_code = i.code AND sn.sn = ${q}
+          )
         )
       ORDER BY
         CASE WHEN ${pattern} <> '' AND i.code ILIKE ${pattern} THEN 0 ELSE 1 END,
