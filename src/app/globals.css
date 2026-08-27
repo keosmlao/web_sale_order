@@ -9119,3 +9119,102 @@ a {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
+
+/* Money block, last trim that does not cost a tap.
+   The delivery trigger joins the button row instead of owning one — it is
+   set once per bill, not per item, and mostly reads "ລູກຄ້າຮັບເອງ". */
+@media (min-width: 1180px) {
+  .pos-sale-rail .pos-checkout-card > .px-4 {
+    padding-left: 10px;
+    padding-right: 10px;
+  }
+  .pos-sale-rail .pos-checkout-card > .py-3 {
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .pos-sale-rail .pos-total-line {
+    margin-top: 0;
+    padding: 6px 10px;
+    border-radius: 10px;
+  }
+  .pos-sale-rail .pos-total-line .font-mono { font-size: 17px; }
+  .pos-sale-rail .pos-total-line > div:first-child { font-size: 10px !important; }
+
+  .pos-sale-rail .pos-delivery-trigger {
+    order: 2;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 40px;
+    margin: 0 !important;
+    padding: 4px 10px !important;
+    border-radius: 10px;
+    font-size: 11px;
+  }
+  /* Delivery and the two icon buttons share one row; the pay button keeps
+     its own full-width row underneath. */
+  .pos-sale-rail .pos-action-row {
+    flex-wrap: wrap;
+    margin-top: 6px;
+    padding-top: 6px;
+    gap: 6px;
+  }
+  .pos-sale-rail .pos-action-row .pos-iconaction {
+    order: 1;
+    width: 40px;
+    height: 40px;
+  }
+  .pos-sale-rail .pos-action-row .pos-cta {
+    order: 3;
+    flex: 1 0 100%;
+    height: 44px;
+    min-height: 44px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   POS typography, one size down across the screen
+   Every size here was set individually as the layout came together, so
+   this is a single pass over all of them rather than a root-size change
+   — the POS is laid out in px, so scaling the root would have moved the
+   type without moving anything it sits inside.
+   Tap targets are untouched: only the lettering shrinks.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (min-width: 1180px) {
+  /* Catalogue — search, table, cards */
+  .pos-shell2.pos-has-catalog .pos-catalog-title > span:first-child { font-size: 13.5px; }
+  .pos-shell2.pos-has-catalog .pos-catalog-count { font-size: 10px; }
+  .pos-shell2.pos-has-catalog .pos-catalog-search { height: 44px; }
+  .pos-shell2.pos-has-catalog .pos-catalog-search-input { font-size: 12.5px; }
+  .pos-shell2.pos-has-catalog .pos-catalog-scan { font-size: 10px; height: 30px; }
+
+  .pos-shell2.pos-has-catalog .pos-catalog-table thead th { font-size: 9px; padding: 6px 10px; }
+  .pos-shell2.pos-has-catalog .pos-cat-cell { padding: 6px 10px; }
+  .pos-shell2.pos-has-catalog .pos-cat-title { font-size: 11.5px; }
+  .pos-shell2.pos-has-catalog .pos-cat-sub { font-size: 9.5px; }
+  .pos-shell2.pos-has-catalog .pos-cat-price { font-size: 12.5px; }
+
+  .pos-shell2.pos-has-catalog .pos-ctile { min-height: 118px; padding: 9px 10px; gap: 5px; }
+  .pos-shell2.pos-has-catalog .pos-ctile-name { font-size: 11px; line-height: 1.35; }
+  .pos-shell2.pos-has-catalog .pos-ctile-price { font-size: 13px; }
+  .pos-shell2.pos-has-catalog .pos-ctile-price em { font-size: 9px; }
+  .pos-shell2.pos-has-catalog .pos-ctile-stock { font-size: 10px; }
+  .pos-shell2.pos-has-catalog .pos-ctile-qty { font-size: 11px; min-width: 22px; height: 22px; }
+
+  /* Sale rail — header, cart lines, money */
+  .pos-sale-rail .pos-order-title > div > div:first-child { font-size: 13.5px !important; }
+  .pos-sale-rail .pos-customer-card .font-bold { font-size: 12.5px; }
+  .pos-sale-rail .odoo-pill { font-size: 10px; }
+
+  .pos-sale-rail .pos-cline-name { font-size: 11.5px; }
+  .pos-sale-rail .pos-cline-tag { font-size: 9px; }
+  .pos-sale-rail .pos-cline-money { font-size: 12px; }
+  .pos-sale-rail .pos-cline-unit { font-size: 10px; }
+  .pos-sale-rail .pos-cline-code { font-size: 10px; }
+  .pos-sale-rail .pos-cline-chips button { font-size: 10px; }
+  .pos-sale-rail .pos-cline-qty .pos-qty-input { font-size: 13px; }
+
+  .pos-sale-rail .pos-checkout-card .space-y-1 > div { font-size: 11px; }
+  .pos-sale-rail .pos-total-line .font-mono { font-size: 16px; }
+  .pos-sale-rail .pos-delivery-trigger { font-size: 10.5px; }
+  .pos-sale-rail .pos-action-row .pos-cta { font-size: 13px; }
+}

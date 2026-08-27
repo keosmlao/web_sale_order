@@ -3129,26 +3129,7 @@ function PosScreen({
               </div>
 
               {/* ≤640px: compact trigger that opens the delivery sheet. */}
-              <button
-                type="button"
-                onClick={() => setDeliverySheetOpen(true)}
-                className="pos-delivery-trigger mt-3 flex w-full items-center justify-between gap-2 rounded-xl border border-odoo-border bg-odoo-surface-muted px-3 py-2.5 text-left"
-              >
-                <span className="flex min-w-0 items-center gap-2 text-[12px] font-bold text-odoo-text-strong">
-                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                    <rect x="1" y="3" width="15" height="13" rx="1" />
-                    <path d="M16 8h4l3 3v5h-7z" />
-                    <circle cx="5.5" cy="18.5" r="2" />
-                    <circle cx="18.5" cy="18.5" r="2" />
-                  </svg>
-                  <span>ຂົນສົ່ງ · ໝາຍເຫດ</span>
-                </span>
-                <span className="flex min-w-0 items-center gap-1 text-[11px] font-semibold text-odoo-text-muted">
-                  <span className="max-w-32 truncate">{selectedTransportName}</span>
-                  <span aria-hidden>›</span>
-                </span>
-              </button>
-
+  
               {/* >640px: delivery round summary + fields inline, as before. */}
               <div className="pos-delivery-inline">
                 {/* ສະຫຼຸບບິນຈັດສົ່ງ ຕາມຮອບ ຂອງວັນຮັບສິນຄ້າ — ດຶງຈາກ TMS */}
@@ -3199,6 +3180,25 @@ function PosScreen({
               ) : null}
 
               <div className="pos-action-row">
+            <button
+                type="button"
+                onClick={() => setDeliverySheetOpen(true)}
+                className="pos-delivery-trigger flex w-full items-center justify-between gap-2 rounded-xl border border-odoo-border bg-odoo-surface-muted px-3 py-2.5 text-left"
+              >
+                <span className="flex min-w-0 items-center gap-2 text-[12px] font-bold text-odoo-text-strong">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <rect x="1" y="3" width="15" height="13" rx="1" />
+                    <path d="M16 8h4l3 3v5h-7z" />
+                    <circle cx="5.5" cy="18.5" r="2" />
+                    <circle cx="18.5" cy="18.5" r="2" />
+                  </svg>
+                  <span>ຂົນສົ່ງ · ໝາຍເຫດ</span>
+                </span>
+                <span className="flex min-w-0 items-center gap-1 text-[11px] font-semibold text-odoo-text-muted">
+                  <span className="max-w-32 truncate">{selectedTransportName}</span>
+                  <span aria-hidden>›</span>
+                </span>
+              </button>
                 <button
                   type="button"
                   onClick={() => {
