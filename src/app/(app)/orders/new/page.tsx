@@ -1057,6 +1057,16 @@ function PosScreen({
 
   async function addProduct(p: Product) {
     setSubmitError(null);
+    // 2,421 of the 11,010 sellable rows carry no price in
+    // ic_inventory_price. They used to land in the cart at 0 and could be
+    // rung up for nothing. Refuse them here — this is the guard that holds
+    // wherever the product came from: a tile, the search list or a scan.
+    if (!isAirSetProduct(p) && p.price <= 0) {
+      setSubmitError(
+        `${p.name} (${p.code}) ຍັງບໍ່ມີລາຄາຂາຍ — ຂາຍບໍ່ໄດ້ ຈົນກວ່າຈະຕັ້ງລາຄາໃນລະບົບ`,
+      );
+      return;
+    }
     if (isAirSetProduct(p)) {
       void openSetBuilder(p);
       return;

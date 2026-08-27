@@ -186,6 +186,16 @@ async function queryCatalogPage(
             AND sc.ic_set_code IS NOT NULL
           )
         )
+        -- Nothing without a price belongs in a grid whose purpose is
+        -- "tap to sell". They stay in the full catalogue, so a scan of one
+        -- still resolves and can say why it cannot be sold.
+        AND (
+          COALESCE(price.sale_price_kip, 0) > 0
+          OR (
+            (i.item_category = '032' OR i.group_main = '12')
+            AND sc.ic_set_code IS NOT NULL
+          )
+        )
         AND (
           ${category} = ''
           OR COALESCE(NULLIF(TRIM(i.group_main), ''), TRIM(i.item_category)) = ${category}
