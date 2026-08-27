@@ -89,6 +89,22 @@ function timeToMinutes(v: Date | string | null): number | null {
   return d.getUTCHours() * 60 + d.getUTCMinutes();
 }
 
+// Laos has a single fixed offset (UTC+7) and no daylight saving, so the
+// shop's wall clock is always UTC + 420 minutes.
+//
+// This has to be explicit. Promotion time windows are entered as Lao shop
+// hours ("08:00–18:00"), but the production server runs Etc/UTC — reading
+// the hour off the machine clock would gate an 08:00–18:00 promo over
+// 15:00–01:00 Lao time. Anchoring on the offset makes the answer identical
+// whether the engine runs on the server, in the browser, or off a tablet
+// whose own timezone is set wrong.
+const LAOS_UTC_OFFSET_MINUTES = 7 * 60;
+
+function laoMinutesOfDay(now: Date): number {
+  const utcMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  return (utcMin + LAOS_UTC_OFFSET_MINUTES) % (24 * 60);
+}
+
 export function isPromoActiveNow(p: EnginePromotion, now: Date): boolean {
   if (!p.isActive) return false;
   const startAt = asDate(p.startAt);
@@ -98,7 +114,7 @@ export function isPromoActiveNow(p: EnginePromotion, now: Date): boolean {
   const fromMin = timeToMinutes(p.timeFrom);
   const toMin = timeToMinutes(p.timeTo);
   if (fromMin !== null && toMin !== null) {
-    const nowMin = now.getHours() * 60 + now.getMinutes();
+    const nowMin = laoMinutesOfDay(now);
     // Same-day window only (no overnight wraparound for v1).
     if (fromMin <= toMin) {
       if (nowMin < fromMin || nowMin > toMin) return false;
@@ -255,4 +271,85 @@ export function applyPromotions(
     );
   }
   return lines;
+}
+
+// ---------------------------------------------------------------------------
+// Cart pricing — the whole of it, in one place.
+//
+// applyPromotions() above is only the middle step. A priced cart is really
+// three: narrow the promos to the cashier's per-item choices, apply them,
+// then drop the member % on any line whose promo opted out of stacking.
+// Those three used to be re-spelled at every call site — the order route,
+// the POS page, and the Flutter app each had their own copy, and the copies
+// were free to drift apart without anything failing. priceCart() is the one
+// they all go through now.
+// ---------------------------------------------------------------------------
+
+// Cashier's per-item promo picks, keyed by trigger item code.
+//   • key absent      → that trigger keeps every promo it qualifies for
+//   • null / ""       → the cashier declined all promos on that trigger
+//   • a promotion id  → only that promo applies
+export type PromoSelections = Record<string, string | null | undefined>;
+
+export function selectEffectivePromotions<T extends EnginePromotion>(
+  promos: T[],
+  selections: PromoSelections | null | undefined,
+): T[] {
+  if (!selections) return promos;
+  return promos.filter((p) => {
+    const trigger = (p.triggerItemCode ?? "").trim();
+    if (!trigger) return true;
+    if (!Object.prototype.hasOwnProperty.call(selections, trigger)) return true;
+    const chosen = selections[trigger];
+    if (chosen == null || chosen === "") return false;
+    return String(p.id) === String(chosen);
+  });
+}
+
+// Price a cart end to end. Mutates and returns `lines`, matching
+// applyPromotions()' in-place contract so existing callers keep working.
+export function priceCart(
+  lines: EngineLine[],
+  promos: EnginePromotion[],
+  selections: PromoSelections | null | undefined,
+  now: Date,
+): EngineLine[] {
+  const priced = applyPromotions(
+    lines,
+    selectEffectivePromotions(promos, selections),
+    now,
+  );
+  // A promo that opted out of member stacking cancels the customer's
+  // standing discount on the lines it touched — the promo price is the
+  // deal, not a floor to discount further from.
+  for (const line of priced) {
+    if (line.awardsMemberDiscount === false) {
+      line.customerDiscount = 0;
+      line.amount = Math.max(0, line.gross - line.promoDiscount);
+    }
+  }
+  return priced;
+}
+
+export type CartTotals = {
+  gross: number;
+  customerDiscount: number;
+  promoDiscount: number;
+  net: number;
+};
+
+export function cartTotals(lines: EngineLine[]): CartTotals {
+  const totals: CartTotals = {
+    gross: 0,
+    customerDiscount: 0,
+    promoDiscount: 0,
+    net: 0,
+  };
+  for (const line of lines) {
+    totals.gross += line.gross;
+    totals.customerDiscount += line.customerDiscount;
+    totals.promoDiscount += line.promoDiscount;
+    totals.net += line.amount;
+  }
+  return totals;
 }

@@ -8,7 +8,7 @@ import { notifyByRole } from "@/lib/notify";
 import { publishNewOrder } from "@/lib/order-events";
 import { parseOrderRemark } from "@/lib/order-remark";
 import { canBeSalesperson, roleFromEmployee, counterSide } from "@/lib/roles";
-import { applyPromotions } from "@/lib/promotions-engine";
+import { priceCart } from "@/lib/promotions-engine";
 
 const DEFAULT_SIDE_CODE = "200";
 
@@ -976,20 +976,10 @@ export async function POST(request: NextRequest) {
   const activePromos = await prisma.appPromotion.findMany({
     where: { isActive: true },
   });
-  // Honour the cart's per-item promo choices (mirrors the app's preview
-  // filter). An opted-out trigger drops all its promos; a chosen trigger
-  // keeps only that promo id; untouched triggers keep their defaults.
-  const effectivePromos = activePromos.filter((p) => {
-    const trig = (p.triggerItemCode ?? "").trim();
-    if (!trig) return true;
-    if (!Object.prototype.hasOwnProperty.call(promoSelections, trig)) {
-      return true;
-    }
-    const chosen = promoSelections[trig];
-    if (chosen == null || chosen === "") return false;
-    return String(p.id) === String(chosen);
-  });
-  applyPromotions(
+  // Honour the cart's per-item promo choices, then apply. Both steps live
+  // in the engine so this route, the POS page, and the app's preview
+  // endpoint cannot drift apart.
+  priceCart(
     linePricing.map((lp) => ({
       productId: lp.item.productId,
       quantity: lp.item.quantity,
@@ -1000,25 +990,26 @@ export async function POST(request: NextRequest) {
       promoLabel: lp.promoLabel,
       amount: lp.amount,
     })),
-    effectivePromos,
+    activePromos,
+    promoSelections,
     new Date(),
   ).forEach((engineLine, i) => {
     const lp = linePricing[i];
     lp.promoDiscount = engineLine.promoDiscount;
     lp.promoLabel = engineLine.promoLabel;
-    // The engine sets these two opt-out flags independently from the
-    // touching promo. Member discount is dropped when the promo says
-    // so; the awardsPoints flag is carried through to the earn calc.
+    // priceCart() has already dropped the member % on any line whose
+    // promo opted out of stacking, so copy its numbers back rather than
+    // recomputing them here.
+    lp.customerDiscount = engineLine.customerDiscount;
+    lp.amount = engineLine.amount;
+    // The two opt-out flags are independent: a promo can deny loyalty
+    // points without denying the member discount, and vice versa.
     const tagged = lp as {
       awardsPoints?: boolean;
       awardsMemberDiscount?: boolean;
     };
     if (engineLine.awardsMemberDiscount === false) {
-      lp.customerDiscount = 0;
-      lp.amount = Math.max(0, lp.gross - lp.promoDiscount);
       tagged.awardsMemberDiscount = false;
-    } else {
-      lp.amount = engineLine.amount;
     }
     if (engineLine.awardsPoints === false) {
       tagged.awardsPoints = false;

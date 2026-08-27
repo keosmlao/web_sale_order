@@ -3,7 +3,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
-  applyPromotions,
+  priceCart,
   isPromoActiveNow,
   type EngineLine,
   type EnginePromotion,
@@ -1826,29 +1826,13 @@ function PosScreen({
         amount: Math.max(0, gross - customerDiscount),
       };
     });
-    // Mirror the server's effectivePromos filter so the POS preview matches
-    // what /api/orders will actually charge for the cashier's promo choices.
-    const effectivePromos = activePromotions.filter((p) => {
-      const trig = (p.triggerItemCode ?? "").trim();
-      if (!trig) return true;
-      if (!Object.prototype.hasOwnProperty.call(promoChoice, trig)) return true;
-      const chosen = promoChoice[trig];
-      if (chosen == null || chosen === "") return false;
-      return String(p.id) === String(chosen);
-    });
-    const lines = applyPromotions(baseLines, effectivePromos, new Date());
-    // Two independent per-promo flags drive the post-processing:
-    //   awardsMemberDiscount=false → zero out the member % on this line
-    //   awardsPoints=false         → exclude from the earn calc below
-    // The two were one toggle before; admin can now opt out of either
-    // benefit on its own.
-    for (const line of lines) {
-      if (line.awardsMemberDiscount === false) {
-        line.customerDiscount = 0;
-        line.amount = Math.max(0, line.gross - line.promoDiscount);
-      }
-    }
-    return lines;
+    // Exactly what /api/orders runs at submit — same function, same
+    // arguments — so the preview on screen and the charge on the bill
+    // cannot disagree. priceCart() honours the cashier's per-item promo
+    // choices and drops the member % on lines whose promo opts out of
+    // stacking (awardsMemberDiscount=false); awardsPoints=false is left
+    // on the line for the earn calc below to read.
+    return priceCart(baseLines, activePromotions, promoChoice, new Date());
     // Include the whole customer object in deps so a swap (or fresh
     // membership) re-runs the math even if the discountPct didn't
     // change — covers e.g. picking a member after items are already

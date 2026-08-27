@@ -1,18 +1,25 @@
 // The Android build currently published at /downloads/odg-sale.apk.
 //
-// `minBuildNumber` is the floor the app enforces on itself: anything older
-// is refused entry and sent to the download page. Raise it only when an
-// older build would genuinely misbehave against today's server — a changed
-// API contract, a fix that must not be skipped. Cosmetic releases should
-// leave it alone, because raising it locks every tablet out of selling
-// until someone walks over and updates it.
+// Every release is mandatory. The shop's tablets are updated by someone
+// walking over to them, so an old build will otherwise sit there selling
+// for months against a server that has moved on — which is how a cart gets
+// priced by rules the bill no longer agrees with. Rather than deciding
+// case by case whether a given change is "important enough" to force,
+// minBuildNumber is pinned to the published build: install the new APK, or
+// the app stops at the update screen.
 //
-// Keep `buildNumber` in step with pubspec.yaml's `version: x.y.z+build`
-// whenever an APK is published.
+// So a release is exactly two edits, and they must agree:
+//   1. pubspec.yaml   version: x.y.z+BUILD
+//   2. BUILD below, plus VERSION and the note
+// Then rebuild the APK and copy it to public/downloads/odg-sale.apk.
+const VERSION = "1.0.4";
+const BUILD = 5;
+
 export const APP_RELEASE = {
-  version: "1.0.3",
-  buildNumber: 4,
-  minBuildNumber: 2,
+  version: VERSION,
+  buildNumber: BUILD,
+  // Not a separate decision — the published build IS the floor.
+  minBuildNumber: BUILD,
   downloadUrl: "/downloads/odg-sale.apk",
-  notes: "ISN ທີ່ເລືອກ ຖືກບັນທຶກໄວ້ກັບບິນ",
+  notes: "ໂປຣໂມຊັ່ນຄິດໄລ່ຢູ່ເຊີບເວີບ່ອນດຽວ — ລາຄາໃນແອັບກັບໃນບິນຕົງກັນ",
 } as const;
