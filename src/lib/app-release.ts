@@ -10,9 +10,9 @@
 // Keep `buildNumber` in step with pubspec.yaml's `version: x.y.z+build`
 // whenever an APK is published.
 export const APP_RELEASE = {
-  version: "1.0.1",
-  buildNumber: 2,
+  version: "1.0.2",
+  buildNumber: 3,
   minBuildNumber: 2,
   downloadUrl: "/downloads/odg-sale.apk",
-  notes: "POS ແບບ tablet: ສິນຄ້າຢູ່ໜ້າຈໍຕະຫຼອດ, ກະຕ່າຢູ່ຂວາ",
+  notes: "ເລືອກ ISN ໄດ້ ເມື່ອຂາຍຈາກສາງໜ້າຮ້ານ",
 } as const;
