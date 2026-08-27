@@ -194,7 +194,11 @@ function CashierClientInner({
 }) {
   const [tab, setTab] = useState<TabKey>("orders");
   const [query, setQuery] = useState("");
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("ALL");
+  // "ໃບສັ່ງຂາຍ" means orders still waiting to be billed. A settled one used
+  // to stay in the list next to the ones still owing, which is exactly the
+  // row a cashier must not pick up twice — it belongs under ໃບຮັບເງິນ now.
+  // The status chips still reach the others when someone needs to look.
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("PENDING");
   const [selectedCart, setSelectedCart] = useState<string | null>(null);
   const [deletingCart, setDeletingCart] = useState<string | null>(null);
   const [successNotice, setSuccessNotice] = useState<{
