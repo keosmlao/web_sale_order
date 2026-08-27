@@ -189,6 +189,7 @@ async function queryCatalogPage(
   q: string,
   category: string,
   limit: number,
+  offset: number,
   storefront: string,
 ): Promise<Catalog> {
   const pattern = q ? `%${q}%` : "";
@@ -312,7 +313,7 @@ async function queryCatalogPage(
       ORDER BY
         CASE WHEN ${pattern} <> '' AND i.code ILIKE ${pattern} THEN 0 ELSE 1 END,
         i.code
-      LIMIT ${limit}
+      LIMIT ${limit} OFFSET ${offset}
     `;
   // Show the storefront's own count, not the company-wide one.
   return products.filter(visibleInPos).map((row) => {
@@ -445,18 +446,30 @@ export async function GET(request: NextRequest) {
   const q = (params.get("q") ?? "").trim();
   const category = (params.get("category") ?? "").trim();
   const limitRaw = Number(params.get("limit"));
-  const wantsPage = params.has("limit") || q !== "" || category !== "";
+  const offsetRaw = Number(params.get("offset"));
+  const wantsPage =
+    params.has("limit") || params.has("offset") || q !== "" || category !== "";
   if (wantsPage) {
     const limit = Number.isFinite(limitRaw)
       ? Math.min(Math.max(Math.floor(limitRaw), 1), 200)
       : 60;
     // The first configured warehouse is the storefront (the POS pins 1101).
     const storefront = salesWarehouses[0] ?? warehouseList;
+    // Paging: the grid shows 60 at a time and the storefront stocks ~700,
+    // so browsing past the first screen has to ask for more.
+    //
+    // Callers must stop on an EMPTY page, not on a short one. The rule
+    // that hides air units without a set composition runs after the SQL
+    // limit, so a full page of rows can arrive here and leave as fewer.
+    const offset = Number.isFinite(offsetRaw)
+      ? Math.max(Math.floor(offsetRaw), 0)
+      : 0;
     const page = await queryCatalogPage(
       warehouseList,
       q,
       category,
       limit,
+      offset,
       storefront,
     );
     return NextResponse.json(page, {
