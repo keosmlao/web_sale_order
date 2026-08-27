@@ -2315,25 +2315,6 @@ function PosScreen({
                       (out ? " pos-ctile-out" : "")
                     }
                   >
-                    <span className="pos-ctile-top">
-                      <span className="pos-ctile-cat">
-                        {productCategoryLabel(p)}
-                      </span>
-                      <span
-                        className={
-                          "pos-ctile-stock" +
-                          (out
-                            ? " is-none"
-                            : low
-                              ? " is-low"
-                              : " is-ok")
-                        }
-                      >
-                        <i aria-hidden />
-                        {isSet ? "ຊຸດ" : out ? "ໝົດ" : moneyFmt.format(p.stock)}
-                      </span>
-                    </span>
-
                     <span className="pos-ctile-name">{p.name}</span>
 
                     <span className="pos-ctile-foot">
@@ -2341,11 +2322,24 @@ function PosScreen({
                         {moneyFmt.format(p.price)}
                         <em>ກີບ</em>
                       </span>
+                      {/* Once it is in the cart the count is what matters;
+                          before that, what is left on the shelf. Never both
+                          — they were two chips fighting for the corner. */}
                       {inCartQty > 0 ? (
                         <span className="pos-ctile-qty">
                           {moneyFmt.format(inCartQty)}
                         </span>
-                      ) : null}
+                      ) : (
+                        <span
+                          className={
+                            "pos-ctile-stock" +
+                            (out ? " is-none" : low ? " is-low" : " is-ok")
+                          }
+                        >
+                          <i aria-hidden />
+                          {isSet ? "ຊຸດ" : out ? "ໝົດ" : moneyFmt.format(p.stock)}
+                        </span>
+                      )}
                     </span>
                   </button>
                 );
