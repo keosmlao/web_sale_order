@@ -78,20 +78,51 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // for them so they don't get a ping for the bill they just rang up.
     return (
       <div className="min-h-screen bg-background text-odoo-text">
-        {/* These roles get no sidebar on desktop, so anything outside their
-            one work screen needs a link here or it is unreachable. The
-            register closes its till against the daily takings report. */}
+        {/* These roles get no sidebar, so their chrome is a top bar. It
+            used to be two `fixed` buttons in the corner, which floated over
+            whatever the page put at the top — on the register that was the
+            shift banner. In flow they cannot collide. The POS keeps its own
+            chrome: its shell is height:100dvh and a bar above it would push
+            the page into overflow. */}
         {isRegisterUser ? (
-          <a
-            href="/reports/daily-payments"
-            className="fixed right-3 top-14 z-50 inline-flex items-center gap-2 rounded-md border border-odoo-border bg-white px-3 py-1.5 text-xs font-semibold text-odoo-text-strong shadow-sm transition hover:bg-odoo-surface-muted md:top-3 md:right-44"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-              <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
-            </svg>
-            <span>ສະຫຼຸບການຮັບເງິນ</span>
-          </a>
-        ) : null}
+          <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-odoo-border bg-white px-3 shadow-sm sm:px-4">
+            <div className="flex items-center gap-2">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-odoo-primary text-[9px] font-black text-white">
+                ODG
+              </span>
+              <span className="text-sm font-black text-odoo-text-strong">
+                ໜ້າຮັບເງິນ
+              </span>
+            </div>
+
+            <div className="flex-1" />
+
+            <a
+              href="/reports/daily-payments"
+              className="inline-flex items-center gap-2 rounded-lg border border-odoo-border bg-white px-3 py-2 text-xs font-bold text-odoo-text-strong transition hover:bg-odoo-surface-muted"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
+              </svg>
+              <span className="hidden sm:inline">ສະຫຼຸບການຮັບເງິນ</span>
+            </a>
+
+            <form action={logoutAction}>
+              <button
+                type="submit"
+                title={`${displayName} · ອອກຈາກລະບົບ`}
+                className="inline-flex items-center gap-2 rounded-lg border border-odoo-border bg-white px-3 py-2 text-xs font-bold text-odoo-text-strong transition hover:bg-odoo-surface-muted"
+              >
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <path d="m16 17 5-5-5-5" />
+                  <path d="M21 12H9" />
+                </svg>
+                <span className="hidden sm:inline">{displayName}</span>
+              </button>
+            </form>
+          </header>
+        ) : (
         <form
           action={logoutAction}
           className="fixed right-3 top-3 z-50"
@@ -109,6 +140,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             <span className="hidden sm:inline">{displayName}</span>
           </button>
         </form>
+        )}
         <main className="min-h-screen pb-20 md:pb-0">{children}</main>
         {/* POS-locked staff still get to their profile / bonus via a slim bottom bar. */}
         <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-odoo-border bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_10px_rgba(0,0,0,0.06)] md:hidden">
