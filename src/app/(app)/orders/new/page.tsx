@@ -2310,54 +2310,64 @@ function PosScreen({
           ) : catalogProducts.length === 0 ? (
             <div className="pos-catalog-empty">ບໍ່ພົບສິນຄ້າ</div>
           ) : (
-            <div className="pos-catalog-grid">
-              {catalogProducts.map((p) => {
-                const isSet = isAirSetProduct(p);
-                const out = p.stock <= 0 && !isSet;
-                const low = !out && p.stock > 0 && p.stock <= 5;
-                const inCartQty = cartQtyByProduct.get(p.id) ?? 0;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    disabled={out}
-                    onClick={() => void addProduct(p)}
-                    className={
-                      "pos-ctile" +
-                      (inCartQty > 0 ? " pos-ctile-in" : "") +
-                      (out ? " pos-ctile-out" : "")
-                    }
-                  >
-                    <span className="pos-ctile-name">{p.name}</span>
-
-                    <span className="pos-ctile-foot">
-                      <span className="pos-ctile-price">
+            <table className="pos-catalog-table">
+              <thead>
+                <tr>
+                  <th className="pos-cat-th-name">ສິນຄ້າ</th>
+                  <th className="pos-cat-th-stock">ຄົງເຫຼືອ</th>
+                  <th className="pos-cat-th-price">ລາຄາ (ກີບ)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {catalogProducts.map((p) => {
+                  const isSet = isAirSetProduct(p);
+                  const out = p.stock <= 0 && !isSet;
+                  const low = !out && p.stock > 0 && p.stock <= 5;
+                  const inCartQty = cartQtyByProduct.get(p.id) ?? 0;
+                  return (
+                    <tr
+                      key={p.id}
+                      onClick={() => {
+                        if (!out) void addProduct(p);
+                      }}
+                      className={
+                        "pos-cat-row" +
+                        (inCartQty > 0 ? " pos-cat-row-in" : "") +
+                        (out ? " pos-cat-row-out" : "")
+                      }
+                    >
+                      <td className="pos-cat-cell pos-cat-name">
+                        <span className="pos-cat-title">{p.name}</span>
+                        <span className="pos-cat-sub">
+                          <span className="pos-cat-code">{p.code}</span>
+                          {p.brand ? <span>{p.brand}</span> : null}
+                        </span>
+                      </td>
+                      <td className="pos-cat-cell pos-cat-stock">
+                        {inCartQty > 0 ? (
+                          <span className="pos-ctile-qty">
+                            {moneyFmt.format(inCartQty)}
+                          </span>
+                        ) : (
+                          <span
+                            className={
+                              "pos-ctile-stock" +
+                              (out ? " is-none" : low ? " is-low" : " is-ok")
+                            }
+                          >
+                            <i aria-hidden />
+                            {isSet ? "ຊຸດ" : out ? "ໝົດ" : moneyFmt.format(p.stock)}
+                          </span>
+                        )}
+                      </td>
+                      <td className="pos-cat-cell pos-cat-price">
                         {moneyFmt.format(p.price)}
-                        <em>ກີບ</em>
-                      </span>
-                      {/* Once it is in the cart the count is what matters;
-                          before that, what is left on the shelf. Never both
-                          — they were two chips fighting for the corner. */}
-                      {inCartQty > 0 ? (
-                        <span className="pos-ctile-qty">
-                          {moneyFmt.format(inCartQty)}
-                        </span>
-                      ) : (
-                        <span
-                          className={
-                            "pos-ctile-stock" +
-                            (out ? " is-none" : low ? " is-low" : " is-ok")
-                          }
-                        >
-                          <i aria-hidden />
-                          {isSet ? "ຊຸດ" : out ? "ໝົດ" : moneyFmt.format(p.stock)}
-                        </span>
-                      )}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           )}
         </div>
       </div>

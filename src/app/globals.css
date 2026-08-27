@@ -8870,3 +8870,127 @@ a {
 .pos-catalog-chip {
   max-width: none;
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Catalogue as a table
+   Cards gave each product a box and a line break; a list gives the name
+   the full width, which is what long Lao product names need, and fits
+   roughly three times as many rows on screen.
+   ═══════════════════════════════════════════════════════════════════ */
+.pos-catalog-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--odoo-surface);
+  border: 1px solid #e6ebf2;
+  border-radius: 14px;
+  overflow: hidden;
+}
+.pos-catalog-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--odoo-surface-muted);
+  color: var(--odoo-text-soft);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: left;
+  white-space: nowrap;
+  padding: 8px 12px;
+  border-bottom: 1px solid #e6ebf2;
+}
+.pos-cat-th-stock { text-align: center; width: 92px; }
+.pos-cat-th-price { text-align: right; width: 118px; }
+
+.pos-cat-row {
+  cursor: pointer;
+  transition: background 110ms ease;
+}
+.pos-cat-row:hover .pos-cat-cell { background: var(--odoo-primary-50); }
+.pos-cat-row-in .pos-cat-cell { box-shadow: inset 0 0 0 9999px rgba(43, 112, 181, 0.05); }
+.pos-cat-row-out { cursor: not-allowed; opacity: 0.5; }
+.pos-cat-row-out:hover .pos-cat-cell { background: transparent; }
+
+.pos-cat-cell {
+  padding: 7px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+.pos-cat-name { min-width: 0; }
+.pos-cat-title {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--odoo-text-strong);
+}
+.pos-cat-sub {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 1px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--odoo-text-soft);
+}
+.pos-cat-code { font-family: var(--font-mono); }
+.pos-cat-stock { text-align: center; }
+.pos-cat-price {
+  text-align: right;
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--odoo-primary-dark);
+  white-space: nowrap;
+}
+
+/* ── Checkout block: less of it ──────────────────────────────────────
+   Two summary lines, the total, the delivery trigger and the buttons had
+   grown to about a third of the rail. Everything but the total loses a
+   step; the total keeps its weight because it is the number the cashier
+   reads out loud. */
+@media (min-width: 1180px) {
+  .pos-sale-rail .pos-checkout-card > .px-4 {
+    padding-left: 11px;
+    padding-right: 11px;
+  }
+  .pos-sale-rail .pos-checkout-card > .py-3 {
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+  .pos-sale-rail .pos-checkout-card .space-y-1 > div {
+    font-size: 11.5px;
+  }
+  .pos-sale-rail .pos-total-line {
+    margin-top: 6px;
+    padding: 9px 12px;
+    border-radius: 11px;
+  }
+  .pos-sale-rail .pos-total-line .font-mono {
+    font-size: 20px;
+  }
+  .pos-sale-rail .pos-delivery-trigger {
+    min-height: 40px;
+    margin-top: 8px !important;
+    padding: 6px 11px !important;
+    border-radius: 10px;
+  }
+  .pos-sale-rail .pos-action-row {
+    margin-top: 8px;
+    padding-top: 8px;
+    gap: 7px;
+  }
+  .pos-sale-rail .pos-action-row .pos-cta {
+    height: 46px;
+    min-height: 46px;
+    font-size: 14px;
+  }
+  .pos-sale-rail .pos-action-row .pos-iconaction {
+    width: 44px;
+    height: 46px;
+  }
+}
