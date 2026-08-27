@@ -4,24 +4,32 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
-import { incentiveBandPrice, incentivePointQuantity, incentiveWasherSizeBand } from "@/lib/incentive-scoring";
+import {
+  incentiveBandPrice,
+  incentiveMatePrice,
+  incentivePointQuantity,
+  incentiveWasherSizeBand,
+} from "@/lib/incentive-scoring";
+import { foldAirSets } from "@/lib/incentive-sets";
 import { saleBasis } from "@/lib/sales-basis";
 import { saleReportDate, saleReportMonth } from "@/lib/sale-month";
 
-// Per-salesperson bill breakdown for the incentive report:
-// every qualifying sale line is returned, including zero-point products and
-// the non-scoring [H] half of an AIR set, so the detail sales total can be
-// reconciled to the employee's report row bill by bill.
+// Per-salesperson bill breakdown for the incentive report: every qualifying
+// sale line is returned, zero-point products included, so the detail sales
+// total can be reconciled to the employee's report row bill by bill. A split
+// air conditioner is one row — the outdoor half is folded into its indoor
+// partner, money and all — so a bill reads as the machines it sold.
 // Lazy-loaded per employee when a row is expanded, so the main report stays light.
 // Reproduces the exact line-level scoring of the main report's `lines`/`sold`
 // CTEs (walk-in only, services excluded, newest-effective point rule, status
 // multiplier). A zero score is data to display, not a reason to hide the line.
 
 type LineRow = {
-  pcat: string;
+  pcat: string | null;
   doc_date: Date | string;
   doc_no: string | null;
   brand: string | null;
+  item_code: string | null;
   item_name: string | null;
   qty: string | number | null;
   price: string | number | null;
@@ -41,14 +49,22 @@ const number = (value: string | number | null | undefined) => Number(value ?? 0)
 
 // Same label mapping the client chips use, kept here so the bill audit reads
 // the same as the workbook's Bonus_Summary columns.
+/**
+ * Bucket for sales whose category carries no point group. Those are outside
+ * the scheme entirely (TV brackets, freezers, spare parts …) — they must not
+ * be filed under SDA, which is a real point group whose rules they would then
+ * appear to have failed rather than never been subject to.
+ */
+const OUT_OF_SCHEME = "—";
 const CATEGORY_LABELS: Record<string, string> = {
   AV: "AV",
   REF: "ຕູ້ເຢັນ",
   Washer: "ເຄື່ອງຊັກ",
   Air: "ແອ",
   SDA: "SDA",
+  [OUT_OF_SCHEME]: "ນອກເງື່ອນໄຂ",
 };
-const CATEGORY_ORDER = ["Air", "REF", "Washer", "AV", "SDA"];
+const CATEGORY_ORDER = ["Air", "REF", "Washer", "AV", "SDA", OUT_OF_SCHEME];
 
 export async function GET(request: NextRequest) {
   const employee = await getEmployeeFromRequest(request);
@@ -73,7 +89,7 @@ export async function GET(request: NextRequest) {
     const rows = await prisma.$queryRaw<LineRow[]>`
       WITH lines AS (
         SELECT
-          s.doc_date, s.doc_no, s.brand, s.item_name, s.qty, s.point_qty, s.price, s.pcat,
+          s.doc_date, s.doc_no, s.brand, s.item_code, s.item_name, s.qty, s.point_qty, s.price, s.pcat,
           ps.status_code AS status_code,
           ps.note AS status_note,
           s.sum_amount AS sales_amount,
@@ -104,16 +120,17 @@ export async function GET(request: NextRequest) {
             ${saleReportDate("sd")} AS doc_date, sd.doc_no, sd.qty,
             ${incentivePointQuantity(
               "sd",
-              Prisma.sql`COALESCE(cat.pointmap_category, 'SDA')`,
+              Prisma.sql`cat.pointmap_category`,
+              Prisma.sql`${incentiveMatePrice("sd")} IS NOT NULL`,
             )} AS point_qty,
             ${incentiveBandPrice(
               "sd",
-              Prisma.sql`COALESCE(cat.pointmap_category, 'SDA')`,
+              Prisma.sql`cat.pointmap_category`,
             )} AS combo_price,
             sd.sum_amount, sd.price, sd.item_name,
             sd.item_category, sd.design_name, sd.size_name, sd.item_code,
             UPPER(COALESCE(sd.item_brand, '')) AS brand,
-            COALESCE(cat.pointmap_category, 'SDA') AS pcat,
+            cat.pointmap_category AS pcat,
             COALESCE(cat.sda_subtype, 'OTH') AS sda_subtype
           FROM odg_sale_detail sd
           LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
@@ -147,7 +164,7 @@ export async function GET(request: NextRequest) {
       )
       SELECT
         l.pcat, to_char(l.doc_date::date, 'YYYY-MM-DD') AS doc_date,
-        l.doc_no, l.brand, l.item_name, l.qty, l.point_qty, l.price, l.sales_amount,
+        l.doc_no, l.brand, l.item_code, l.item_name, l.qty, l.point_qty, l.price, l.sales_amount,
         l.design_token, l.size_token, l.status_code, l.status_note,
         pm.points AS configured_points, sm.multiplier AS status_multiplier,
         COALESCE(pm.points, 0) * COALESCE(sm.multiplier, 1) AS unit_points,
@@ -159,9 +176,22 @@ export async function GET(request: NextRequest) {
         WHERE pm0.category_code = l.pcat
           AND pm0.brand_code = l.brand
           AND pm0.design_token = l.design_token
-          AND pm0.size_token = l.size_token
           AND l.doc_date::date BETWEEN pm0.effective_from AND pm0.effective_to
-        ORDER BY pm0.is_special DESC,
+          -- A "<=" band is a ceiling, not a bracket: the rule written at
+          -- <=5000 covers everything up to 5,000 that no tighter ceiling
+          -- already covers. The exact band still wins, so a deliberate 0
+          -- beats falling up; bands that are not ceilings never fall up.
+          AND (
+            pm0.size_token = l.size_token
+            OR (
+              l.size_token ~ '^<=' AND pm0.size_token ~ '^<='
+              AND (substring(pm0.size_token from '([0-9.]+)'))::numeric
+                  >= (substring(l.size_token from '([0-9.]+)'))::numeric
+            )
+          )
+        ORDER BY (pm0.size_token = l.size_token) DESC,
+                   CASE WHEN pm0.size_token ~ '^<=' THEN (substring(pm0.size_token from '([0-9.]+)'))::numeric ELSE 1e18 END ASC,
+                   pm0.is_special DESC,
                  (pm0.effective_to - pm0.effective_from) ASC,
                  pm0.updated_at DESC, pm0.id DESC
         LIMIT 1
@@ -176,12 +206,18 @@ export async function GET(request: NextRequest) {
       docDate: string; docNo: string | null; itemName: string | null;
       qty: number; price: number; unitPoints: number; points: number; salesAmount: number;
       noPointReason: string | null;
+      pointBasis: string | null;
     };
     type Brand = { brand: string; points: number; salesAmount: number; qty: number; items: Item[] };
     type Cat = { category: string; label: string; points: number; salesAmount: number; qty: number; brands: Map<string, Brand> };
     const byCat = new Map<string, Cat>();
-    for (const r of rows) {
-      const cat = r.pcat || "SDA";
+    // One row per SET: the outdoor half of a split air conditioner scores on
+    // its indoor partner, so it is folded into it rather than listed as a
+    // second line worth half the money and no points. See lib/incentive-sets.
+    for (const r of foldAirSets(rows, (partner, half) => {
+      partner.sales_amount = number(partner.sales_amount) + number(half.sales_amount);
+    })) {
+      const cat = r.pcat || OUT_OF_SCHEME;
       let c = byCat.get(cat);
       if (!c) {
         c = { category: cat, label: CATEGORY_LABELS[cat] ?? cat, points: 0, salesAmount: 0, qty: 0, brands: new Map() };
@@ -196,21 +232,33 @@ export async function GET(request: NextRequest) {
       const points = number(r.line_points);
       const sales = number(r.sales_amount);
       const qty = number(r.qty);
+      // The dimensions the point rule is looked up by. Note pcat is the
+      // point-map category (AV / REF / Air …), not the ERP category name the
+      // line is filed under — it is what the rules are written against.
+      const dimensions = [
+        r.pcat || OUT_OF_SCHEME,
+        (r.brand ?? "").trim() || "ບໍ່ມີຍີ່ຫໍ້",
+        (r.design_token ?? "").trim() || "—",
+        (r.size_token ?? "").trim() || "—",
+      ].join(" / ");
       let noPointReason: string | null = null;
+      // How the line arrived at its points. 9 a unit can be a 9-point rule or
+      // an 18-point rule halved by a product status, and the report cannot be
+      // checked without saying which.
+      let pointBasis: string | null = null;
       if (points === 0) {
-        if (r.pcat === "Air" && number(r.point_qty) === 0 && r.item_name?.match(/\[H\]\s*$/)) {
+        // Said first: no point group means the category is not part of the
+        // scheme at all, and "no matching rule" would read as a gap in the
+        // point map rather than a deliberate exclusion.
+        if (!r.pcat) {
+          noPointReason = "ໝວດສິນຄ້ານີ້ບໍ່ຢູ່ໃນເງື່ອນໄຂການໃຫ້ຄະແນນ";
+        } else if (r.pcat === "Air" && number(r.point_qty) === 0 && r.item_name?.match(/\[H\]\s*$/)) {
           noPointReason = "ສ່ວນ [H] ຂອງຊຸດ AIR — ຄະແນນຖືກນັບຢູ່ສ່ວນ [C]";
         } else if (r.status_multiplier != null && number(r.status_multiplier) === 0) {
           noPointReason = r.status_note?.trim()
             ? `ຕັ້ງຄ່າບໍ່ໃຫ້ໂບນັດ: ${r.status_note.trim()}`
             : `ສະຖານະ ${r.status_code ?? "no-bonus"} ບໍ່ໃຫ້ຄະແນນ`;
         } else if (r.configured_points == null) {
-          const dimensions = [
-            r.pcat || "SDA",
-            (r.brand ?? "").trim() || "ບໍ່ມີຍີ່ຫໍ້",
-            (r.design_token ?? "").trim() || "—",
-            (r.size_token ?? "").trim() || "—",
-          ].join(" / ");
           noPointReason = `ບໍ່ມີກົດຄະແນນທີ່ກົງ: ${dimensions}`;
         } else if (number(r.configured_points) === 0) {
           noPointReason = "ກົດ Incentive ຂອງເດືອນນີ້ກຳນົດເປັນ 0 ຄະແນນ";
@@ -219,6 +267,14 @@ export async function GET(request: NextRequest) {
         } else {
           noPointReason = "ຜົນຄຳນວນຄະແນນເປັນ 0";
         }
+      } else {
+        const base = number(r.configured_points);
+        const multiplier = r.status_multiplier == null ? 1 : number(r.status_multiplier);
+        const note = r.status_note?.trim();
+        pointBasis = multiplier === 1
+          ? `${dimensions} · ${base} ຄະແນນ/ໜ່ວຍ`
+          : `${dimensions} · ${base} × ຕົວຄູນ ${multiplier}${note ? ` (${note})` : ""}`
+            + ` = ${number(r.unit_points)}/ໜ່ວຍ`;
       }
       c.points += points; c.salesAmount += sales; c.qty += qty;
       b.points += points; b.salesAmount += sales; b.qty += qty;
@@ -232,6 +288,7 @@ export async function GET(request: NextRequest) {
         points,
         salesAmount: sales,
         noPointReason,
+        pointBasis,
       });
     }
 

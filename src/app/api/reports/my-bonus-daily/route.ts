@@ -3,7 +3,12 @@ import type { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
-import { incentiveBandPrice, incentivePointQuantity, incentiveWasherSizeBand } from "@/lib/incentive-scoring";
+import {
+  incentiveBandPrice,
+  incentiveMatePrice,
+  incentivePointQuantity,
+  incentiveWasherSizeBand,
+} from "@/lib/incentive-scoring";
 import { saleBasis } from "@/lib/sales-basis";
 import { saleReportDate, saleReportMonth } from "@/lib/sale-month";
 
@@ -42,28 +47,29 @@ export async function GET(request: NextRequest) {
           ${saleReportDate("sd")} AS doc_date, sd.qty,
           ${incentivePointQuantity(
             "sd",
-            Prisma.sql`COALESCE(cat.pointmap_category, 'SDA')`,
+            Prisma.sql`cat.pointmap_category`,
+            Prisma.sql`${incentiveMatePrice("sd")} IS NOT NULL`,
           )} AS point_qty,
           sd.price, sd.item_name, ps.status_code,
           UPPER(COALESCE(sd.item_brand, '')) AS brand,
-          COALESCE(cat.pointmap_category, 'SDA') AS pcat,
-          CASE COALESCE(cat.pointmap_category, 'SDA')
+          cat.pointmap_category AS pcat,
+          CASE cat.pointmap_category
             WHEN 'SDA' THEN COALESCE(cat.sda_subtype, 'OTH')
             WHEN 'Air' THEN CASE WHEN sd.item_name ~* 'invert' THEN 'Inverter' ELSE 'On-Off' END
             WHEN 'AV' THEN ''
             ELSE COALESCE(dtok.design_token, '')
           END AS design_token,
           CASE
-            WHEN COALESCE(cat.pointmap_category, 'SDA') = 'REF' THEN COALESCE(stok.size_token, '')
-            WHEN COALESCE(cat.pointmap_category, 'SDA') = 'Washer' THEN COALESCE(stok.size_token, ${incentiveWasherSizeBand("sd")})
-            WHEN COALESCE(cat.pointmap_category, 'SDA') = 'AV' AND sd.item_category = '008' THEN COALESCE(stok.size_token, '')
-            WHEN COALESCE(cat.pointmap_category, 'SDA') IN ('AV', 'Air') THEN
+            WHEN cat.pointmap_category = 'REF' THEN COALESCE(stok.size_token, '')
+            WHEN cat.pointmap_category = 'Washer' THEN COALESCE(stok.size_token, ${incentiveWasherSizeBand("sd")})
+            WHEN cat.pointmap_category = 'AV' AND sd.item_category = '008' THEN COALESCE(stok.size_token, '')
+            WHEN cat.pointmap_category IN ('AV', 'Air') THEN
               CASE
-                WHEN ${incentiveBandPrice("sd", Prisma.sql`COALESCE(cat.pointmap_category, 'SDA')`)} <= 10000 THEN '<=10000'
-                WHEN ${incentiveBandPrice("sd", Prisma.sql`COALESCE(cat.pointmap_category, 'SDA')`)} <= 20000 THEN '10001-20000'
+                WHEN ${incentiveBandPrice("sd", Prisma.sql`cat.pointmap_category`)} <= 10000 THEN '<=10000'
+                WHEN ${incentiveBandPrice("sd", Prisma.sql`cat.pointmap_category`)} <= 20000 THEN '10001-20000'
                 ELSE '>20000'
               END
-            WHEN COALESCE(cat.pointmap_category, 'SDA') = 'SDA' THEN
+            WHEN cat.pointmap_category = 'SDA' THEN
               CASE WHEN sd.price <= 500 THEN '<=500' WHEN sd.price <= 1000 THEN '<=1000' WHEN sd.price <= 2000 THEN '<=2000' WHEN sd.price <= 5000 THEN '<=5000' ELSE '>5000' END
             ELSE ''
           END AS size_token
@@ -93,9 +99,22 @@ export async function GET(request: NextRequest) {
           SELECT pm0.points
           FROM app_incentive_point_rule pm0
           WHERE pm0.category_code = l.pcat AND pm0.brand_code = l.brand
-            AND pm0.design_token = l.design_token AND pm0.size_token = l.size_token
-            AND l.doc_date::date BETWEEN pm0.effective_from AND pm0.effective_to
-          ORDER BY pm0.is_special DESC,
+            AND pm0.design_token = l.design_token AND l.doc_date::date BETWEEN pm0.effective_from AND pm0.effective_to
+            -- A "<=" band is a ceiling, not a bracket: the rule written at
+            -- <=5000 covers everything up to 5,000 that no tighter ceiling
+            -- already covers. The exact band still wins, so a deliberate 0
+            -- beats falling up; bands that are not ceilings never fall up.
+            AND (
+              pm0.size_token = l.size_token
+              OR (
+                l.size_token ~ '^<=' AND pm0.size_token ~ '^<='
+                AND (substring(pm0.size_token from '([0-9.]+)'))::numeric
+                    >= (substring(l.size_token from '([0-9.]+)'))::numeric
+              )
+            )
+          ORDER BY (pm0.size_token = l.size_token) DESC,
+                   CASE WHEN pm0.size_token ~ '^<=' THEN (substring(pm0.size_token from '([0-9.]+)'))::numeric ELSE 1e18 END ASC,
+                   pm0.is_special DESC,
                    (pm0.effective_to - pm0.effective_from) ASC,
                    pm0.updated_at DESC, pm0.id DESC
           LIMIT 1

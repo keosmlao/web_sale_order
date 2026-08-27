@@ -16,6 +16,7 @@ type Row = {
   targetPerPerson: number;
   achievementPct: number;
   netBonus: number;
+  unitReward: number;
   specialReward: number;
   commission: number;
   totalPay: number;

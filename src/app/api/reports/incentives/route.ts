@@ -4,10 +4,14 @@ import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { roleFromEmployee } from "@/lib/roles";
-import { incentiveBandPrice, incentivePointQuantity, incentiveWasherSizeBand } from "@/lib/incentive-scoring";
+import {
+  incentiveBandPrice,
+  incentiveMatePrice,
+  incentivePointQuantity,
+  incentiveWasherSizeBand,
+} from "@/lib/incentive-scoring";
 import { saleBasis } from "@/lib/sales-basis";
 import { saleReportDate, saleReportMonth } from "@/lib/sale-month";
-import { targetSalesScope } from "@/lib/sales-scope";
 
 type IncentiveRow = {
   employee_code: string;
@@ -21,17 +25,33 @@ type IncentiveRow = {
   target_per_person: string | number | null;
 };
 
+/**
+ * Front-store (ຂາຍໜ້າຮ້ານ) rewards, kept in step with the management app's
+ * retail-incentive report (odgmgt-next app/api/retail-incentive/route.js).
+ *
+ * The two read the same database and the same scheme tables, so a seller
+ * opening this page and a manager opening that one have to arrive at the same
+ * pay. The scoring query already agrees line for line; what used to differ was
+ * the assembly on top of it, so the rules below are deliberately spelled the
+ * same way as there:
+ *
+ *   pay per person = ໂບນັດຄະແນນ + ລາງວັນຕໍ່ຊຸດ + ຄ່າຄອມ
+ *
+ * ② ເງິນພິເສດ is NOT part of it. A department reward is one pot won by the
+ * whole storefront, not an amount each person earns — paying it per head
+ * multiplied a 1,000 reward into 15,000 and made this report read far above
+ * the payout the branch actually approves.
+ */
 type RewardRow = {
   reward_code: string;
   description: string | null;
   group_code: string;
-  brand_code: string | null;
   target_amount: string | number;
   reward_amount: string | number;
   split_by_share: boolean;
 };
 
-// Where a row's ເງິນພິເສດ came from. The figure is a sum of independent
+// Where a row's ລາງວັນຕໍ່ຊຸດ came from. The figure is a sum of independent
 // programmes, so without the parts a manager cannot check it or explain it to
 // the person being paid.
 type SpecialLine = {
@@ -40,14 +60,25 @@ type SpecialLine = {
   amount: number;
 };
 
+// One department programme (② ເງິນພິເສດ) and whether the storefront won it —
+// the same shape the management app returns, so both screens can show the
+// condition beside the result instead of a bare amount.
+type SpecialReward = {
+  code: string;
+  description: string;
+  groupCode: string;
+  targetAmount: number;
+  rewardAmount: number;
+  splitByShare: boolean;
+  achieved: boolean;
+  actualAmount: number;
+  achievementPct: number;
+};
+
 // Amounts inside the explanation strings — grouped, no decimals, so the note
 // reads like the workbook rather than like a database value.
 const fmt = (value: number) =>
   new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(value);
-
-type DepartmentTotalRow = {
-  sales_amount: string | number | null;
-};
 
 type ConfigRow = {
   currency_code: string;
@@ -135,7 +166,7 @@ export async function GET(request: NextRequest) {
     : current.month;
 
   try {
-    const [configRows, ruleRows, tierRows, rewardRows, roleCommRows, roleEmpRows, rows, unitRewardRows, departmentTotalRows] = await Promise.all([
+    const [configRows, ruleRows, tierRows, rewardRows, roleCommRows, roleEmpRows, rows, unitRewardRows] = await Promise.all([
       prisma.$queryRaw<ConfigRow[]>`
         SELECT currency_code, low_max_pct, standard_max_pct,
                low_multiplier, standard_multiplier, high_multiplier, commission_base
@@ -156,13 +187,17 @@ export async function GET(request: NextRequest) {
         FROM app_incentive_commission_tier
         ORDER BY position_code, from_pct
       `.catch(() => []),
+      // Department rewards in force for the month. Mid-month rather than any
+      // overlap with it, exactly as the management report asks: a reward
+      // written for one month is what that month pays, and an overlap test lets
+      // a programme that ended on the 2nd, or starts on the 30th, pay a whole
+      // month's pot.
       prisma.$queryRaw<RewardRow[]>`
-        SELECT reward_code, description, group_code, brand_code,
+        SELECT reward_code, description, group_code,
                target_amount, reward_amount, split_by_share
         FROM app_incentive_special_reward
         WHERE is_active
-          AND effective_from < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
-          AND effective_to >= make_date(${year}, ${month}, 1)
+          AND make_date(${year}, ${month}, 15) BETWEEN effective_from AND effective_to
       `,
       // Manager / unit-head commission lines (workbook: per product group,
       // paid on the TEAM's achievement of that group). Best-effort — table
@@ -188,7 +223,7 @@ export async function GET(request: NextRequest) {
             s.qty,
             s.sales_amount,
             s.brand,
-            ${incentivePointQuantity("s", Prisma.sql`s.pcat`)} AS point_qty,
+            ${incentivePointQuantity("s", Prisma.sql`s.pcat`, Prisma.sql`s.has_mate`)} AS point_qty,
             ps.status_code AS status_code,
             -- Design dimension (workbook Bonus_Maps). SDA=subtype, Air=inverter/on-off,
             -- REF=door type and Washer=load type both from ic_design (Top/Front/Twin Tub);
@@ -228,13 +263,17 @@ export async function GET(request: NextRequest) {
               ${saleReportDate("sd")} AS doc_date, sd.doc_no, sd.salename, sd.qty, sd.sum_amount AS sales_amount, sd.price, sd.item_name,
               sd.item_category, sd.design_name, sd.size_name, sd.item_code,
               UPPER(COALESCE(sd.item_brand, '')) AS brand,
-              COALESCE(cat.pointmap_category, 'SDA') AS pcat,
+              cat.pointmap_category AS pcat,
               COALESCE(cat.sda_subtype, 'OTH') AS sda_subtype,
               COALESCE(cat.group_code, 'CE_SDA') AS group_code,
               ${incentiveBandPrice(
                 "sd",
-                Prisma.sql`COALESCE(cat.pointmap_category, 'SDA')`,
-              )} AS combo_price
+                Prisma.sql`cat.pointmap_category`,
+              )} AS combo_price,
+              -- Whether this component found its other half at all. Resolved
+              -- here, where the columns the match correlates on are still in
+              -- scope; the layer above only sees the answer.
+              ${incentiveMatePrice("sd")} IS NOT NULL AS has_mate
             FROM odg_sale_detail sd
             LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
             WHERE ${saleBasis("sd")}
@@ -278,9 +317,22 @@ export async function GET(request: NextRequest) {
             WHERE pm0.category_code = l.pcat
               AND pm0.brand_code = l.brand
               AND pm0.design_token = l.design_token
-              AND pm0.size_token = l.size_token
               AND l.doc_date::date BETWEEN pm0.effective_from AND pm0.effective_to
-            ORDER BY pm0.is_special DESC,
+              -- A "<=" band is a ceiling, not a bracket: the rule written at
+              -- <=5000 covers everything up to 5,000 that no tighter ceiling
+              -- already covers. The exact band still wins, so a deliberate 0
+              -- beats falling up; bands that are not ceilings never fall up.
+              AND (
+                pm0.size_token = l.size_token
+                OR (
+                  l.size_token ~ '^<=' AND pm0.size_token ~ '^<='
+                  AND (substring(pm0.size_token from '([0-9.]+)'))::numeric
+                      >= (substring(l.size_token from '([0-9.]+)'))::numeric
+                )
+              )
+            ORDER BY (pm0.size_token = l.size_token) DESC,
+                   CASE WHEN pm0.size_token ~ '^<=' THEN (substring(pm0.size_token from '([0-9.]+)'))::numeric ELSE 1e18 END ASC,
+                   pm0.is_special DESC,
                      (pm0.effective_to - pm0.effective_from) ASC,
                      pm0.updated_at DESC, pm0.id DESC
             LIMIT 1
@@ -352,6 +404,12 @@ export async function GET(request: NextRequest) {
         FROM roster
         LEFT JOIN by_emp ON by_emp.employee_code = roster.employee_code
         LEFT JOIN odg_employee emp ON emp.employee_code = roster.employee_code
+        -- A target of zero is not a target: the scheme pays against one, and a
+        -- person carrying none has no achievement to be banded or paid on. The
+        -- management report drops these rows, so their sales must not reach the
+        -- department total here either, or the two disagree on whether the
+        -- storefront won its monthly reward.
+        WHERE COALESCE(roster.target, 0) > 0
         ORDER BY sales_amount DESC
       `,
       // Unit-count spiffs (workbook ④/⑤): active rewards with each roster
@@ -420,23 +478,6 @@ export async function GET(request: NextRequest) {
           AND ur.effective_from < make_date(${year}, ${month}, 1) + INTERVAL '1 month'
           AND ur.effective_to >= make_date(${year}, ${month}, 1)
       `.catch(() => []),
-      // The whole-department reward is measured on every eligible front-store
-      // sale, including salespeople who are not on this month's payout roster.
-      // The roster still controls who receives the flat per-person reward.
-      //
-      // Scoped exactly like the ລາງວັນພິເສດ card (@/lib/sales-scope): the
-      // department target covers storefront product groups only, so counting
-      // ອາໄຫຼ່ and ONLINE here paid the reward out on ~2.2M of sales the target
-      // never included.
-      prisma.$queryRaw<DepartmentTotalRow[]>`
-        SELECT COALESCE(SUM(sd.sum_amount), 0) AS sales_amount
-        FROM odg_sale_detail sd
-        LEFT JOIN app_incentive_category cat ON cat.category_code = sd.item_category
-        WHERE ${saleBasis("sd")}
-          ${targetSalesScope("sd")}
-          AND ${saleReportMonth("sd", year, month)}
-          AND COALESCE(cat.is_active, true)
-      `,
     ]);
 
     const config = configRows[0] ?? {
@@ -489,7 +530,11 @@ export async function GET(request: NextRequest) {
           ? number(config.standard_multiplier)
           : number(config.high_multiplier);
       const normalBonus = number(row.normal_bonus);
-      const netBonus = normalBonus * multiplier;
+      // A month can end on negative points — a return scored against a bill
+      // from an earlier month leaves a lone credit note behind. That is a
+      // correction to a bonus already paid, not money owed back out of this
+      // one, so the floor is zero, as in the management report.
+      const netBonus = Math.max(0, normalBonus) * multiplier;
       // Sellers are position 13.
       const commissionRate = rateForPosition("13", achievementPct);
       const sellerBase = roleBase.get(`13|${row.group_code}`) ?? commissionBase;
@@ -509,6 +554,10 @@ export async function GET(request: NextRequest) {
         normalBonus,
         multiplier,
         netBonus,
+        // Per-set spiffs (④/⑤) are earned by this person and are part of their
+        // pay; ② ເງິນພິເສດ is the storefront's pot and is only their share of
+        // it, shown so the card can explain the department card's figure.
+        unitReward: 0,
         specialReward: 0,
 
         specialLines: [] as SpecialLine[],
@@ -523,46 +572,48 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    // Special department rewards (workbook "② ເງິນພິເສດ"). Each active reward pays out only if
-    // the department's qualifying walk-in total reaches its target. brand_code-scoped rewards
-    // (e.g. HISENSE) qualify on that brand's sales; split_by_share divides the pot by each
-    // person's share of those sales, otherwise it is a flat amount per person in the group.
-    for (const reward of rewardRows) {
-      const group = reward.group_code;
-      const inGroup = group === "ALL"
-        ? mapped
-        : mapped.filter((row) => row.groupCode === group);
-      if (inGroup.length === 0) continue;
-      const qualifyingOf = (row: (typeof mapped)[number]) =>
-        reward.brand_code === "HISENSE" ? row.hisenseSales : row.salesAmount;
-      const deptTotal = group === "ALL" && !reward.brand_code
-        ? number(departmentTotalRows[0]?.sales_amount)
-        : inGroup.reduce((sum, row) => sum + qualifyingOf(row), 0);
-      if (deptTotal < number(reward.target_amount)) continue;
+    // ② ເງິນພິເສດ — department rewards. One pot per programme, won when the
+    // storefront's own monthly total reaches the target, and measured on the
+    // same total the roster is banded against: the sales of the people who
+    // carry a target. A reward is therefore a department figure, not a line in
+    // anyone's pay, and it stays out of totalPay below.
+    //
+    // split_by_share is the one case a person has a figure of their own: the
+    // pot is divided by each seller's share of that total, so the card can say
+    // what this month's share came to.
+    const departmentSales = mapped.reduce((sum, row) => sum + row.salesAmount, 0);
+    const specialRewards: SpecialReward[] = rewardRows.map((reward) => {
+      const targetAmount = number(reward.target_amount);
       const rewardAmount = number(reward.reward_amount);
-      // "ALL" with no brand is the whole department — saying so adds nothing,
-      // so only a narrower scope earns a prefix.
-      const scope = reward.brand_code
-        ? `${reward.brand_code} · `
-        : reward.group_code === "ALL"
-          ? ""
-          : `${reward.group_code} · `;
-      const hit = `${scope}ບັນລຸ ${fmt(deptTotal)}/${fmt(number(reward.target_amount))}`;
-      for (const row of inGroup) {
-        const pay = reward.split_by_share
-          ? (deptTotal > 0 ? rewardAmount * (qualifyingOf(row) / deptTotal) : 0)
-          : rewardAmount;
-        row.specialReward += pay;
-        row.totalPay += pay;
-        row.specialLines.push({
-          label: reward.description?.trim() || reward.reward_code,
-          note: reward.split_by_share
-            ? `${hit} → ແບ່ງ ${fmt(rewardAmount)} ຕາມ % ຍອດ`
-            : `${hit} → ${fmt(rewardAmount)}/ຄົນ`,
-          amount: pay,
-        });
+      const achieved = targetAmount > 0 && departmentSales >= targetAmount;
+      if (achieved && reward.split_by_share && departmentSales > 0) {
+        const hit = `ບັນລຸ ${fmt(departmentSales)}/${fmt(targetAmount)}`;
+        for (const row of mapped) {
+          const pay = rewardAmount * (row.salesAmount / departmentSales);
+          row.specialReward += pay;
+          row.specialLines.push({
+            label: reward.description?.trim() || reward.reward_code,
+            note: `${hit} → ແບ່ງ ${fmt(rewardAmount)} ຕາມ % ຍອດ`,
+            amount: pay,
+          });
+        }
       }
-    }
+      return {
+        code: reward.reward_code,
+        description: reward.description?.trim() || reward.reward_code,
+        groupCode: reward.group_code,
+        targetAmount,
+        rewardAmount,
+        splitByShare: reward.split_by_share,
+        achieved,
+        actualAmount: departmentSales,
+        achievementPct: targetAmount > 0 ? departmentSales / targetAmount : 0,
+      };
+    });
+    const departmentSpecialTotal = specialRewards.reduce(
+      (sum, reward) => sum + (reward.achieved ? reward.rewardAmount : 0),
+      0,
+    );
 
     // Unit-count spiffs (workbook ④/⑤): the person's OWN monthly set count
     // picks the tier — reach high_min_qty and EVERY set pays high_reward,
@@ -581,7 +632,7 @@ export async function GET(request: NextRequest) {
       if (pay <= 0) continue;
       const row = mapped.find((r) => r.employeeCode === line.emp_code);
       if (!row) continue;
-      row.specialReward += pay;
+      row.unitReward += pay;
       row.totalPay += pay;
       const tierMin = highMin > 0 && units >= highMin ? highMin : lowMin;
       const tierRate = highMin > 0 && units >= highMin
@@ -656,6 +707,7 @@ export async function GET(request: NextRequest) {
           normalBonus: 0,
           multiplier: 1,
           netBonus: 0,
+          unitReward: 0,
           specialReward: 0,
 
           specialLines: [] as SpecialLine[],
@@ -700,6 +752,7 @@ export async function GET(request: NextRequest) {
           normalBonus: 0,
           multiplier: number(config.standard_multiplier),
           netBonus: 0,
+          unitReward: 0,
           specialReward: 0,
 
           specialLines: [] as SpecialLine[],
@@ -734,6 +787,9 @@ export async function GET(request: NextRequest) {
       ),
       commissionBase,
       rows: visible,
+      // The department programmes and whether the storefront won them, so the
+      // report can show the pot beside the pay it is not part of.
+      specialRewards,
       // Boss rows (pos 11/12) re-display the team sales as their commission basis,
       // so exclude them here to avoid double-counting the sales-column total.
       totalSales: visible.reduce(
@@ -741,7 +797,13 @@ export async function GET(request: NextRequest) {
         0,
       ),
       totalBonus: visible.reduce((sum, row) => sum + row.netBonus, 0),
-      totalSpecial: visible.reduce((sum, row) => sum + row.specialReward, 0),
+      totalUnitReward: visible.reduce((sum, row) => sum + row.unitReward, 0),
+      // ② is the whole storefront's pot for a manager reading the report, and
+      // one person's share of it on their own card — a seller shown the
+      // department figure would read it as money coming to them.
+      totalSpecial: isManager && !selfOnly
+        ? departmentSpecialTotal
+        : visible.reduce((sum, row) => sum + row.specialReward, 0),
       // (specialLines rides along on each row — see SpecialLine)
       totalCommission: visible.reduce((sum, row) => sum + row.commission, 0),
       totalPay: visible.reduce((sum, row) => sum + row.totalPay, 0),

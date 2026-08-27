@@ -30,6 +30,11 @@ type IncentiveRow = {
   normalBonus: number;
   multiplier: number;
   netBonus: number;
+  // ④/⑤ per-set spiffs — part of this person's pay.
+  unitReward: number;
+  // This person's share of a split ② department pot. Shown for explanation
+  // only: a department reward is won by the storefront, not earned by a row,
+  // so it is deliberately absent from totalPay.
   specialReward: number;
   specialLines?: SpecialLine[];
   commissionRate: number;
@@ -63,6 +68,8 @@ type BreakdownItem = {
   points: number;
   salesAmount: number;
   noPointReason: string | null;
+  /** The rule and multiplier behind the points; null when it scored nothing. */
+  pointBasis: string | null;
 };
 type BreakdownBrand = {
   brand: string;
@@ -127,11 +134,28 @@ type Report = {
   tiers?: Tiers;
   commissionBase?: number;
   rows: IncentiveRow[];
+  specialRewards?: SpecialRewardProgramme[];
   totalSales: number;
   totalBonus: number;
+  totalUnitReward?: number;
   totalSpecial?: number;
   totalCommission?: number;
   totalPay?: number;
+};
+
+// A ② department programme and whether the storefront won it. The pot is a
+// department figure — it is reported beside the table rather than inside it,
+// because no row is paid out of it.
+type SpecialRewardProgramme = {
+  code: string;
+  description: string;
+  groupCode: string;
+  targetAmount: number;
+  rewardAmount: number;
+  splitByShare: boolean;
+  achieved: boolean;
+  actualAmount: number;
+  achievementPct: number;
 };
 
 const pct = (value: number) => `${Math.round(value * 100)}%`;
@@ -220,11 +244,11 @@ export default function IncentivesClient() {
         (a, r) => ({
           sales: a.sales + r.salesAmount,
           bonus: a.bonus + r.netBonus,
-          special: a.special + r.specialReward,
+          unit: a.unit + r.unitReward,
           commission: a.commission + r.commission,
           pay: a.pay + r.totalPay,
         }),
-        { sales: 0, bonus: 0, special: 0, commission: 0, pay: 0 },
+        { sales: 0, bonus: 0, unit: 0, commission: 0, pay: 0 },
       ),
     [sellers],
   );
@@ -272,7 +296,9 @@ export default function IncentivesClient() {
   }, [period]);
   const currency = report?.currencyCode ?? "THB";
   const tiers = report?.tiers;
-  const hasSpecial = (report?.totalSpecial ?? 0) > 0;
+  // The ④/⑤ column earns its width only when someone actually won a spiff.
+  const hasSpecial = (report?.totalUnitReward ?? 0) > 0;
+  const specialRewards = report?.specialRewards ?? [];
   const isSelf = report?.scope === "self";
 
   return (
@@ -411,7 +437,7 @@ export default function IncentivesClient() {
                 <th className="px-3 py-3 text-right">ຄະແນນສະສົມ</th>
                 <th className="px-3 py-3 text-right">ຕົວຄູນ</th>
                 <th className="px-3 py-3 text-right">① ໂບນັດ</th>
-                {hasSpecial ? <th className="px-3 py-3 text-right">② ເງິນພິເສດ</th> : null}
+                {hasSpecial ? <th className="px-3 py-3 text-right">④ ລາງວັນຕໍ່ຊຸດ</th> : null}
                 <th className="px-3 py-3 text-right">③ ຄ່າຄອມ</th>
                 <th className="px-4 py-3 text-right">ລວມລາຍຮັບ</th>
               </tr>
@@ -456,7 +482,7 @@ export default function IncentivesClient() {
                   <td className="px-3 py-3 text-right font-mono">{numberFmt.format(row.bonusPoints)}</td>
                   <td className="px-3 py-3 text-right font-mono font-bold">×{row.multiplier.toFixed(1)}</td>
                   <td className="px-3 py-3 text-right font-mono font-bold text-odoo-text-strong">{numberFmt.format(row.netBonus)}</td>
-                  {hasSpecial ? <td className="px-3 py-3 text-right font-mono">{row.specialReward > 0 ? numberFmt.format(row.specialReward) : "—"}</td> : null}
+                  {hasSpecial ? <td className="px-3 py-3 text-right font-mono">{row.unitReward > 0 ? numberFmt.format(row.unitReward) : "—"}</td> : null}
                   <td className="px-3 py-3 text-right font-mono">{row.commission > 0 ? numberFmt.format(row.commission) : "—"}</td>
                   <td className="px-4 py-3 text-right font-mono font-black text-emerald-700">{numberFmt.format(row.totalPay)} {currency}</td>
                 </tr>
@@ -468,7 +494,7 @@ export default function IncentivesClient() {
                         loading={bdLoading.has(row.employeeCode)}
                         currency={currency}
                         specialLines={row.specialLines}
-                        specialTotal={row.specialReward}
+                        specialTotal={row.unitReward + row.specialReward}
                       />
                     </td>
                   </tr>
@@ -478,11 +504,65 @@ export default function IncentivesClient() {
               })}
             </tbody>
             {!loading && sellers.length > 0 ? (
-              <tfoot><tr className="border-t-2 border-odoo-border bg-odoo-surface-muted font-bold"><td colSpan={4} className="px-4 py-3">ລວມ</td><td className="px-3 py-3 text-right font-mono">{numberFmt.format(sellerTotals.sales)}</td><td colSpan={4} /><td className="px-3 py-3 text-right font-mono text-odoo-text-strong">{numberFmt.format(sellerTotals.bonus)}</td>{hasSpecial ? <td className="px-3 py-3 text-right font-mono">{numberFmt.format(sellerTotals.special)}</td> : null}<td className="px-3 py-3 text-right font-mono">{numberFmt.format(sellerTotals.commission)}</td><td className="px-4 py-3 text-right font-mono text-emerald-700">{numberFmt.format(sellerTotals.pay)} {currency}</td></tr></tfoot>
+              <tfoot><tr className="border-t-2 border-odoo-border bg-odoo-surface-muted font-bold"><td colSpan={4} className="px-4 py-3">ລວມ</td><td className="px-3 py-3 text-right font-mono">{numberFmt.format(sellerTotals.sales)}</td><td colSpan={4} /><td className="px-3 py-3 text-right font-mono text-odoo-text-strong">{numberFmt.format(sellerTotals.bonus)}</td>{hasSpecial ? <td className="px-3 py-3 text-right font-mono">{numberFmt.format(sellerTotals.unit)}</td> : null}<td className="px-3 py-3 text-right font-mono">{numberFmt.format(sellerTotals.commission)}</td><td className="px-4 py-3 text-right font-mono text-emerald-700">{numberFmt.format(sellerTotals.pay)} {currency}</td></tr></tfoot>
             ) : null}
           </table>
         </div>
       </section>
+
+      {/* ② ເງິນພິເສດ — the storefront's own pots, deliberately outside the
+          table above: they are won by the whole department against its monthly
+          total, not earned by a row, so adding them to anyone's pay would read
+          as money each person receives. */}
+      {specialRewards.length > 0 ? (
+        <section className="odoo-card mt-4 p-4">
+          <h3 className="card-title">② ເງິນພິເສດ (ລາງວັນທັງພະແນກ)</h3>
+          <p className="mt-1 text-[11px] text-odoo-text-muted">
+            ວັດຈາກຍອດຂາຍລວມຂອງຄົນທີ່ມີເປົ້າ — ບໍ່ໄດ້ລວມຢູ່ໃນ “ລວມລາຍຮັບ” ຂອງແຕ່ລະຄົນ
+          </p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="odoo-table min-w-[720px]">
+              <thead>
+                <tr>
+                  <th className="px-4 py-2">ລາງວັນ</th>
+                  <th className="px-3 py-2">ກຸ່ມ</th>
+                  <th className="px-3 py-2 text-right">ເປົ້າ</th>
+                  <th className="px-3 py-2 text-right">ຍອດຈິງ</th>
+                  <th className="px-3 py-2 text-right">ບັນລຸ</th>
+                  <th className="px-4 py-2 text-right">ເງິນລາງວັນ</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-odoo-border">
+                {specialRewards.map((reward) => (
+                  <tr key={reward.code}>
+                    <td className="px-4 py-2 font-bold text-odoo-text-strong">
+                      {reward.description}
+                      {reward.splitByShare ? (
+                        <span className="ml-2 text-[11px] font-semibold text-odoo-text-muted">ແບ່ງຕາມ % ຍອດ</span>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-2">{reward.groupCode}</td>
+                    <td className="px-3 py-2 text-right font-mono">{numberFmt.format(reward.targetAmount)}</td>
+                    <td className="px-3 py-2 text-right font-mono">{numberFmt.format(reward.actualAmount)}</td>
+                    <td className="px-3 py-2 text-right">
+                      <span
+                        className={`rounded-full px-2 py-1 text-[11px] font-bold ${
+                          reward.achieved ? "bg-emerald-100 text-emerald-700" : "bg-odoo-surface-muted text-odoo-text-muted"
+                        }`}
+                      >
+                        {pct(reward.achievementPct)}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2 text-right font-mono font-black text-amber-600">
+                      {reward.achieved ? `${numberFmt.format(reward.rewardAmount)} ${currency}` : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      ) : null}
       </>
       )}
     </div>
@@ -550,6 +630,9 @@ function BreakdownTree({
               <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${CAT_CHIP[cat.category] ?? "bg-slate-100 text-slate-700"}`}>
                 {cat.label}
               </span>
+              {/* The point map is keyed by this code, not by the ERP category
+                  name, so show it — it is what to check when a line scores 0. */}
+              <span className="font-mono text-odoo-text-muted">{cat.category}</span>
               <span className="font-mono text-odoo-text-muted">
                 {cat.brands.length} ຍີ່ຫໍ້ · {numberFmt.format(cat.qty)} ໜ່ວຍ
               </span>
@@ -592,7 +675,7 @@ function BreakdownTree({
                                   <th className="px-2 py-1.5 text-right font-semibold">ຈຳນວນ</th>
                                   <th className="px-2 py-1.5 text-right font-semibold">ຄະແນນ/ໜ່ວຍ</th>
                                   <th className="px-2 py-1.5 text-right font-semibold">ຄະແນນ</th>
-                                  <th className="px-2 py-1.5 text-left font-semibold">ເຫດຜົນບໍ່ໄດ້ຄະແນນ</th>
+                                  <th className="px-2 py-1.5 text-left font-semibold">ເງື່ອນໄຂຄະແນນ</th>
                                   <th className="px-2 py-1.5 text-right font-semibold">ຍອດຂາຍ</th>
                                 </tr>
                               </thead>
@@ -608,8 +691,8 @@ function BreakdownTree({
                                     <td className={`px-2 py-1.5 text-right font-mono font-bold ${item.points === 0 ? "text-slate-400" : "text-odoo-primary"}`}>
                                       {numberFmt.format(item.points)}
                                     </td>
-                                    <td className={`max-w-[360px] px-2 py-1.5 ${item.noPointReason ? "text-amber-700" : "text-slate-300"}`}>
-                                      {item.noPointReason ?? "—"}
+                                    <td className={`max-w-[360px] px-2 py-1.5 ${item.noPointReason ? "text-amber-700" : "text-odoo-text-muted"}`}>
+                                      {item.noPointReason ?? item.pointBasis ?? "—"}
                                     </td>
                                     <td className="px-2 py-1.5 text-right font-mono">{numberFmt.format(item.salesAmount)}</td>
                                   </tr>
@@ -633,18 +716,19 @@ function BreakdownTree({
         <span className="text-odoo-text-muted">· × 10 {currency}/ຄະແນນ × ຕົວຄູນ = ໂບນັດ</span>
       </div>
 
-      {/* ② ເງິນພິເສດ is a sum of separate programmes, so name what produced it —
-          one compact right-aligned line each, matching the points line above. */}
+      {/* Rewards outside the points are a sum of separate programmes, so name
+          what produced each one — one compact right-aligned line each,
+          matching the points line above. */}
       {specialLines.map((line, i) => (
         <div key={`${line.label}-${i}`} className="flex items-center justify-end gap-2 pt-1 text-sm">
-          <span className="text-odoo-text-muted">ເງິນພິເສດ:</span>
+          <span className="text-odoo-text-muted">ລາງວັນ:</span>
           <span className="font-mono font-black text-amber-600">{numberFmt.format(line.amount)}</span>
           <span className="text-odoo-text-muted">· {line.note}</span>
         </div>
       ))}
       {specialLines.length > 1 ? (
         <div className="flex items-center justify-end gap-2 pt-1 text-sm">
-          <span className="text-odoo-text-muted">ລວມເງິນພິເສດ:</span>
+          <span className="text-odoo-text-muted">ລວມລາງວັນ:</span>
           <span className="font-mono font-black text-amber-600">
             {numberFmt.format(specialTotal)} {currency}
           </span>
@@ -723,7 +807,7 @@ function SelfHero({ row, loading, currency, tiers }: { row: IncentiveRow | null;
       </div>
       <div className="odoo-card grid grid-cols-2 gap-4 p-6 lg:col-span-2 sm:grid-cols-3">
         <Metric label="① ໂບນັດ" value={`${numberFmt.format(row.netBonus)} ${currency}`} />
-        {row.specialReward > 0 ? <Metric label="② ເງິນພິເສດ" value={`${numberFmt.format(row.specialReward)} ${currency}`} /> : null}
+        {row.unitReward > 0 ? <Metric label="④ ລາງວັນຕໍ່ຊຸດ" value={`${numberFmt.format(row.unitReward)} ${currency}`} /> : null}
         <Metric label="③ ຄ່າຄອມ" value={row.commission > 0 ? `${numberFmt.format(row.commission)} ${currency}` : "—"} />
         <Metric label="ຍອດຂາຍ" value={`${numberFmt.format(row.salesAmount)}`} />
         <Metric label="ເປົ້າ/ຄົນ" value={`${numberFmt.format(row.targetPerPerson)}`} />

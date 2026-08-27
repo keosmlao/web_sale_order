@@ -13,7 +13,9 @@ type CommissionLine = {
 type Row = {
   bonusPoints: number;
   netBonus: number;
-  specialReward: number;
+  // Per-set spiffs (④/⑤). ② ເງິນພິເສດ is the storefront's own pot and is shown
+  // by SpecialRewardCard, not here — it is not part of what this person is paid.
+  unitReward: number;
   commission: number;
   commissionRate: number;
   totalPay: number;
@@ -144,7 +146,7 @@ export default function MyBonusCard() {
     day: "2-digit",
   }).format(new Date());
   const todayPoints = daily.find((entry) => entry.day === todayIso)?.points ?? 0;
-  const bonusTotal = row.netBonus + row.specialReward;
+  const bonusTotal = row.netBonus + row.unitReward;
   // Manager / unit head: commission-only (per-group team lines) — every
   // bonus-points section is hidden for them.
   const isRoleComm = !!(row.commissionLines && row.commissionLines.length > 0);
@@ -570,9 +572,9 @@ export default function MyBonusCard() {
                 <span className="font-mono text-3xl font-black leading-none">{fmt.format(bonusTotal)}</span>
                 <span className="text-xs font-black text-emerald-100">{currencyLabel}</span>
               </div>
-              {row.specialReward > 0 ? (
+              {row.unitReward > 0 ? (
                 <div className="mt-1 text-[11px] font-semibold text-emerald-100/90">
-                  +ພິເສດ {fmt.format(row.specialReward)}
+                  +ລາງວັນຕໍ່ຊຸດ {fmt.format(row.unitReward)}
                 </div>
               ) : null}
             </div>
