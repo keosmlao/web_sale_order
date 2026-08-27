@@ -2,6 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { counterSide, homePathForSide } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import {
   clearSessionCookie,
@@ -22,10 +23,10 @@ async function postLoginPath(employeeCode: string): Promise<string> {
       AND is_active = true
     LIMIT 1
   `;
-  const explicitRole = rows[0]?.app_role?.trim().toLowerCase();
-  return explicitRole === "pc" || explicitRole === "salesperson"
-    ? "/orders/new"
-    : "/";
+  // A 'pc' works the register, not the POS — sending both sides to
+  // /orders/new landed the register user on a screen they are not allowed
+  // to open, and the layout guard then had to bounce them back out.
+  return homePathForSide(counterSide({ appRole: rows[0]?.app_role ?? null }));
 }
 
 export async function loginAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
