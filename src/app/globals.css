@@ -7847,10 +7847,10 @@ a {
 .pos-ctile {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: 9px;
   min-height: 178px;
-  padding: 13px 14px 12px;
+  padding: 10px 10px 12px;
   border: 1.5px solid #e6ebf2;
   border-radius: 16px;
   background: #ffffff;
@@ -9381,4 +9381,75 @@ a {
 /* The bottom nav reserved space for itself on every page. */
 [data-embed="1"] main {
   padding-bottom: 0 !important;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Catalogue tile photo
+   Sixty fridges have near-identical names; the picture is what tells
+   them apart at a glance. Photos come from the storefront's own online
+   shop (odg_ecom), served by /api/products/image — 613 of the 701 items
+   warehouse 1101 stocks have one. The rest keep a plain placeholder
+   rather than a broken-image box.
+   ═══════════════════════════════════════════════════════════════════ */
+.pos-ctile-photo {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 11px;
+  background: #f4f7fa;
+}
+.pos-ctile-photo img {
+  width: 100%;
+  height: 100%;
+  /* contain, not cover: a fridge with its top cropped off is harder to
+     recognise than one with white space beside it. */
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+.pos-ctile-photo-none {
+  color: #b6c2d1;
+}
+
+/* The in-cart count moves onto the photo, so the footer is always
+   price + stock and the row below never reflows as items are added. */
+.pos-ctile-photo .pos-ctile-qty {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 22px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--odoo-primary);
+  color: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1.45;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.25);
+}
+
+.pos-ctile-name {
+  /* Two lines, then ellipsis — with a photo above it the name is
+     confirming a choice the picture already made, not carrying it. */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Push the price/stock row to the bottom whatever the name's length, so
+   prices line up across the grid instead of stepping up and down. */
+.pos-ctile-foot {
+  margin-top: auto;
+}
+
+@media (min-width: 1180px) {
+  .pos-shell2.pos-has-catalog .pos-ctile {
+    min-height: 232px;
+  }
 }

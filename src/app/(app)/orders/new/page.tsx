@@ -52,6 +52,9 @@ type Product = {
   stock: number;
   minimumStock?: number;
   hasSet?: boolean;
+  // Set when the storefront's online shop has a photo for this item. The
+  // tile only requests one when there is one — see /api/products/image.
+  hasImage?: boolean;
 };
 
 type LocationBalance = {
@@ -2301,27 +2304,49 @@ function PosScreen({
                       (out ? " pos-ctile-out" : "")
                     }
                   >
+                    {/* The photo is the fastest way to find a fridge among
+                        sixty fridges — a name truncated to two lines is
+                        not. Items without one keep a plain tile rather
+                        than a broken-image box. */}
+                    <span className="pos-ctile-photo">
+                      {p.hasImage ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={`/api/products/image/${encodeURIComponent(p.code)}`}
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <span className="pos-ctile-photo-none" aria-hidden>
+                          <svg viewBox="0 0 24 24" width="26" height="26" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="3" y="3" width="18" height="18" rx="2" />
+                            <circle cx="8.5" cy="8.5" r="1.5" />
+                            <path d="m21 15-5-5L5 21" />
+                          </svg>
+                        </span>
+                      )}
+                      {inCartQty > 0 ? (
+                        <span className="pos-ctile-qty">
+                          {moneyFmt.format(inCartQty)}
+                        </span>
+                      ) : null}
+                    </span>
                     <span className="pos-ctile-name">{p.name}</span>
                     <span className="pos-ctile-foot">
                       <span className="pos-ctile-price">
                         {moneyFmt.format(p.price)}
                         <em>ກີບ</em>
                       </span>
-                      {inCartQty > 0 ? (
-                        <span className="pos-ctile-qty">
-                          {moneyFmt.format(inCartQty)}
-                        </span>
-                      ) : (
-                        <span
-                          className={
-                            "pos-ctile-stock" +
-                            (out ? " is-none" : low ? " is-low" : " is-ok")
-                          }
-                        >
-                          <i aria-hidden />
-                          {isSet ? "ຊຸດ" : out ? "ໝົດ" : moneyFmt.format(p.stock)}
-                        </span>
-                      )}
+                      <span
+                        className={
+                          "pos-ctile-stock" +
+                          (out ? " is-none" : low ? " is-low" : " is-ok")
+                        }
+                      >
+                        <i aria-hidden />
+                        {isSet ? "ຊຸດ" : out ? "ໝົດ" : moneyFmt.format(p.stock)}
+                      </span>
                     </span>
                   </button>
                 );

@@ -17,6 +17,7 @@ type ProductRow = {
   minimum_stock: string | number | null;
   sale_price_kip: string | number | null;
   has_set: boolean | null;
+  has_image: boolean | null;
 };
 
 function isAirProduct(row: Pick<ProductRow, "item_category" | "group_main">) {
@@ -52,6 +53,10 @@ function toProduct(row: ProductRow) {
     groupMain: row.group_main,
     groupMainName: row.group_main_name,
     hasSet: airSet,
+    // Whether a photo exists, not the photo itself — the tile requests it
+    // from /api/products/image/<code> only when there is one to fetch,
+    // rather than firing 60 requests that mostly 404.
+    hasImage: row.has_image === true,
   };
 }
 
@@ -97,7 +102,11 @@ async function queryCatalog(warehouseList: string): Promise<Catalog> {
         COALESCE(i.balance_qty, 0) AS balance_qty,
         COALESCE(ms.minimum_stock, 0) AS minimum_stock,
         price.sale_price_kip,
-        (sc.ic_set_code IS NOT NULL) AS has_set
+        (sc.ic_set_code IS NOT NULL) AS has_set,
+        EXISTS (
+          SELECT 1 FROM odg_ecom.product_images pi
+          WHERE pi.product_code = i.code
+        ) AS has_image
       FROM ic_inventory i
       LEFT JOIN ic_category cat ON cat.code = i.item_category
       LEFT JOIN ic_group grp ON grp.code = i.group_main
@@ -212,7 +221,11 @@ async function queryCatalogPage(
         COALESCE(i.balance_qty, 0) AS balance_qty,
         COALESCE(ms.minimum_stock, 0) AS minimum_stock,
         price.sale_price_kip,
-        (sc.ic_set_code IS NOT NULL) AS has_set
+        (sc.ic_set_code IS NOT NULL) AS has_set,
+        EXISTS (
+          SELECT 1 FROM odg_ecom.product_images pi
+          WHERE pi.product_code = i.code
+        ) AS has_image
       FROM ic_inventory i
       LEFT JOIN ic_category cat ON cat.code = i.item_category
       LEFT JOIN ic_group grp ON grp.code = i.group_main
