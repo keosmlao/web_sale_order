@@ -8386,17 +8386,28 @@ a {
     overflow: hidden;
     background: #eef2f7;
   }
-  /* The cart takes the slack and scrolls; checkout keeps its natural
-     height pinned to the bottom of the rail. */
+  /* The cart takes the slack and scrolls. Checkout must be allowed to
+     shrink and scroll too: with the delivery panel open it is taller than
+     half the rail, and as an unshrinkable flex item it squeezed the cart
+     to zero height — the lines vanished while the total still counted
+     them. The cart keeps a floor so it can never disappear again. */
   .pos-sale-rail .pos-order-left {
     flex: 1 1 auto;
-    min-height: 0;
+    min-height: 240px;
     height: auto;
     max-height: none;
     border-right: 0;
   }
+  /* Checkout sits in normal flow — no inner scroller. It used to scroll
+     because the delivery panel made it taller than the rail; that panel
+     now lives in the sheet, so the block is short again. An inner
+     scroller here is what put the pay button, and then the delivery
+     row, underneath a sticky footer. */
   .pos-sale-rail .pos-checkout-col {
     flex: 0 0 auto;
+    min-height: 0;
+    max-height: none;
+    overflow: visible;
     padding: 0 12px 12px;
   }
 
@@ -8413,4 +8424,297 @@ a {
   .pos-sale-rail .pos-cline-money {
     align-items: flex-end;
   }
+}
+
+/* ── Delivery moves behind a button on the two-pane layout ───────────
+   The rounds board and the transport/notes form are reference material:
+   read once a day, not once a sale. Inline they were taller than the
+   cart. From 1180px up they use the same sheet the phone already opens
+   — which already renders both — and the rail keeps a one-line trigger
+   showing the chosen transport. */
+@media (min-width: 1180px) {
+  .pos-shell2.pos-has-catalog .pos-delivery-inline {
+    display: none;
+  }
+  .pos-shell2.pos-has-catalog .pos-delivery-trigger {
+    display: flex;
+    min-height: 48px;
+  }
+}
+
+/* Four cards to a row on the two-pane layout. auto-fill was packing five
+   narrow tiles in, which is what pushed the long Lao names into an
+   ellipsis; a fixed four gives each card the width to read. */
+@media (min-width: 1180px) {
+  .pos-shell2.pos-has-catalog .pos-catalog-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Cart line, compact
+   A row was ~300px tall — name, code, an always-open "ຂໍລາຄາພິເສດ"
+   control, two chips, then the stepper — so only two lines fit on
+   screen. Reference data (code · warehouse · seller) collapses onto one
+   line beside the stepper, and the rare actions appear only on the
+   selected row.
+   ═══════════════════════════════════════════════════════════════════ */
+.pos-cline-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 7px;
+  min-width: 0;
+}
+.pos-cline-name {
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.4;
+  color: var(--odoo-text-strong);
+  text-wrap: pretty;
+}
+.pos-cline-tag {
+  flex-shrink: 0;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.pos-cline-tag-promo {
+  background: var(--odoo-warning-bg);
+  border: 1px solid var(--odoo-warning-border);
+  color: var(--odoo-warning-text);
+}
+.pos-cline-tag-bonus {
+  background: #ffffff;
+  border: 1px solid var(--odoo-success-border);
+  color: var(--odoo-success-text);
+}
+
+/* One metadata line: code, then the warehouse and salesperson controls
+   sitting inline rather than stacked. */
+.pos-cline-code {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--odoo-text-soft);
+}
+.pos-cline-main {
+  gap: 6px;
+}
+
+.pos-cline-unit {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--odoo-text-soft);
+  white-space: nowrap;
+}
+
+/* The set breakdown is reference too — it only opens on the picked row
+   already, so keep it visually subordinate. */
+.pos-cline-detail { padding-top: 2px; }
+
+@media (min-width: 1180px) {
+  /* In the rail the row is: name + total, then stepper + metadata. */
+  .pos-sale-rail .pos-cline {
+    gap: 7px;
+    padding: 11px 14px;
+  }
+  .pos-sale-rail .pos-cline-side {
+    align-items: center;
+    gap: 10px;
+  }
+  .pos-sale-rail .pos-cline-money {
+    min-width: 0;
+    margin-left: auto;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Sale rail — proportion pass
+   Before the first product line the rail spent ~200px on chrome: a title
+   row, the customer block, a "ຜູ້ຂາຍ:" line, then a whole row holding one
+   ໂປຣ button. On a 500px rail that is a quarter of the height gone to
+   labels. Everything above the cart is now one compact block.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (min-width: 1180px) {
+  .pos-sale-rail .pos-order-header {
+    padding: 10px 12px;
+  }
+  .pos-sale-rail .pos-order-title {
+    margin-bottom: 8px;
+  }
+  /* The "ຜູ້ຂາຍ: …" strip is context, not a heading. */
+  .pos-sale-rail .pos-order-header > .mt-2 {
+    margin-top: 6px;
+    font-size: 11px;
+  }
+  /* Only the �ເປຣ chip is left on the add bar — it does not need a band
+     of its own with 44px of padding around it. */
+  .pos-sale-rail .pos-add-bar {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e6ebf2;
+  }
+  .pos-sale-rail .pos-promo-chip {
+    height: 38px;
+    border-radius: 10px;
+  }
+
+  /* Cart card sits flush in the rail rather than floating in a margin. */
+  .pos-sale-rail .pos-order-lines {
+    margin: 10px 12px;
+    border-radius: 14px;
+  }
+
+  /* Totals: the grand total is the only number that needs size. The
+     lines above it are supporting detail and were competing with it. */
+  .pos-sale-rail .pos-checkout-card .space-y-1 > div {
+    font-size: 12px;
+  }
+  .pos-sale-rail .pos-total-line {
+    padding: 12px 14px;
+  }
+  .pos-sale-rail .pos-total-line .font-mono {
+    font-size: 24px;
+  }
+}
+
+/* ── The pay button never scrolls out of reach ───────────────────────
+   Letting the checkout block scroll inside itself fixed the collapsed
+   cart, but pushed the one control the whole screen exists for below
+   its own fold — it sat clipped against the bottom edge. The action row
+   now sticks to the bottom of that scroller, so the totals may scroll
+   under it but the button is always on screen. */
+@media (min-width: 1180px) {
+  .pos-sale-rail .pos-order-left {
+    min-height: 200px;
+  }
+  /* One row, not two. The shell's wrap + order:-1 put the CTA on its own
+     line with the two icon buttons beneath, which is ~130px of sticky
+     footer in a rail that needs the height for cart lines. Side by side
+     it is 52px, and an opaque background stops the total showing through
+     as it scrolls underneath. */
+  .pos-sale-rail .pos-action-row {
+    flex-wrap: nowrap;
+    gap: 8px;
+    margin-top: 10px;
+    padding: 10px 0 2px;
+    background: var(--odoo-surface);
+    border-top: 1px solid var(--odoo-border-strong);
+  }
+  .pos-sale-rail .pos-action-row .pos-cta {
+    order: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 52px;
+    min-height: 52px;
+  }
+  .pos-sale-rail .pos-action-row .pos-iconaction {
+    flex: 0 0 auto;
+    width: 48px;
+    height: 52px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Cart line — two rows, not three
+   Name / metadata / controls each owned a row, so a line ran ~150px and
+   the metadata chips read as tappable boxes when they are mostly labels.
+   The row becomes a grid: name and total on top, stepper with the
+   metadata beside it underneath. The wrappers go display:contents so
+   their children can be placed directly — no markup shuffling needed.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (min-width: 1180px) {
+  .pos-sale-rail .pos-cline {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    grid-template-areas:
+      "title title total"
+      "qty   meta  del"
+      "act   act   act";
+    align-items: center;
+    gap: 7px 10px;
+    padding: 11px 13px;
+  }
+  .pos-sale-rail .pos-cline-main,
+  .pos-sale-rail .pos-cline-side {
+    display: contents;
+  }
+  .pos-sale-rail .pos-cline-title { grid-area: title; align-self: start; }
+  .pos-sale-rail .pos-cline-money { grid-area: total; align-self: start; }
+  .pos-sale-rail .pos-cline-qty   { grid-area: qty; }
+  .pos-sale-rail .pos-cline-chips { grid-area: meta; }
+  .pos-sale-rail .pos-cline-del   { grid-area: del; }
+  .pos-sale-rail .pos-cline-actions { grid-area: act; }
+
+  .pos-sale-rail .pos-cline-money {
+    flex-direction: row;
+    align-items: baseline;
+    justify-content: flex-end;
+    gap: 6px;
+    min-width: 0;
+    margin-left: 0;
+    text-align: right;
+  }
+
+  /* Metadata reads as text, not as a row of buttons. It is still
+     clickable — the warehouse and salesperson pickers are what they
+     open — but it should not shout like a control. */
+  .pos-sale-rail .pos-cline-chips {
+    flex-wrap: nowrap;
+    gap: 8px;
+    overflow: hidden;
+  }
+  .pos-sale-rail .pos-cline-chips > div {
+    flex-wrap: nowrap;
+    gap: 8px !important;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .pos-sale-rail .pos-cline-main button,
+  .pos-sale-rail .pos-cline-chips button {
+    min-height: 26px;
+    max-width: 100%;
+    padding: 2px 0;
+    border: 0 !important;
+    border-radius: 6px;
+    background: transparent !important;
+    color: var(--odoo-text-muted) !important;
+    font-size: 11px;
+    font-weight: 700;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .pos-sale-rail .pos-cline-chips button:hover {
+    color: var(--odoo-primary) !important;
+    text-decoration: underline;
+  }
+  /* …except the rare-action row, which really is a button. */
+  .pos-sale-rail .pos-cline-actions button {
+    min-height: 32px;
+    padding: 6px 11px !important;
+    border: 1px solid var(--odoo-primary-200) !important;
+    background: var(--odoo-surface) !important;
+    color: var(--odoo-primary-dark) !important;
+  }
+
+  /* Remove the ✕ box; the glyph is enough at this density. */
+  .pos-sale-rail .pos-cline-del .pos-iconbtn {
+    width: 30px;
+    height: 30px;
+    min-width: 30px;
+    min-height: 30px;
+    border: 0;
+    background: transparent;
+    font-size: 15px;
+  }
+
+  /* The stepper carries the row, so keep it the one solid control. */
+  .pos-sale-rail .pos-cline-qty .pos-cart-stepper { height: 40px; }
+  .pos-sale-rail .pos-cline-qty .pos-step-btn { width: 38px; }
+  .pos-sale-rail .pos-cline-qty .pos-qty-input { width: 44px; }
 }

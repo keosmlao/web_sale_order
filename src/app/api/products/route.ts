@@ -7,7 +7,6 @@ import { getConfiguredSalesWarehouses } from "@/lib/inventory-config";
 type ProductRow = {
   code: string;
   name_1: string;
-  name_eng_1: string | null;
   unit_standard_name: string | null;
   item_brand: string | null;
   item_category: string | null;
@@ -37,14 +36,15 @@ function toProduct(row: ProductRow) {
   const stock = row.balance_qty ? Number(row.balance_qty) : 0;
   const minimumStock = row.minimum_stock ? Number(row.minimum_stock) : 0;
   return {
+    // `description` (name_eng_1) and `imageUrl` used to ride along here and
+    // no caller ever read them: across 10.6k rows that was ~700KB of the
+    // payload spent on nothing.
     id: row.code,
     code: row.code,
     name: row.name_1,
-    description: row.name_eng_1,
     price: row.sale_price_kip ? Number(row.sale_price_kip) : 0,
     stock: airSet ? Math.max(stock, 1) : stock,
     minimumStock,
-    imageUrl: null,
     unitName: airSet ? "ຊຸດ" : row.unit_standard_name,
     brand: row.item_brand,
     category: row.item_category,
@@ -88,7 +88,6 @@ async function queryCatalog(warehouseList: string): Promise<Catalog> {
       SELECT
         i.code,
         i.name_1,
-        i.name_eng_1,
         i.unit_standard_name,
         i.item_brand,
         i.item_category,
@@ -181,7 +180,11 @@ export async function GET(request: NextRequest) {
   // The catalog is ~4MB; let the browser reuse it for a short window so
   // navigating back to the sales page doesn't re-download it every time.
   return NextResponse.json(products, {
-    headers: { "Cache-Control": "private, max-age=30" },
+    // stale-while-revalidate lets a re-open paint from cache immediately
+    // and refresh in the background instead of blocking on the query.
+    headers: {
+      "Cache-Control": "private, max-age=30, stale-while-revalidate=120",
+    },
   });
 }
 

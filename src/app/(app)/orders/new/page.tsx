@@ -156,6 +156,18 @@ const EXCLUDED_POS_CATEGORY_LABELS = [
   "ອຸປະກອນການຕະຫຼາດ",
 ];
 
+// Warehouse names in ic_warehouse already start with "ສາງ" and carry a
+// parenthetical restating the same place — "ສາງຂົວຫຼວງ 1(ໜ້າຮ້ານຂົວຫຼວງ)".
+// Printed under a "ສາງ " label that read "ສາງ ສາງຂົວຫຼວງ 1(ໜ້າຮ້ານ…)", which
+// is three words of noise on a cart line that has none to spare.
+function shortWarehouseLabel(name: string | undefined, code: string) {
+  const raw = (name ?? "").trim();
+  if (!raw) return code;
+  const withoutParens = raw.replace(/\s*\([^)]*\)\s*$/, "").trim();
+  const withoutPrefix = withoutParens.replace(/^ສາງ\s*/, "").trim();
+  return withoutPrefix || withoutParens || code;
+}
+
 function normalizeCategoryLabel(value: string) {
   return value.trim().replace(/\s+/g, " ").toLowerCase();
 }
@@ -646,25 +658,46 @@ function PosScreen({
   }, []);
 
   // Catalog stock breakdown: once we have a product list, batch-fetch the
+  // One lowercase haystack per product, built once per catalogue load. The
+  // three search memos below used to concatenate and lower-case nine fields
+  // for all ~10.6k products on EVERY keystroke — three full passes per
+  // character typed, which is what made the page feel heavy.
+  const productSearchIndex = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const p of products) {
+      map.set(
+        p.id,
+        [
+          p.name,
+          p.code,
+          p.brand ?? "",
+          p.unitName ?? "",
+          p.category ?? "",
+          p.categoryName ?? "",
+          p.groupMain ?? "",
+          p.groupMainName ?? "",
+          productCategoryLabel(p),
+        ]
+          .join(" ")
+          .toLowerCase(),
+      );
+    }
+    return map;
+  }, [products]);
+
+  // Excluded-category test walks several string comparisons per product;
+  // it does not depend on the query, so resolve it once too.
+  const posProducts = useMemo(
+    () => products.filter((p) => !isExcludedPosCategory(p)),
+    [products],
+  );
+
   const productPickerProducts = useMemo(() => {
     const q = productPickerQuery.trim().toLowerCase();
     const isAirQuery = q === "ແອ" || q === "air";
-    const matched = products.filter((p) => {
-      if (isExcludedPosCategory(p)) return false;
+    const matched = posProducts.filter((p) => {
       if (!q) return true;
-      const searchable = [
-        p.name,
-        p.code,
-        p.brand ?? "",
-        p.unitName ?? "",
-        p.category ?? "",
-        p.categoryName ?? "",
-        p.groupMain ?? "",
-        p.groupMainName ?? "",
-        productCategoryLabel(p),
-      ]
-        .join(" ")
-        .toLowerCase();
+      const searchable = productSearchIndex.get(p.id) ?? "";
       return (
         searchable.includes(q) ||
         (isAirQuery &&
@@ -674,7 +707,7 @@ function PosScreen({
       );
     });
     return matched.slice(0, isAirQuery ? matched.length : q ? 24 : 36);
-  }, [products, productPickerQuery]);
+  }, [posProducts, productSearchIndex, productPickerQuery]);
 
   // Search-first POS: results for the always-visible quick-search box render
   // inline right under the bar (tap a row → straight into the cart via
@@ -684,31 +717,22 @@ function PosScreen({
     const q = quickSearch.trim().toLowerCase();
     if (!q) return [] as Product[];
     const isAirQuery = q === "ແອ" || q === "air";
-    const matched = products.filter((p) => {
-      if (isExcludedPosCategory(p)) return false;
-      const searchable = [
-        p.name,
-        p.code,
-        p.brand ?? "",
-        p.unitName ?? "",
-        p.category ?? "",
-        p.categoryName ?? "",
-        p.groupMain ?? "",
-        p.groupMainName ?? "",
-        productCategoryLabel(p),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return (
+    const matched: Product[] = [];
+    for (const p of posProducts) {
+      const searchable = productSearchIndex.get(p.id) ?? "";
+      const hit =
         searchable.includes(q) ||
         (isAirQuery &&
           (searchable.includes("air") ||
             p.category?.trim() === "032" ||
-            p.groupMain?.trim() === "12"))
-      );
-    });
-    return matched.slice(0, 8);
-  }, [products, quickSearch]);
+            p.groupMain?.trim() === "12"));
+      if (!hit) continue;
+      matched.push(p);
+      // Only eight rows are ever rendered — stop scanning once they are in.
+      if (matched.length >= 8) break;
+    }
+    return matched;
+  }, [posProducts, productSearchIndex, quickSearch]);
 
   // ── Catalogue column ───────────────────────────────────────────────
   // On a wide screen the products are on-screen the whole time instead of
@@ -717,8 +741,7 @@ function PosScreen({
   // grid rather than opening a second results surface.
   const catalogCategories = useMemo(() => {
     const map = new Map<string, { code: string; label: string; count: number }>();
-    for (const p of products) {
-      if (isExcludedPosCategory(p)) continue;
+    for (const p of posProducts) {
       const code = productCategoryCode(p);
       if (!code) continue;
       const found = map.get(code);
@@ -726,33 +749,22 @@ function PosScreen({
       else map.set(code, { code, label: productCategoryLabel(p), count: 1 });
     }
     return [...map.values()].sort((a, b) => b.count - a.count).slice(0, 12);
-  }, [products]);
+  }, [posProducts]);
 
   const catalogProducts = useMemo(() => {
     const q = quickSearch.trim().toLowerCase();
-    const matched = products.filter((p) => {
-      if (isExcludedPosCategory(p)) return false;
+    const matched: Product[] = [];
+    for (const p of posProducts) {
       if (catalogCategory && productCategoryCode(p) !== catalogCategory) {
-        return false;
+        continue;
       }
-      if (!q) return true;
-      const searchable = [
-        p.name,
-        p.code,
-        p.brand ?? "",
-        p.unitName ?? "",
-        p.category ?? "",
-        p.categoryName ?? "",
-        p.groupMain ?? "",
-        p.groupMainName ?? "",
-        productCategoryLabel(p),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return searchable.includes(q);
-    });
-    return matched.slice(0, 60);
-  }, [products, catalogCategory, quickSearch]);
+      if (q && !(productSearchIndex.get(p.id) ?? "").includes(q)) continue;
+      matched.push(p);
+      // The grid renders 60; scanning past that buys nothing.
+      if (matched.length >= 60) break;
+    }
+    return matched;
+  }, [posProducts, productSearchIndex, catalogCategory, quickSearch]);
 
   // Quantity already in the cart, per product — drives the tile badge so the
   // cashier can see what is on the bill without reading the cart.
@@ -2627,27 +2639,27 @@ function PosScreen({
                           }
                         >
                           <div className="pos-cline-main">
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={
-                                  "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide " +
-                                  (isFreeBonus
-                                    ? "bg-emerald-100 text-emerald-700"
-                                    : isPromoSold
-                                      ? "bg-indigo-100 text-indigo-700"
-                                      : "bg-odoo-surface-muted text-odoo-text-muted")
-                                }
-                              >
-                                {isFreeBonus ? "ແຖມ" : isPromoSold ? "ໂປຣ" : "ຂາຍ"}
-                              </span>
-                              <span className="pos-cart-name text-xs font-semibold text-odoo-text-strong">
+                            <div className="pos-cline-title">
+                              <span className="pos-cline-name">
                                 {line.productName}
                               </span>
-                            </div>
-                            <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] font-bold text-odoo-text-muted">
-                              <span>{line.productId}</span>
+                              {/* A tag only earns its place when the line is
+                                  NOT an ordinary sale — "ຂາຍ" on every row was
+                                  noise. */}
+                              {isFreeBonus || isPromoSold ? (
+                                <span
+                                  className={
+                                    "pos-cline-tag " +
+                                    (isFreeBonus
+                                      ? "pos-cline-tag-bonus"
+                                      : "pos-cline-tag-promo")
+                                  }
+                                >
+                                  {isFreeBonus ? "ແຖມຟຣີ" : "ໂປຣ"}
+                                </span>
+                              ) : null}
                               {isAirSetLine(line) ? (
-                                <span className="pos-unit-badge">ຫົວໜ່ວຍ: ຊຸດ</span>
+                                <span className="pos-unit-badge">ຊຸດ</span>
                               ) : null}
                             </div>
                             {hasPromo ? (
@@ -2655,7 +2667,8 @@ function PosScreen({
                                 {pricing.promoLabel || "Promotion"}
                               </div>
                             ) : null}
-                            {line.promoBonusOfCode ? null : (
+                            {line.promoBonusOfCode || !selected ? null : (
+                              <div className="pos-cline-actions">
                               <button
                                 type="button"
                                 onClick={(e) => {
@@ -2690,8 +2703,10 @@ function PosScreen({
                                     : "ຂໍລາຄາພິເສດ"}
                                 </span>
                               </button>
+                              </div>
                             )}
                             <div className="pos-cline-chips">
+                              <span className="pos-cline-code">{line.productId}</span>
                               <div className="flex flex-col items-start gap-1">
                                 <button
                                   type="button"
@@ -2761,7 +2776,7 @@ function PosScreen({
                                 ) : line.locations.length === 0 ? (
                                   line.warehouseStock > 0 ? (
                                     <span className="text-[10px] text-odoo-text-muted">
-                                      ສາງ {warehouseNames[line.warehouseCode] ?? line.warehouseCode}
+                                      ສາງ {shortWarehouseLabel(warehouseNames[line.warehouseCode], line.warehouseCode)}
                                     </span>
                                   ) : (
                                     <span className="text-[10px] font-semibold text-odoo-danger">
@@ -2818,7 +2833,7 @@ function PosScreen({
                                           : "text-odoo-text-muted")
                                       }
                                     >
-                                      ສາງ {warehouseNames[line.warehouseCode] ?? line.warehouseCode}
+                                      ສາງ {shortWarehouseLabel(warehouseNames[line.warehouseCode], line.warehouseCode)}
                                       {" · "}
                                       {sel?.name ?? "—"}
                                       {" · "}
@@ -2923,16 +2938,16 @@ function PosScreen({
                                   − {moneyFmt.format(lineDiscount)}
                                 </div>
                               ) : null}
-                              <div className="pos-cline-unit">
-                                <span className="font-bold text-odoo-text-strong">
-                                  {moneyFmt.format(line.unitPrice)}
-                                </span>
-                                {line.unitName ? (
-                                  <span className="ml-1 text-[10px] text-odoo-text-muted">
-                                    / {line.unitName}
-                                  </span>
-                                ) : null}
-                              </div>
+                              {/* At quantity 1 the unit price is the same
+                                  number as the total, printed twice. */}
+                              {line.quantity > 1 ? (
+                                <div className="pos-cline-unit">
+                                  <span>{moneyFmt.format(line.unitPrice)}</span>
+                                  {line.unitName ? (
+                                    <span className="ml-1">/ {line.unitName}</span>
+                                  ) : null}
+                                </div>
+                              ) : null}
                             </div>
                             <div className="pos-cline-del">
                               <button
