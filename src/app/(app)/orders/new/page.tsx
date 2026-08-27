@@ -3082,20 +3082,25 @@ function PosScreen({
                 {/* Gross before any discount, then the line-level discount,
                     then the post-discount subtotal — so the cashier sees the
                     full → discount → net breakdown. */}
-                <SummaryRow
-                  label="ມູນຄ່າເຕັມ (ກ່ອນຫຼຸດ)"
-                  value={moneyFmt.format(grossTotal)}
-                />
+                {/* With no discount anywhere, gross, subtotal and total are
+                    the same number — printing it three times says nothing.
+                    The breakdown appears only when there is one to show. */}
                 {lineDiscountTotal > 0 ? (
-                  <SummaryRow
-                    label="ສ່ວນຫຼຸດ"
-                    value={`− ${moneyFmt.format(lineDiscountTotal)}`}
-                  />
+                  <>
+                    <SummaryRow
+                      label="ມູນຄ່າເຕັມ (ກ່ອນຫຼຸດ)"
+                      value={moneyFmt.format(grossTotal)}
+                    />
+                    <SummaryRow
+                      label="ສ່ວນຫຼຸດ"
+                      value={`− ${moneyFmt.format(lineDiscountTotal)}`}
+                    />
+                    <SummaryRow
+                      label="ລວມລາຍການ"
+                      value={moneyFmt.format(afterLineDiscounts)}
+                    />
+                  </>
                 ) : null}
-                <SummaryRow
-                  label="ລວມລາຍການ"
-                  value={moneyFmt.format(afterLineDiscounts)}
-                />
                 {appliedExtraDiscount > 0 ? (
                   <SummaryRow
                     label="ສ່ວນຫຼຸດທ້າຍບິນ"
