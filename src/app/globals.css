@@ -9526,10 +9526,32 @@ a {
     grid-template-rows: minmax(0, 1.25fr) minmax(0, 1fr);
   }
 
+  /* The whole column, not just display. flex-direction and the height
+     clamps live in the 1180px block, so setting display alone left this a
+     flex ROW — the search box beside the grid, each getting half the
+     screen, with the left half of the page empty. */
   .pos-shell2.pos-has-catalog .pos-catalog-col {
     display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #f8fafc;
     border-right: 0;
     border-bottom: 1px solid #e6ebf2;
+  }
+
+  /* Four across. The pane is the full width of the tablet here, so the
+     tiles have the room. */
+  .pos-shell2.pos-has-catalog .pos-catalog-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .pos-shell2.pos-has-catalog .pos-ctile {
+    min-height: 232px;
+  }
+  .pos-shell2.pos-has-catalog .pos-ctile-photo {
+    min-height: 128px;
   }
 
   .pos-shell2.pos-has-catalog .pos-sale-rail {
@@ -9575,5 +9597,10 @@ a {
   }
   .pos-shell2.pos-has-catalog.pos-cart-empty .pos-catalog-col {
     border-bottom-color: transparent;
+  }
+  /* The wide layout widens the grid when the rail stands down; here the
+     pane was already full width, so the count stays put. */
+  .pos-shell2.pos-has-catalog.pos-cart-empty .pos-catalog-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
