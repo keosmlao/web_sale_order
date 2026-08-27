@@ -1,4 +1,5 @@
 import { headers } from "next/headers";
+import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { requireEmployee } from "@/lib/auth";
 import {
@@ -76,6 +77,24 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (posOnly) {
     // POS users are the senders, not the recipients — skip the notifier
     // for them so they don't get a ping for the bill they just rang up.
+    // How many sales orders are still waiting to be billed. Cheap COUNT,
+    // and only for the register — nobody else sees the badge. A failure
+    // here must not take the whole shell down, so it falls back to none.
+    let pendingOrders = 0;
+    if (isRegisterUser) {
+      try {
+        const rows = await prisma.$queryRaw<Array<{ n: bigint }>>`
+          SELECT COUNT(*)::bigint AS n
+          FROM ic_trans
+          WHERE doc_format_code = 'SOK'
+            AND COALESCE(status, 0) NOT IN (1, 2)
+        `;
+        pendingOrders = Number(rows[0]?.n ?? 0);
+      } catch {
+        pendingOrders = 0;
+      }
+    }
+
     // Two jobs, two menus. Taking the order and issuing the receipt are
     // separate documents in the books, so the register gets a link to each
     // instead of one screen with the receipt buried behind a row link.
@@ -83,6 +102,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       {
         href: "/cashier",
         label: "ໃບສັ່ງຂາຍ",
+        hint: "ລໍຖ້າອອກບິນ",
+        badge: pendingOrders,
         active: pathname === "/cashier",
         icon: (
           <>
@@ -152,7 +173,31 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                   >
                     {item.icon}
                   </svg>
-                  <span className="truncate">{item.label}</span>
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate">{item.label}</span>
+                    {item.hint ? (
+                      <span
+                        className={
+                          "truncate text-[10px] font-bold " +
+                          (item.active ? "text-white/75" : "text-odoo-text-soft")
+                        }
+                      >
+                        {item.hint}
+                      </span>
+                    ) : null}
+                  </span>
+                  {item.badge ? (
+                    <span
+                      className={
+                        "ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-black " +
+                        (item.active
+                          ? "bg-white/25 text-white"
+                          : "bg-odoo-warning text-white")
+                      }
+                    >
+                      {item.badge}
+                    </span>
+                  ) : null}
                 </a>
               ))}
             </nav>

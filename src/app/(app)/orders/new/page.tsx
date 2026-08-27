@@ -150,7 +150,12 @@ function todayLocalISODate() {
   return local.toISOString().slice(0, 10);
 }
 
-const DEFAULT_WAREHOUSE_CODE = "1102";
+// Storefront warehouse ("ສາງຂົວຫຼວງ 1 — ໜ້າຮ້ານ"). A POS sale is handed over
+// the counter, so it comes off the shop floor. Pinned rather than taken from
+// whatever /api/settings/sales-warehouses happens to list first: that order is
+// alphabetical by code and would silently move the default if another
+// warehouse were added.
+const DEFAULT_WAREHOUSE_CODE = "1101";
 const EXCLUDED_POS_CATEGORY_LABELS = [
   "ເຄື່ອງໃຊ້ຫ້ອງການ",
   "ອຸປະກອນການຕະຫຼາດ",
@@ -535,7 +540,12 @@ function PosScreen({
           .filter((row) => row.isSalesWarehouse && row.code)
           .map((row) => row.code as string);
         if (configuredWarehouses.length > 0) {
-          setSalesWarehouses(configuredWarehouses);
+          // Keep the storefront first so it stays the cart default; the rest
+          // still count for stock lookups.
+          setSalesWarehouses([
+            ...configuredWarehouses.filter((c) => c === DEFAULT_WAREHOUSE_CODE),
+            ...configuredWarehouses.filter((c) => c !== DEFAULT_WAREHOUSE_CODE),
+          ]);
         }
         const config = loyaltyData?.config;
         const earn = Number(config?.earnKipPerPoint);
