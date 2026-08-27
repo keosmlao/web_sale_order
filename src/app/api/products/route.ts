@@ -184,7 +184,10 @@ async function queryCatalogPage(
 ): Promise<Catalog> {
   const pattern = q ? `%${q}%` : "";
   const whStock = await loadWarehouseStock(storefront);
-  const inStock = [...whStock.keys()];
+  // Comma string + string_to_array, the pattern the rest of these queries
+  // use. A JS array through $queryRaw arrives as a single opaque parameter
+  // and `= ANY($1)` then matches nothing — which emptied the whole grid.
+  const inStockList = [...whStock.keys()].join(",");
   const products = await prisma.$queryRaw<ProductRow[]>`
       WITH min_stock AS (
         SELECT item_code, SUM(min_qty) AS minimum_stock
@@ -249,7 +252,7 @@ async function queryCatalogPage(
         -- Only what the storefront itself holds. Air sets are exempt:
         -- they are built from components, not stocked as a unit.
         AND (
-          i.code = ANY(${inStock})
+          i.code = ANY(string_to_array(${inStockList}, ','))
           OR (
             (i.item_category = '032' OR i.group_main = '12')
             AND sc.ic_set_code IS NOT NULL
