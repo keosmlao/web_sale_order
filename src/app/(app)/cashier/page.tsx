@@ -466,7 +466,15 @@ function CashierClientInner({
   }
 
   return (
-    <div className="px-4 py-5 sm:px-6 lg:px-8">
+    // On the register's 27" monitor the settle panel docks beside the queue
+    // instead of covering it (see globals.css) — this flag is what tells the
+    // page to leave room for it.
+    <div
+      className={
+        "cashier-page px-4 py-5 sm:px-6 lg:px-8" +
+        (selected ? " cashier-page-docked" : "")
+      }
+    >
       <LowStockBanner />
       <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
@@ -546,7 +554,7 @@ function CashierClientInner({
       )}
 
       {selected && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm">
+        <div className="cashier-settle-layer fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-sm">
           <button
             type="button"
             aria-label="ປິດໜ້າລາຍລະອຽດ"

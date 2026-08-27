@@ -8824,3 +8824,38 @@ a {
     padding: 8px 12px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Register on a 27" monitor — dock the settle panel, don't overlay it
+   The settle form opens as a drawer over a dimmed page. On a 1180px
+   laptop that is right; on a 2560px desk monitor it hides a queue that
+   had plenty of room beside it, and the cashier loses sight of what is
+   waiting while taking money. From 1600px up the panel docks to the
+   right and the queue keeps the rest.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (min-width: 1600px) {
+  .cashier-settle-layer {
+    left: auto;
+    width: min(1180px, 52vw);
+    background: transparent;
+    backdrop-filter: none;
+    pointer-events: none;
+  }
+  /* The click-away backdrop would swallow clicks on the queue. */
+  .cashier-settle-layer > button {
+    display: none;
+  }
+  .cashier-settle-layer .cashier-drawer {
+    pointer-events: auto;
+    max-width: none;
+    box-shadow: -18px 0 44px rgba(15, 23, 42, 0.14);
+  }
+  /* Leave the panel its room rather than letting it sit on the table. */
+  .cashier-page-docked {
+    padding-right: calc(min(1180px, 52vw) + 24px);
+  }
+  /* The queue is narrower while docked, so let its table breathe. */
+  .cashier-page-docked table {
+    min-width: 0;
+  }
+}
