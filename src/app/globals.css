@@ -8631,13 +8631,16 @@ a {
   .pos-sale-rail .pos-cline {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
+    /* Two declared rows only. The action row was declared here too, so it
+       reserved its gap on every line whether or not anything was in it —
+       that was the empty band under the selected row. It flows into an
+       implicit third row instead, which costs nothing when absent. */
     grid-template-areas:
       "title title total"
-      "qty   meta  del"
-      "act   act   act";
+      "qty   meta  del";
     align-items: center;
-    gap: 7px 10px;
-    padding: 11px 13px;
+    gap: 6px 10px;
+    padding: 9px 12px;
   }
   .pos-sale-rail .pos-cline-main,
   .pos-sale-rail .pos-cline-side {
@@ -8648,7 +8651,7 @@ a {
   .pos-sale-rail .pos-cline-qty   { grid-area: qty; }
   .pos-sale-rail .pos-cline-chips { grid-area: meta; }
   .pos-sale-rail .pos-cline-del   { grid-area: del; }
-  .pos-sale-rail .pos-cline-actions { grid-area: act; }
+  .pos-sale-rail .pos-cline-actions { grid-column: 1 / -1; }
 
   .pos-sale-rail .pos-cline-money {
     flex-direction: row;
@@ -8992,5 +8995,33 @@ a {
   .pos-sale-rail .pos-action-row .pos-iconaction {
     width: 44px;
     height: 46px;
+  }
+}
+
+/* One more step off the cart line: the stepper and the special-price
+   button were sized for a page, not for a 500px rail. */
+@media (min-width: 1180px) {
+  .pos-sale-rail .pos-cline-qty .pos-cart-stepper { height: 36px; }
+  .pos-sale-rail .pos-cline-qty .pos-step-btn {
+    width: 34px;
+    font-size: 17px;
+  }
+  .pos-sale-rail .pos-cline-qty .pos-qty-input {
+    width: 40px;
+    font-size: 14px;
+  }
+  .pos-sale-rail .pos-cline-title { font-size: 12.5px; }
+  .pos-sale-rail .pos-cline-name { font-size: 12.5px; line-height: 1.35; }
+  .pos-sale-rail .pos-cline-money { font-size: 13px; }
+  .pos-sale-rail .pos-cline-actions button {
+    min-height: 28px;
+    padding: 4px 10px !important;
+    font-size: 10.5px;
+  }
+  .pos-sale-rail .pos-cline-del .pos-iconbtn {
+    width: 26px;
+    height: 26px;
+    min-width: 26px;
+    min-height: 26px;
   }
 }
