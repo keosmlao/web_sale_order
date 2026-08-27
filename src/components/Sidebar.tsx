@@ -409,7 +409,10 @@ const sections: NavSection[] = [
             // over has to be findable — it was a URL you had to know.
             href: "/beta",
             label: "ແອັບລຸ້ນທົດລອງ",
-            roles: ["manager"],
+            // head as well as manager — the person who tests the build is
+            // not always the one who administers the system, and a page
+            // that hands over an APK is not worth gating tightly.
+            roles: ["head", "manager"],
             icon: (
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
                 <rect x="6" y="2" width="12" height="20" rx="2.5" />
