@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
+import { memberDiscountPct } from "@/lib/customer-discount";
 import { canCreateCustomers, roleFromEmployee } from "@/lib/roles";
 
 type CustomerRow = {
@@ -16,13 +17,6 @@ type CustomerRow = {
   point_balance: string | number | null;
 };
 
-function parseDiscountPct(raw: string | null): number {
-  if (!raw) return 0;
-  const cleaned = raw.replace(/[^0-9.-]/g, "").trim();
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : 0;
-}
-
 function parsePointBalance(raw: string | number | null): number {
   if (raw === null) return 0;
   const n = Number(raw);
@@ -36,7 +30,8 @@ function toCustomer(row: CustomerRow) {
   const address = row.address?.trim() || null;
   const groupCode = row.group_code?.trim() || null;
   const groupName = row.group_name?.trim() || null;
-  const discountPct = parseDiscountPct(row.discount_raw);
+  // Every row here is a member — the query filters on reg_group.
+  const discountPct = memberDiscountPct(row.discount_raw);
   const pointBalance = parsePointBalance(row.point_balance);
   return {
     id: row.code.trim(),

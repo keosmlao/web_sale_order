@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
+import { memberDiscountPct } from "@/lib/customer-discount";
 
 type MemberRow = {
   code: string;
@@ -14,15 +15,8 @@ type MemberRow = {
   discount_raw: string | null;
 };
 
-function parseDiscountPct(raw: string | null): number {
-  if (!raw) return 0;
-  const cleaned = raw.replace(/[^0-9.-]/g, "").trim();
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : 0;
-}
-
 function toMember(row: MemberRow) {
-  const discountPct = parseDiscountPct(row.discount_raw);
+  const discountPct = memberDiscountPct(row.discount_raw);
   return {
     id: row.code.trim(),
     name: row.name_1?.trim() || row.code.trim(),

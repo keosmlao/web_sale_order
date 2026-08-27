@@ -2,6 +2,7 @@
 
 import { requireEmployee } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { memberDiscountPct } from "@/lib/customer-discount";
 
 export type Member = {
   id: string;
@@ -31,13 +32,6 @@ type Row = {
 };
 
 type TierRow = { group_name: string | null; n: bigint };
-
-function parseDiscountPct(raw: string | null): number {
-  if (!raw) return 0;
-  const cleaned = raw.replace(/[^0-9.-]/g, "").trim();
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : 0;
-}
 
 type SearchParams = {
   page?: string | string[];
@@ -131,7 +125,7 @@ export async function getMembersData(sp: SearchParams) {
     address: r.address?.trim() || null,
     groupCode: r.group_code?.trim() || null,
     groupName: r.group_name?.trim() || null,
-    discountPct: parseDiscountPct(r.discount_raw),
+    discountPct: memberDiscountPct(r.discount_raw),
     points: r.point_balance ? Number(r.point_balance) : 0,
   }));
 

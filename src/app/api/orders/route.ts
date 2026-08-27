@@ -9,6 +9,7 @@ import { publishNewOrder } from "@/lib/order-events";
 import { parseOrderRemark } from "@/lib/order-remark";
 import { canBeSalesperson, roleFromEmployee, counterSide } from "@/lib/roles";
 import { priceCart } from "@/lib/promotions-engine";
+import { memberDiscountPct } from "@/lib/customer-discount";
 
 const DEFAULT_SIDE_CODE = "200";
 
@@ -115,13 +116,6 @@ type IncomingItem = {
   transportCode: string | null;
 };
 
-function parseDiscountPct(raw: string | number | null): number {
-  if (raw === null) return 0;
-  const cleaned = String(raw).replace(/[^0-9.-]/g, "").trim();
-  const n = Number(cleaned);
-  return Number.isFinite(n) ? n : 0;
-}
-
 function statusLabel(
   status: number | null,
   isScheduled = false,
@@ -166,7 +160,7 @@ function toOrder(row: OrderRow) {
       address: null,
       groupCode: row.customer_group_code,
       groupName: row.customer_group_name,
-      discountPct: parseDiscountPct(row.customer_discount_raw),
+      discountPct: memberDiscountPct(row.customer_discount_raw),
       pointBalance: Number.isFinite(pointBalanceNum) ? pointBalanceNum : 0,
     },
     warehouseCode: row.warehouse_code,
@@ -653,9 +647,12 @@ export async function POST(request: NextRequest) {
       { status: 400 },
     );
   }
+  // Walk-in pays full price; a member gets their rate, defaulting to 3%.
+  // Same function the POS previews with, so the figure on screen and the
+  // figure on the bill cannot disagree.
   const customerDiscountPct = isWalkIn
     ? 0
-    : parseDiscountPct(customers[0]?.discount_raw ?? null);
+    : memberDiscountPct(customers[0]?.discount_raw ?? null);
   const discountPct = customerDiscountPct;
 
   const productIds = [...new Set(items.map((i) => i.productId))];
