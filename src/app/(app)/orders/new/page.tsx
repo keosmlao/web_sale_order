@@ -230,8 +230,6 @@ function PosScreen({
   // product picker seeded with the query; a barcode-looking value is added
   // straight to the cart.
   const [quickSearch, setQuickSearch] = useState("");
-  // Category filter for the always-on catalogue column (≥1180px). Empty = all.
-  const [catalogCategory, setCatalogCategory] = useState("");
 
   // Barcode scanning. A USB/Bluetooth scanner behaves like a keyboard that
   // types the code in a tight burst and ends with Enter. We buffer keystrokes
@@ -709,60 +707,6 @@ function PosScreen({
     });
     return matched.slice(0, 8);
   }, [products, quickSearch]);
-
-  // ── Catalogue column ───────────────────────────────────────────────
-  // On a wide screen the products are on-screen the whole time instead of
-  // behind the "ເພີ່ມສິນຄ້າ" modal: tap a tile, it lands in the cart. The
-  // column shares `quickSearch` with the search bar, so typing narrows the
-  // grid rather than opening a second results surface.
-  const catalogCategories = useMemo(() => {
-    const map = new Map<string, { code: string; label: string; count: number }>();
-    for (const p of products) {
-      if (isExcludedPosCategory(p)) continue;
-      const code = productCategoryCode(p);
-      if (!code) continue;
-      const found = map.get(code);
-      if (found) found.count += 1;
-      else map.set(code, { code, label: productCategoryLabel(p), count: 1 });
-    }
-    return [...map.values()].sort((a, b) => b.count - a.count).slice(0, 12);
-  }, [products]);
-
-  const catalogProducts = useMemo(() => {
-    const q = quickSearch.trim().toLowerCase();
-    const matched = products.filter((p) => {
-      if (isExcludedPosCategory(p)) return false;
-      if (catalogCategory && productCategoryCode(p) !== catalogCategory) {
-        return false;
-      }
-      if (!q) return true;
-      const searchable = [
-        p.name,
-        p.code,
-        p.brand ?? "",
-        p.unitName ?? "",
-        p.category ?? "",
-        p.categoryName ?? "",
-        p.groupMain ?? "",
-        p.groupMainName ?? "",
-        productCategoryLabel(p),
-      ]
-        .join(" ")
-        .toLowerCase();
-      return searchable.includes(q);
-    });
-    return matched.slice(0, 60);
-  }, [products, catalogCategory, quickSearch]);
-
-  // Quantity already in the cart, per product — drives the tile badge so the
-  // cashier can see what is on the bill without reading the cart.
-  const cartQtyByProduct = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const line of items) {
-      map.set(line.productId, (map.get(line.productId) ?? 0) + line.quantity);
-    }
-    return map;
-  }, [items]);
 
   const currentPromotions = useMemo(() => {
     const now = new Date();
@@ -2113,7 +2057,7 @@ function PosScreen({
     transportTypes.find((t) => t.code === transportCode)?.name ?? "ຍັງບໍ່ເລືອກ";
 
   return (
-    <div className={`pos-shell2 pos-has-catalog pos-mstep-${mStep}`}>
+    <div className={`pos-shell2 pos-mstep-${mStep}`}>
       <header className="pos-mobile-appbar">
         <div className="pos-mobile-appbar-icon" aria-hidden>
           <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2148,119 +2092,6 @@ function PosScreen({
           <span className="min-w-0 truncate">{scanFeedback.text}</span>
         </div>
       ) : null}
-      {/* Catalogue column — visible from 1180px up (CSS). Below that the
-          screen falls back to the search-first flow + picker modal. */}
-      <div className="pos-catalog-col">
-        <div className="pos-catalog-head">
-          <div className="pos-catalog-title">
-            <span>ສິນຄ້າ</span>
-            <span className="pos-catalog-count">
-              {loadingProducts ? "…" : `${catalogProducts.length} ລາຍການ`}
-            </span>
-          </div>
-          <div className="pos-catalog-chips">
-            <button
-              type="button"
-              onClick={() => setCatalogCategory("")}
-              className={
-                "pos-catalog-chip" +
-                (catalogCategory === "" ? " pos-catalog-chip-on" : "")
-              }
-            >
-              ທັງໝົດ
-            </button>
-            {catalogCategories.map((cat) => (
-              <button
-                key={cat.code}
-                type="button"
-                onClick={() =>
-                  setCatalogCategory((cur) => (cur === cat.code ? "" : cat.code))
-                }
-                className={
-                  "pos-catalog-chip" +
-                  (catalogCategory === cat.code ? " pos-catalog-chip-on" : "")
-                }
-                title={cat.label}
-              >
-                <span className="truncate">{cat.label}</span>
-                <span className="pos-catalog-chip-count">{cat.count}</span>
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <div className="pos-catalog-body">
-          {loadingProducts ? (
-            <div className="pos-catalog-empty">ກຳລັງໂຫລດສິນຄ້າ...</div>
-          ) : catalogProducts.length === 0 ? (
-            <div className="pos-catalog-empty">ບໍ່ພົບສິນຄ້າ</div>
-          ) : (
-            <div className="pos-catalog-grid">
-              {catalogProducts.map((p) => {
-                const isSet = isAirSetProduct(p);
-                const out = p.stock <= 0 && !isSet;
-                const low = !out && p.stock > 0 && p.stock <= 5;
-                const inCartQty = cartQtyByProduct.get(p.id) ?? 0;
-                return (
-                  <button
-                    key={p.id}
-                    type="button"
-                    disabled={out}
-                    onClick={() => void addProduct(p)}
-                    className={
-                      "pos-ctile" +
-                      (inCartQty > 0 ? " pos-ctile-in" : "") +
-                      (out ? " pos-ctile-out" : "")
-                    }
-                  >
-                    <span className="pos-ctile-top">
-                      <span className="pos-ctile-cat">
-                        {productCategoryLabel(p)}
-                      </span>
-                      <span
-                        className={
-                          "pos-ctile-stock" +
-                          (out
-                            ? " is-none"
-                            : low
-                              ? " is-low"
-                              : " is-ok")
-                        }
-                      >
-                        <i aria-hidden />
-                        {isSet ? "ຊຸດ" : out ? "ໝົດ" : moneyFmt.format(p.stock)}
-                      </span>
-                    </span>
-
-                    <span className="pos-ctile-name">{p.name}</span>
-
-                    <span className="pos-ctile-meta">
-                      <span className="pos-ctile-code">{p.code}</span>
-                      {p.unitName ? (
-                        <span className="pos-ctile-unit">/ {p.unitName}</span>
-                      ) : null}
-                      {p.brand ? <span className="truncate">{p.brand}</span> : null}
-                    </span>
-
-                    <span className="pos-ctile-foot">
-                      <span className="pos-ctile-price">
-                        {moneyFmt.format(p.price)}
-                        <em>ກີບ</em>
-                      </span>
-                      {inCartQty > 0 ? (
-                        <span className="pos-ctile-qty">
-                          {moneyFmt.format(inCartQty)}
-                        </span>
-                      ) : null}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
       <div className="pos-order pos-order-left">
         <div className="pos-flow-panel">
           <div className="pos-flow-list">
