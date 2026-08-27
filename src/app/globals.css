@@ -9353,3 +9353,18 @@ a {
     font-size: 12.5px;
   }
 }
+
+/* Serial / ISN on a scanned cart line — a fact about the unit, set apart
+   from the controls beside it. */
+.pos-cline-serial {
+  flex-shrink: 0;
+  padding: 1px 7px;
+  border-radius: 6px;
+  background: var(--odoo-primary-50);
+  border: 1px solid var(--odoo-primary-200);
+  color: var(--odoo-primary-dark);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}

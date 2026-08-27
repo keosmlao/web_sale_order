@@ -94,6 +94,10 @@ type SetWarehouseAvailability = {
 };
 
 type Line = {
+  // Set when the line was added by scanning a serial number. The unit is
+  // identified, so the receipt and the picker can name it.
+  serialNo?: string | null;
+  serialIsn?: string | null;
   productId: string;
   productName: string;
   unitName: string | null;
@@ -1180,6 +1184,12 @@ function PosScreen({
   async function resolveScanAndAdd(rawCode: string) {
     const code = rawCode.trim();
     if (!code) return;
+    let serialHit: {
+      sn: string | null;
+      isn: string | null;
+      warehouseCode: string | null;
+      locationCode: string | null;
+    } | null = null;
     let product = products.find((p) => p.id === code || p.code === code) ?? null;
     if (!product) {
       setScanFeedback({ kind: "loading", text: `ກຳລັງຄົ້ນຫາ barcode ${code}...` });
@@ -1191,6 +1201,12 @@ function PosScreen({
           const data = (await res.json()) as {
             found?: boolean;
             item?: { code?: string };
+            serial?: {
+              sn: string | null;
+              isn: string | null;
+              warehouseCode: string | null;
+              locationCode: string | null;
+            } | null;
           };
           const resolved = data.found ? data.item?.code?.trim() : "";
           if (resolved) {
@@ -1198,6 +1214,7 @@ function PosScreen({
               products.find((p) => p.id === resolved || p.code === resolved) ??
               null;
           }
+          serialHit = data.serial ?? null;
         }
       } catch {
         // network hiccup — fall through to the not-found path below
@@ -1208,6 +1225,19 @@ function PosScreen({
       return;
     }
     setScanFeedback({ kind: "ok", text: `ເພີ່ມ: ${product.name}` });
+    // A serial names one unit in one place. Take that warehouse and shelf
+    // straight away rather than asking the cashier to choose — there is
+    // nothing to choose between.
+    if (serialHit?.warehouseCode) {
+      addProductWithLocation(
+        product,
+        serialHit.warehouseCode,
+        serialHit.locationCode ?? "",
+        1,
+        { serialNo: serialHit.sn, serialIsn: serialHit.isn },
+      );
+      return;
+    }
     void addProduct(product);
   }
 
@@ -1297,6 +1327,8 @@ function PosScreen({
     locationCode: string,
     locationBalance: number,
     options: {
+      serialNo?: string | null;
+      serialIsn?: string | null;
       skipPromotionBonus?: boolean;
       // When the caller is `maybeAutoAddBogoBonus`, it passes the
       // trigger's ic_code so the bonus line is tagged and locked.
@@ -1374,6 +1406,8 @@ function PosScreen({
       setDetailError: null,
       promoBonusOfCode: options.promoBonusOfCode,
       promoId: options.promoId,
+      serialNo: options.serialNo ?? null,
+      serialIsn: options.serialIsn ?? null,
     };
     const newIdx = cur.length;
     commitItems([...cur, newLine]);
@@ -2781,6 +2815,18 @@ function PosScreen({
                               </div>
                             )}
                             <div className="pos-cline-chips">
+                              {/* Scanned off a serial: name the unit. The ISN
+                                  is what the storefront's own paperwork goes
+                                  by, so it is shown for 1101; anywhere else
+                                  the serial itself is the useful handle. */}
+                              {line.serialNo || line.serialIsn ? (
+                                <span className="pos-cline-serial">
+                                  {line.warehouseCode === DEFAULT_WAREHOUSE_CODE &&
+                                  line.serialIsn
+                                    ? `ISN ${line.serialIsn}`
+                                    : `SN ${line.serialNo ?? line.serialIsn}`}
+                                </span>
+                              ) : null}
                               <div className="flex flex-col items-start gap-1">
                                 <button
                                   type="button"

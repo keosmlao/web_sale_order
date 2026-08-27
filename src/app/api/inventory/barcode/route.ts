@@ -70,6 +70,26 @@ export async function GET(request: NextRequest) {
   if (!row) {
     return NextResponse.json({ found: false });
   }
+
+  // A serial belongs to one physical unit standing in one place, so when the
+  // scan resolved through sn_inventory the caller is told where that unit
+  // is — the line must come off that warehouse, not the cart default.
+  const serialRows = await prisma.$queryRaw<
+    Array<{
+      sn: string | null;
+      isn: string | null;
+      wh_code: string | null;
+      location: string | null;
+    }>
+  >`
+    SELECT sn, isn, wh_code, location
+    FROM sn_inventory
+    WHERE sn = ${code}
+    ORDER BY updated_at DESC NULLS LAST
+    LIMIT 1
+  `;
+  const sn = serialRows[0];
+
   return NextResponse.json({
     found: true,
     item: {
@@ -78,5 +98,13 @@ export async function GET(request: NextRequest) {
       unitName: row.unit_standard_name?.trim() || null,
       salePriceKip: row.sale_price_kip ? Number(row.sale_price_kip) : 0,
     },
+    serial: sn
+      ? {
+          sn: sn.sn?.trim() || null,
+          isn: sn.isn?.trim() || null,
+          warehouseCode: sn.wh_code?.trim() || null,
+          locationCode: sn.location?.trim() || null,
+        }
+      : null,
   });
 }
