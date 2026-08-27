@@ -2641,8 +2641,16 @@ function PosScreen({
                   <div className="mt-2 text-sm font-black text-odoo-text-strong">
                     ກະຕ່າຍັງວ່າງ
                   </div>
+                  {/* The "ເພີ່ມສິນຄ້າ" button this used to point at is
+                      hidden from 1180px up, where products are tapped
+                      straight off the catalogue instead. */}
                   <div className="mt-1 text-[12px] text-odoo-text-muted">
-                    ກົດ “ເພີ່ມສິນຄ້າ” ດ້ານເທິງ ເພື່ອເລືອກສິນຄ້າ ແລະ ເລືອກສາງ/location.
+                    <span className="pos-empty-wide">
+                      ກົດສິນຄ້າທາງຊ້າຍ ຫຼື ຍິງ barcode ໄດ້ເລີຍ
+                    </span>
+                    <span className="pos-empty-narrow">
+                      ກົດ “ເພີ່ມສິນຄ້າ” ດ້ານເທິງ ຫຼື ຍິງ barcode
+                    </span>
                   </div>
                 </div>
               </div>
