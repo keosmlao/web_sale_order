@@ -2683,6 +2683,20 @@ function PosScreen({
                       priceRequests,
                       line.productId,
                     );
+                    // updateLine() clamps quantity to what the chosen
+                    // location actually holds, so on a one-in-stock item both
+                    // arrows silently did nothing and read as broken. Work the
+                    // cap out here too so the buttons can show it.
+                    const qtyLocation = line.locations.find(
+                      (loc) => loc.location === line.locationCode,
+                    );
+                    const qtyCap = line.buildFromComponents
+                      ? Math.max(1, Math.floor(line.buildableSets ?? 1))
+                      : qtyLocation
+                        ? Math.max(1, Math.floor(qtyLocation.balanceQty))
+                        : Number.POSITIVE_INFINITY;
+                    const atQtyCap = line.quantity >= qtyCap;
+                    const atQtyFloor = line.quantity <= 1;
                     return (
                       <Fragment key={`${line.productId}-${idx}`}>
                         <div
@@ -2923,7 +2937,7 @@ function PosScreen({
                                     driven by its trigger, so it stays locked. */}
                                 <button
                                   type="button"
-                                  disabled={!!line.promoBonusOfCode}
+                                  disabled={!!line.promoBonusOfCode || atQtyFloor}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     updateLine(idx, {
@@ -2932,6 +2946,7 @@ function PosScreen({
                                   }}
                                   className="pos-step-btn"
                                   aria-label="ຫຼຸດຈຳນວນ"
+                                  title={atQtyFloor ? "ຕ່ຳສຸດ 1 — ກົດ ✕ ເພື່ອລົບລາຍການ" : undefined}
                                 >
                                   −
                                 </button>
@@ -2957,13 +2972,18 @@ function PosScreen({
                                 />
                                 <button
                                   type="button"
-                                  disabled={!!line.promoBonusOfCode}
+                                  disabled={!!line.promoBonusOfCode || atQtyCap}
                                   onClick={(e) => {
                                     e.stopPropagation();
                                     updateLine(idx, { quantity: line.quantity + 1 });
                                   }}
                                   className="pos-step-btn pos-step-btn-plus"
                                   aria-label="ເພີ່ມຈຳນວນ"
+                                  title={
+                                    atQtyCap
+                                      ? `ສາງນີ້ມີພຽງ ${moneyFmt.format(qtyCap)} — ປ່ຽນສາງເພື່ອເອົາເພີ່ມ`
+                                      : undefined
+                                  }
                                 >
                                   +
                                 </button>
