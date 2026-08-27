@@ -76,6 +76,10 @@ export default function LoginForm() {
             id="password"
             name="password"
             type={showPassword ? "text" : "password"}
+            // Passwords here are numeric, so ask for the number pad. Only a
+            // keyboard hint — no `pattern`, which would add client-side
+            // validation and lock out anyone whose password is not all digits.
+            inputMode="numeric"
             autoComplete="current-password"
             required
             placeholder="ໃສ່ລະຫັດຜ່ານ"
