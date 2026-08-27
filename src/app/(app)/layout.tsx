@@ -76,18 +76,52 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   if (posOnly) {
     // POS users are the senders, not the recipients — skip the notifier
     // for them so they don't get a ping for the bill they just rang up.
+    // Two jobs, two menus. Taking the order and issuing the receipt are
+    // separate documents in the books, so the register gets a link to each
+    // instead of one screen with the receipt buried behind a row link.
+    const registerNav = [
+      {
+        href: "/cashier",
+        label: "ໃບສັ່ງຂາຍ",
+        active: pathname === "/cashier",
+        icon: (
+          <>
+            <path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V5a2 2 0 0 0-2-2h-3" />
+            <rect x="8" y="2" width="8" height="4" rx="1" />
+            <path d="M8 11h8M8 15h5" />
+          </>
+        ),
+      },
+      {
+        href: "/cashier/history",
+        label: "ໃບຮັບເງິນ",
+        active:
+          pathname.startsWith("/cashier/history") ||
+          pathname.startsWith("/cashier/receipts"),
+        icon: (
+          <>
+            <path d="M6 2h12v20l-3-2-3 2-3-2-3 2z" />
+            <path d="M9 7h6M9 11h6M9 15h3" />
+          </>
+        ),
+      },
+      {
+        href: "/reports/daily-payments",
+        label: "ສະຫຼຸບການຮັບເງິນ",
+        active: pathname.startsWith("/reports/daily-payments"),
+        icon: <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />,
+      },
+    ];
+
     return (
-      <div className="min-h-screen bg-background text-odoo-text">
-        {/* These roles get no sidebar, so their chrome is a top bar. It
-            used to be two `fixed` buttons in the corner, which floated over
-            whatever the page put at the top — on the register that was the
-            shift banner. In flow they cannot collide. The POS keeps its own
-            chrome: its shell is height:100dvh and a bar above it would push
-            the page into overflow. */}
+      <div className="min-h-screen bg-background text-odoo-text md:flex">
+        {/* The register gets its own slim sidebar. It had no desktop nav at
+            all before — just two position:fixed buttons that floated over
+            whatever the page rendered at the top. */}
         {isRegisterUser ? (
-          <header className="sticky top-0 z-40 flex h-14 items-center gap-3 border-b border-odoo-border bg-white px-3 shadow-sm sm:px-4">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-[10px] bg-odoo-primary text-[9px] font-black text-white">
+          <aside className="hidden w-[212px] shrink-0 flex-col border-r border-odoo-border bg-white md:flex md:h-screen">
+            <div className="flex items-center gap-2 px-4 py-4">
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-[11px] bg-odoo-primary text-[9px] font-black text-white">
                 ODG
               </span>
               <span className="text-sm font-black text-odoo-text-strong">
@@ -95,59 +129,91 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </span>
             </div>
 
+            <nav className="flex flex-col gap-1 px-2">
+              {registerNav.map((item) => (
+                <a
+                  key={item.href}
+                  href={item.href}
+                  className={
+                    "flex items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-[13px] font-bold transition " +
+                    (item.active
+                      ? "bg-odoo-primary text-white"
+                      : "text-odoo-text hover:bg-odoo-surface-muted")
+                  }
+                >
+                  <svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.8"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    className="h-[18px] w-[18px] shrink-0"
+                  >
+                    {item.icon}
+                  </svg>
+                  <span className="truncate">{item.label}</span>
+                </a>
+              ))}
+            </nav>
+
             <div className="flex-1" />
 
-            <a
-              href="/reports/daily-payments"
-              className="inline-flex items-center gap-2 rounded-lg border border-odoo-border bg-white px-3 py-2 text-xs font-bold text-odoo-text-strong transition hover:bg-odoo-surface-muted"
+            <div className="border-t border-odoo-border px-3 py-3">
+              <div className="mb-2 truncate px-1 text-[11px] font-bold text-odoo-text-muted">
+                {displayName}
+              </div>
+              <form action={logoutAction}>
+                <button
+                  type="submit"
+                  className="flex w-full items-center gap-2 rounded-[10px] border border-odoo-border px-3 py-2 text-[12px] font-bold text-odoo-text-strong transition hover:bg-odoo-surface-muted"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                    <path d="m16 17 5-5-5-5" />
+                    <path d="M21 12H9" />
+                  </svg>
+                  ອອກຈາກລະບົບ
+                </button>
+              </form>
+            </div>
+          </aside>
+        ) : (
+          <form action={logoutAction} className="fixed right-3 top-3 z-50">
+            <button
+              type="submit"
+              title={`${displayName} · ອອກຈາກລະບົບ`}
+              className="inline-flex items-center gap-2 rounded-md border border-odoo-border bg-white px-3 py-1.5 text-xs font-semibold text-odoo-text-strong shadow-sm transition hover:bg-odoo-surface-muted"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                <path d="M4 19V9M10 19V5M16 19v-7M22 19H2" />
+                <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                <path d="m16 17 5-5-5-5" />
+                <path d="M21 12H9" />
               </svg>
-              <span className="hidden sm:inline">ສະຫຼຸບການຮັບເງິນ</span>
-            </a>
-
-            <form action={logoutAction}>
-              <button
-                type="submit"
-                title={`${displayName} · ອອກຈາກລະບົບ`}
-                className="inline-flex items-center gap-2 rounded-lg border border-odoo-border bg-white px-3 py-2 text-xs font-bold text-odoo-text-strong transition hover:bg-odoo-surface-muted"
-              >
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-                  <path d="m16 17 5-5-5-5" />
-                  <path d="M21 12H9" />
-                </svg>
-                <span className="hidden sm:inline">{displayName}</span>
-              </button>
-            </form>
-          </header>
-        ) : (
-        <form
-          action={logoutAction}
-          className="fixed right-3 top-3 z-50"
-        >
-          <button
-            type="submit"
-            title={`${displayName} · ອອກຈາກລະບົບ`}
-            className="inline-flex items-center gap-2 rounded-md border border-odoo-border bg-white px-3 py-1.5 text-xs font-semibold text-odoo-text-strong shadow-sm transition hover:bg-odoo-surface-muted"
-          >
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
-              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
-              <path d="m16 17 5-5-5-5" />
-              <path d="M21 12H9" />
-            </svg>
-            <span className="hidden sm:inline">{displayName}</span>
-          </button>
-        </form>
+              <span className="hidden sm:inline">{displayName}</span>
+            </button>
+          </form>
         )}
-        <main className="min-h-screen pb-20 md:pb-0">{children}</main>
-        {/* POS-locked staff still get to their profile / bonus via a slim bottom bar. */}
+
+        <main className="min-w-0 flex-1 pb-20 md:h-screen md:overflow-y-auto md:pb-0">
+          {children}
+        </main>
+
         <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-odoo-border bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_10px_rgba(0,0,0,0.06)] md:hidden">
-          {/* The register user's "work" tab is the register, not the POS. */}
-          <a href={roleHome} className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-bold ${(isRegisterUser ? pathname.startsWith("/cashier") : isOnPosPath) ? "text-odoo-primary" : "text-odoo-text-muted"}`}>
-            <span className="text-lg">{isRegisterUser ? "💵" : "🛒"}</span> {isRegisterUser ? "ຮັບເງິນ" : "ຂາຍ"}
-          </a>
+          {isRegisterUser ? (
+            <>
+              <a href="/cashier" className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-bold ${pathname === "/cashier" ? "text-odoo-primary" : "text-odoo-text-muted"}`}>
+                <span className="text-lg">🧾</span> ໃບສັ່ງຂາຍ
+              </a>
+              <a href="/cashier/history" className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-bold ${pathname.startsWith("/cashier/history") || pathname.startsWith("/cashier/receipts") ? "text-odoo-primary" : "text-odoo-text-muted"}`}>
+                <span className="text-lg">💵</span> ໃບຮັບເງິນ
+              </a>
+            </>
+          ) : (
+            <a href={roleHome} className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-bold ${isOnPosPath ? "text-odoo-primary" : "text-odoo-text-muted"}`}>
+              <span className="text-lg">🛒</span> ຂາຍ
+            </a>
+          )}
           <a href="/profile" className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-bold ${pathname.startsWith("/profile") ? "text-odoo-primary" : "text-odoo-text-muted"}`}>
             <span className="text-lg">👤</span> ໂປຣໄຟລ໌
           </a>

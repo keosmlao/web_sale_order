@@ -14,7 +14,6 @@ import {
   type CurrencyCode,
   type PayMethod,
 } from "@/lib/payment";
-import ShiftBar from "./ShiftBar";
 import LowStockBanner from "./LowStockBanner";
 import OnePayWatcher from "./OnePayWatcher";
 import {
@@ -468,7 +467,6 @@ function CashierClientInner({
 
   return (
     <div className="px-4 py-5 sm:px-6 lg:px-8">
-      <ShiftBar />
       <LowStockBanner />
       <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-end sm:justify-between">
         <div>
