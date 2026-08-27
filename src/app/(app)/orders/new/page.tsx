@@ -2326,14 +2326,6 @@ function PosScreen({
 
                     <span className="pos-ctile-name">{p.name}</span>
 
-                    <span className="pos-ctile-meta">
-                      <span className="pos-ctile-code">{p.code}</span>
-                      {p.unitName ? (
-                        <span className="pos-ctile-unit">/ {p.unitName}</span>
-                      ) : null}
-                      {p.brand ? <span className="truncate">{p.brand}</span> : null}
-                    </span>
-
                     <span className="pos-ctile-foot">
                       <span className="pos-ctile-price">
                         {moneyFmt.format(p.price)}
