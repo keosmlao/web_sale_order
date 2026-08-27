@@ -44,6 +44,9 @@ import {
 // - pay_type        = 1 (cash/mixed tender)
 
 const DOC_PREFIX = "CAKAP";
+// The counter sells out of the storefront, and it is the only warehouse
+// whose serials this app issues. Everywhere else the WMS does it.
+const STOREFRONT_WAREHOUSE = "1101";
 const DEFAULT_SIDE_CODE = "200";
 
 // Caps on attached transfer-slip uploads. Cashier UI is expected to compress
@@ -1362,6 +1365,70 @@ export async function POST(request: NextRequest) {
           SET point_balance = COALESCE(point_balance, 0) + ${earnedPts}
           WHERE code = ${custCode}
         `;
+      }
+
+      // 11b. Issue the serial-tracked units out of the storefront.
+      //
+      // Nothing else does this. The WMS serial ledger has never referenced a
+      // SOK and references a CAKAP exactly once — a row somebody wrote by
+      // hand in May for CAKAP26000001. Until now a television sold over the
+      // counter stayed "ຢູ່ໃນສາງ" in the WMS for good.
+      //
+      // That hand-written row is the pattern followed here: trans_flag 44,
+      // calc_flag -1, qty 1, doc_ref pointing at the receipt, and a doc_no
+      // in the DPC{YYYY}{MM}{seq} series the WMS mints for itself.
+      //
+      // Storefront only. Every other warehouse issues serials through the
+      // WMS's own flow, and posting on their behalf would take the stock out
+      // twice.
+      const soldSerials = await tx.$queryRaw<
+        Array<{
+          item_code: string;
+          serial_number: string | null;
+          warehouse_code: string | null;
+          location_code: string | null;
+          isn: string | null;
+        }>
+      >`
+        SELECT item_code, serial_number, warehouse_code, location_code, isn
+        FROM app_order_serial
+        WHERE doc_no = ${cart.doc_no}
+          AND warehouse_code = ${STOREFRONT_WAREHOUSE}
+          AND COALESCE(serial_number, '') <> ''
+      `;
+      if (soldSerials.length > 0) {
+        const now = new Date();
+        const dpcPrefix = `DPC${now.getFullYear()}${String(
+          now.getMonth() + 1,
+        ).padStart(2, "0")}`;
+        // Same guard the receipt number uses: serialise allocation for the
+        // month so two tills cannot mint the same DPC.
+        await tx.$executeRaw`
+          SELECT pg_advisory_xact_lock(hashtext(${`DPC:${dpcPrefix}`}))
+        `;
+        const dpcSeqRows = await tx.$queryRaw<Array<{ next_seq: number }>>`
+          SELECT COALESCE(MAX(CAST(SUBSTRING(doc_no FROM 10) AS INTEGER)), 0) + 1
+                 AS next_seq
+          FROM sn_trans_detail
+          WHERE doc_no LIKE ${`${dpcPrefix}%`}
+            AND LENGTH(doc_no) = 13
+        `;
+        const dpcNo = `${dpcPrefix}${String(
+          dpcSeqRows[0]?.next_seq ?? 1,
+        ).padStart(4, "0")}`;
+        for (const unit of soldSerials) {
+          await tx.$executeRaw`
+            INSERT INTO sn_trans_detail (
+              trans_flag, doc_no, doc_date, user_created, item_code, sn, qty,
+              calc_flag, warehouse, location, isn, doc_ref,
+              create_date_time_now
+            ) VALUES (
+              44, ${dpcNo}, CURRENT_DATE, ${userCode}, ${unit.item_code},
+              ${unit.serial_number}, 1, -1, ${unit.warehouse_code},
+              ${unit.location_code}, ${unit.isn}, ${docNo}, NOW()
+            )
+          `;
+        }
       }
 
       // 12. Settle audit row — feeds shift X/Z report, receipt history
