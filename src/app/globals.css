@@ -9315,3 +9315,20 @@ a {
   .pos-sale-rail .pos-cline-chips button:hover > span,
   .pos-sale-rail .pos-cline-chips button:hover { color: var(--odoo-primary) !important; }
 }
+
+/* Last of the vertical slack between the three bands: the row gap goes to
+   zero and each band carries only its own leading. */
+@media (min-width: 1180px) {
+  .pos-sale-rail .pos-cline {
+    gap: 0 10px;
+    padding: 5px 12px 6px;
+  }
+  .pos-sale-rail .pos-cline-title { line-height: 1.25; }
+  .pos-sale-rail .pos-cline-chips,
+  .pos-sale-rail .pos-cline-chips > div,
+  .pos-sale-rail .pos-cline-chips button {
+    line-height: 1.15;
+  }
+  .pos-sale-rail .pos-cline-chips { padding: 1px 0; }
+  .pos-sale-rail .pos-cline-qty { margin-top: 1px; }
+}
