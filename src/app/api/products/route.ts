@@ -119,6 +119,55 @@ async function queryCatalog(warehouseList: string): Promise<Catalog> {
   }
 
 
+
+// ── What the storefront actually holds ───────────────────────────────
+// ic_inventory.balance_qty is the total across every warehouse, so the
+// grid was offering — and counting — stock sitting in the back store and
+// the parts warehouse. The per-warehouse figure comes from SML's balance
+// function, which costs ~2.9s for one warehouse, so it is cached: the
+// shop floor does not change by the second, and add-to-cart re-checks the
+// live balance through /api/inventory/stock-balance anyway.
+type WarehouseStock = Map<string, number>;
+
+const WH_STOCK_TTL_MS = 180_000;
+const whStockCache = new Map<string, { data: WarehouseStock; expires: number }>();
+const whStockInflight = new Map<string, Promise<WarehouseStock>>();
+
+async function queryWarehouseStock(wh: string): Promise<WarehouseStock> {
+  const rows = await prisma.$queryRaw<
+    Array<{ ic_code: string; qty: string | number }>
+  >`
+    SELECT ic_code, SUM(balance_qty) AS qty
+    FROM public.sml_ic_function_stock_balance_warehouse(
+      '2099-12-31'::date, '', ${wh}
+    )
+    GROUP BY ic_code
+    HAVING SUM(balance_qty) > 0
+  `;
+  const map: WarehouseStock = new Map();
+  for (const r of rows) map.set(r.ic_code, Number(r.qty) || 0);
+  return map;
+}
+
+async function loadWarehouseStock(wh: string): Promise<WarehouseStock> {
+  const now = Date.now();
+  const hit = whStockCache.get(wh);
+  if (hit && hit.expires > now) return hit.data;
+  const pending = whStockInflight.get(wh);
+  if (pending) return pending;
+  const promise = (async () => {
+    try {
+      const data = await queryWarehouseStock(wh);
+      whStockCache.set(wh, { data, expires: Date.now() + WH_STOCK_TTL_MS });
+      return data;
+    } finally {
+      whStockInflight.delete(wh);
+    }
+  })();
+  whStockInflight.set(wh, promise);
+  return promise;
+}
+
 // ── Filtered mode ────────────────────────────────────────────────────
 // The POS used to pull the whole catalogue — 10.6k rows, ~3MB — and do the
 // searching in the browser. The grid shows 60 at a time and the quick
@@ -131,8 +180,11 @@ async function queryCatalogPage(
   q: string,
   category: string,
   limit: number,
+  storefront: string,
 ): Promise<Catalog> {
   const pattern = q ? `%${q}%` : "";
+  const whStock = await loadWarehouseStock(storefront);
+  const inStock = [...whStock.keys()];
   const products = await prisma.$queryRaw<ProductRow[]>`
       WITH min_stock AS (
         SELECT item_code, SUM(min_qty) AS minimum_stock
@@ -194,6 +246,15 @@ async function queryCatalogPage(
         -- Nothing without a price belongs in a grid whose purpose is
         -- "tap to sell". They stay in the full catalogue, so a scan of one
         -- still resolves and can say why it cannot be sold.
+        -- Only what the storefront itself holds. Air sets are exempt:
+        -- they are built from components, not stocked as a unit.
+        AND (
+          i.code = ANY(${inStock})
+          OR (
+            (i.item_category = '032' OR i.group_main = '12')
+            AND sc.ic_set_code IS NOT NULL
+          )
+        )
         AND (
           COALESCE(price.sale_price_kip, 0) > 0
           OR (
@@ -216,7 +277,12 @@ async function queryCatalogPage(
         i.code
       LIMIT ${limit}
     `;
-  return products.filter(visibleInPos).map(toProduct);
+  // Show the storefront's own count, not the company-wide one.
+  return products.filter(visibleInPos).map((row) => {
+    const mapped = toProduct(row);
+    const local = whStock.get(row.code);
+    return local === undefined ? mapped : { ...mapped, stock: local };
+  });
 }
 
 type Facet = { code: string; label: string; count: number };
@@ -347,7 +413,15 @@ export async function GET(request: NextRequest) {
     const limit = Number.isFinite(limitRaw)
       ? Math.min(Math.max(Math.floor(limitRaw), 1), 200)
       : 60;
-    const page = await queryCatalogPage(warehouseList, q, category, limit);
+    // The first configured warehouse is the storefront (the POS pins 1101).
+    const storefront = salesWarehouses[0] ?? warehouseList;
+    const page = await queryCatalogPage(
+      warehouseList,
+      q,
+      category,
+      limit,
+      storefront,
+    );
     return NextResponse.json(page, {
       headers: { "Cache-Control": "private, max-age=15" },
     });
