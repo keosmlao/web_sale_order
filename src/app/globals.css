@@ -9332,3 +9332,20 @@ a {
   .pos-sale-rail .pos-cline-chips { padding: 1px 0; }
   .pos-sale-rail .pos-cline-qty { margin-top: 1px; }
 }
+
+/* Stepper down one more step: 108×36 → 94×32. */
+@media (min-width: 1180px) {
+  .pos-sale-rail .pos-cline-qty .pos-cart-stepper {
+    height: 32px;
+    border-radius: 9px;
+    border-width: 1px;
+  }
+  .pos-sale-rail .pos-cline-qty .pos-step-btn {
+    width: 30px;
+    font-size: 15px;
+  }
+  .pos-sale-rail .pos-cline-qty .pos-qty-input {
+    width: 34px;
+    font-size: 12.5px;
+  }
+}
