@@ -396,6 +396,21 @@ const sections: NavSection[] = [
             ),
           },
           {
+            // Promotions arrive as a price sheet with a three-day window;
+            // the form takes one at a time, which is why they were never
+            // entered. This is the way they get in.
+            href: "/promotions/import",
+            label: "ນຳເຂົ້າໃບໂປຣ",
+            roles: ["head", "manager"],
+            icon: (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
+                <path d="M12 3v11" />
+                <path d="m8 10 4 4 4-4" />
+                <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+              </svg>
+            ),
+          },
+          {
             href: "/loyalty",
             label: "ສະສົມແຕ້ມ",
             icon: (

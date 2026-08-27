@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { BILL_DISCOUNT_ITEM_CODE } from "@/lib/payment";
+import { canApprovePriceRequests, roleFromEmployee } from "@/lib/roles";
 
 type RouteContext = {
   params: Promise<{ cartNumber: string }>;
@@ -45,6 +46,26 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       const cart = rows[0];
       if (!cart) {
         throw new HandledError(404, `ບໍ່ພົບກະຕ່າ ${id}`);
+      }
+      // A settled receipt is money that has already changed hands: what
+      // follows below unwinds the cash ledger, the stock movement and any
+      // loyalty points spent on it. Voiding one needs a manager and their
+      // PIN, so deleting one cannot need less — it was the same outcome
+      // through a weaker door.
+      //
+      // An unsettled order is still just a promise, and the salesperson
+      // who wrote it can drop it.
+      if ((cart.status ?? 0) === 1) {
+        const role = roleFromEmployee({
+          appRole: employee.appRole,
+          positionCode: employee.positionCode,
+        });
+        if (!canApprovePriceRequests(role)) {
+          throw new HandledError(
+            403,
+            "ບິນນີ້ຮັບເງິນແລ້ວ — ລົບໄດ້ສະເພາະຜູ້ຈັດການ",
+          );
+        }
       }
       if ((cart.status ?? 0) === 1) {
         const receiptDocNo = cart.tax_doc_no?.trim();
