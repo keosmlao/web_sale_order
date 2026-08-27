@@ -2188,7 +2188,16 @@ function PosScreen({
     transportTypes.find((t) => t.code === transportCode)?.name ?? "ຍັງບໍ່ເລືອກ";
 
   return (
-    <div className={`pos-shell2 pos-has-catalog pos-mstep-${mStep}`}>
+    <div
+      className={
+        `pos-shell2 pos-has-catalog pos-mstep-${mStep}` +
+        // Nothing in the cart, nothing to show: the rail steps aside and
+        // the catalogue takes the whole width until the first item is
+        // added. The customer is optional (walk-in) so hiding it early
+        // blocks nothing — it comes back with the sale.
+        (items.length === 0 ? " pos-cart-empty" : "")
+      }
+    >
       <header className="pos-mobile-appbar">
         <div className="pos-mobile-appbar-icon" aria-hidden>
           <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

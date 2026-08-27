@@ -9463,3 +9463,30 @@ a {
     min-height: 128px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   Empty cart — no rail
+   Between sales the rail holds a customer nobody picked yet and a total
+   of nothing, while the catalogue goes short. It stands down until the
+   first item is added and the catalogue browses at full width, six
+   tiles across instead of four.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (min-width: 1180px) {
+  .pos-shell2.pos-has-catalog.pos-cart-empty {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .pos-shell2.pos-has-catalog.pos-cart-empty .pos-sale-rail {
+    display: none;
+  }
+  .pos-shell2.pos-has-catalog.pos-cart-empty .pos-catalog-grid {
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  }
+  .pos-catalog-col {
+    /* The border belongs to the split; with no rail there is nothing to
+       divide from. */
+    transition: border-color 120ms ease;
+  }
+  .pos-shell2.pos-has-catalog.pos-cart-empty .pos-catalog-col {
+    border-right-color: transparent;
+  }
+}
