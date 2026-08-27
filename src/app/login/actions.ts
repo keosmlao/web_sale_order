@@ -2,7 +2,7 @@
 
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { counterSide, homePathForSide } from "@/lib/roles";
+import { landingPathFor } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import {
   clearSessionCookie,
@@ -16,17 +16,24 @@ import { verifyPayload } from "@/lib/line";
 export type LoginState = { error?: string };
 
 async function postLoginPath(employeeCode: string): Promise<string> {
-  const rows = await prisma.$queryRaw<Array<{ app_role: string | null }>>`
-    SELECT app_role
-    FROM app_employee_access
-    WHERE employee_code = ${employeeCode}
-      AND is_active = true
+  // position_code matters as well as app_role: hardly anyone is marked
+  // explicitly, so the salesperson landing is derived from their position.
+  const rows = await prisma.$queryRaw<
+    Array<{ app_role: string | null; position_code: string | null }>
+  >`
+    SELECT a.app_role, e.position_code
+    FROM odg_employee e
+    LEFT JOIN app_employee_access a
+      ON a.employee_code = e.employee_code AND a.is_active = true
+    WHERE e.employee_code = ${employeeCode}
     LIMIT 1
   `;
   // A 'pc' works the register, not the POS — sending both sides to
   // /orders/new landed the register user on a screen they are not allowed
   // to open, and the layout guard then had to bounce them back out.
-  return homePathForSide(counterSide({ appRole: rows[0]?.app_role ?? null }));
+  const appRole = rows[0]?.app_role ?? null;
+  const positionCode = rows[0]?.position_code ?? null;
+  return landingPathFor({ appRole, positionCode });
 }
 
 export async function loginAction(_prev: LoginState, formData: FormData): Promise<LoginState> {

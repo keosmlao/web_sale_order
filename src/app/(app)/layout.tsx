@@ -9,6 +9,7 @@ import {
   counterSide,
   isPathAllowedForSide,
   homePathForSide,
+  landingPathFor,
 } from "@/lib/roles";
 import { getHiddenMenuKeys } from "@/lib/menu-visibility";
 import Sidebar from "@/components/Sidebar";
@@ -31,7 +32,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // Selling and taking the money are separate jobs: a 'pc' works the
   // register and never the POS, a salesperson the reverse. See roles.ts.
   const side = counterSide(employee);
-  const roleHome = homePathForSide(side);
+  const roleHome = landingPathFor(employee);
   const isRegisterUser = side === "register";
   // Only redirect when we are *certain* the user is not on the POS path.
   // If x-pathname is empty (proxy didn't run, edge case during dev HMR,
@@ -46,7 +47,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // them to their screen however they arrive: a fresh login, an old
   // session, a bookmark or the app icon. Routing this at login alone only
   // fixed the first of those.
-  if (side && pathname === "/") {
+  if (pathname === "/" && roleHome !== "/") {
     redirect(roleHome);
   }
   const posAllowed =

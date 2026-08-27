@@ -196,6 +196,25 @@ export function homePathForSide(side: CounterSide | null): string {
   return "/";
 }
 
+// Where a user lands is a different question from what they are barred
+// from. Blocking stays keyed on an explicit app_role — deriving it would
+// shut the shop out of the register (see counterSide). Landing does not
+// take anything away, so it can fall back to the derived role: a
+// salesperson opens on the POS whether or not anyone has marked them one.
+export function landingPathFor(emp: {
+  appRole: string | null | undefined;
+  positionCode: string | null | undefined;
+}): string {
+  const side = counterSide(emp);
+  if (side) return homePathForSide(side);
+  // position_code 13 is the sales floor. Deliberately not
+  // roleFromPositionCode(), which reads every unrecognised code as a
+  // salesperson too — that would open the POS for the 37 people who have
+  // no position on file, including office staff.
+  if ((emp.positionCode ?? "").trim() === "13") return "/orders/new";
+  return "/";
+}
+
 // The register is off-limits to the sales floor and the POS is off-limits to
 // the register — but only once someone has actually been assigned a side.
 export function isPathAllowedForSide(
