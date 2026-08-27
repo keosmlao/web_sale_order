@@ -10,12 +10,8 @@ type Row = {
   rack: string | null;
 };
 
-// Serial-tracked units of one item standing in one warehouse.
-//
-// status tells on-hand from gone: in 1101 the 646 items carrying status-0
-// serials line up with the balance function 97% of the time, against 39%
-// for status 1. So 0 is on the shelf and 1 has left the building; only the
-// former can be sold.
+// Serial-tracked units of one item standing in one warehouse, per the WMS
+// serial ledger.
 export async function GET(request: NextRequest) {
   const employee = await getEmployeeFromRequest(request);
   if (!employee) {
@@ -29,22 +25,52 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ items: [] });
   }
 
+  // Availability comes from the WMS serial ledger, sn_trans_detail: a unit is
+  // on hand when its movements sum to something other than zero
+  // (qty × calc_flag, +1 in / −1 out). That is the rule the WMS's own
+  // wms_check_sn_status view applies — the view hard-codes warehouse 1404, so
+  // the rule is reused rather than the view.
+  //
+  // This matters. Against sn_inventory.status, which is what this endpoint
+  // used first, the two answers agree on only 99 of about 700 serials in
+  // 1101. The ledger is the one the WMS itself trusts.
+  //
+  // The ledger's own isn/location/rack are often blank, so those come from
+  // sn_inventory wherever the ledger has none.
   const rows = await prisma.$queryRaw<Row[]>`
-    SELECT sn, isn, location, rack
-    FROM sn_inventory
-    WHERE item_code = ${code}
-      AND COALESCE(status, 0) = 0
-      AND COALESCE(qty, 0) > 0
-      AND (${warehouse} = '' OR wh_code = ${warehouse})
-    ORDER BY COALESCE(NULLIF(isn, ''), sn)
+    WITH onhand AS (
+      SELECT
+        sn,
+        (array_agg(isn ORDER BY roworder DESC))[1] AS isn,
+        (array_agg(location ORDER BY roworder DESC))[1] AS location,
+        (array_agg(rack ORDER BY roworder DESC))[1] AS rack
+      FROM sn_trans_detail
+      WHERE item_code = ${code}
+        AND (${warehouse} = '' OR warehouse = ${warehouse})
+        AND COALESCE(sn, '') <> ''
+      GROUP BY sn
+      HAVING SUM(qty * calc_flag::numeric) <> 0
+    )
+    SELECT
+      o.sn,
+      COALESCE(NULLIF(o.isn, ''), i.isn) AS isn,
+      COALESCE(NULLIF(o.location, ''), i.location) AS location,
+      COALESCE(NULLIF(o.rack, ''), i.rack) AS rack
+    FROM onhand o
+    LEFT JOIN LATERAL (
+      SELECT isn, location, rack
+      FROM sn_inventory s
+      WHERE s.sn = o.sn
+      ORDER BY s.updated_at DESC NULLS LAST
+      LIMIT 1
+    ) i ON true
+    ORDER BY COALESCE(NULLIF(o.isn, ''), i.isn, o.sn)
     LIMIT 500
   `;
 
   return NextResponse.json({
-    // Some units carry an ISN with no SN. They are still one identifiable
-    // unit on the shelf, so a row counts as long as it has either.
     items: rows
-      .filter((r) => ((r.sn ?? "").trim() || (r.isn ?? "").trim()) !== "")
+      .filter((r) => (r.sn ?? "").trim() !== "")
       .map((r) => ({
         sn: (r.sn ?? "").trim(),
         isn: (r.isn ?? "").trim() || null,

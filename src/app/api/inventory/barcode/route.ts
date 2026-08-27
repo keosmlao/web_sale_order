@@ -74,6 +74,11 @@ export async function GET(request: NextRequest) {
   // A serial belongs to one physical unit standing in one place, so when the
   // scan resolved through sn_inventory the caller is told where that unit
   // is — the line must come off that warehouse, not the cart default.
+  // Where the unit is comes from the WMS serial ledger — the warehouse whose
+  // movements still net out non-zero is the one holding it. sn_inventory is
+  // only consulted for the ISN and shelf, which the ledger usually leaves
+  // blank; the two disagree about location often enough that the ledger has
+  // to win.
   const serialRows = await prisma.$queryRaw<
     Array<{
       sn: string | null;
@@ -82,10 +87,33 @@ export async function GET(request: NextRequest) {
       location: string | null;
     }>
   >`
-    SELECT sn, isn, wh_code, location
-    FROM sn_inventory
-    WHERE sn = ${code}
-    ORDER BY updated_at DESC NULLS LAST
+    WITH onhand AS (
+      SELECT
+        warehouse AS wh_code,
+        (array_agg(isn ORDER BY roworder DESC))[1] AS isn,
+        (array_agg(location ORDER BY roworder DESC))[1] AS location
+      FROM sn_trans_detail
+      WHERE sn = ${code}
+      GROUP BY warehouse
+      HAVING SUM(qty * calc_flag::numeric) <> 0
+      LIMIT 1
+    ),
+    fallback AS (
+      SELECT wh_code, isn, location
+      FROM sn_inventory
+      WHERE sn = ${code}
+      ORDER BY updated_at DESC NULLS LAST
+      LIMIT 1
+    )
+    SELECT
+      ${code} AS sn,
+      COALESCE(NULLIF(o.isn, ''), f.isn) AS isn,
+      COALESCE(o.wh_code, f.wh_code) AS wh_code,
+      COALESCE(NULLIF(o.location, ''), f.location) AS location
+    FROM (SELECT 1) x
+    LEFT JOIN onhand o ON true
+    LEFT JOIN fallback f ON true
+    WHERE COALESCE(o.wh_code, f.wh_code) IS NOT NULL
     LIMIT 1
   `;
   const sn = serialRows[0];
