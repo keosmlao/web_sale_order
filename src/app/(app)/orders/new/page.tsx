@@ -2016,6 +2016,11 @@ function PosScreen({
             // it per line when the cart actually mixes transports; a bill
             // where every line shares one transport is unchanged.
             transportCode: effectiveTransportForWh(it.warehouseCode) || undefined,
+            // The unit that left the shelf, when the line was added by
+            // scanning a serial. Kept with the bill so a warranty claim or a
+            // return can be tied back to it.
+            serialNo: it.serialNo || undefined,
+            serialIsn: it.serialIsn || undefined,
           })),
         }),
       });

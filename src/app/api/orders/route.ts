@@ -103,6 +103,10 @@ type IncomingItem = {
   // here it wins over the cart-level salespersonCode for that line's
   // ic_trans_detail.sale_code; absent → fall back to cart-level.
   salespersonCode: string | null;
+  // The serial-tracked unit the line is taking, when there is one. Recorded
+  // in app_order_serial once the document number exists.
+  serialNo?: string | null;
+  serialIsn?: string | null;
   // Optional per-line transport type (transport_type.code). Set by the POS
   // when a cart is dispatched from several warehouses and each warehouse
   // ships differently. Recorded in ic_trans_detail.remark per line only when
@@ -251,6 +255,18 @@ function normalizeItems(rawItems: unknown[], fallbackWarehouseCode: string | nul
         typeof (i as { transportCode?: unknown }).transportCode === "string" &&
         (i as { transportCode: string }).transportCode.trim() !== ""
           ? (i as { transportCode: string }).transportCode.trim().slice(0, 25)
+          : null,
+      // Which physical unit this line is taking, when the goods are serial
+      // tracked and the cashier picked one.
+      serialNo:
+        typeof (i as { serialNo?: unknown }).serialNo === "string" &&
+        (i as { serialNo: string }).serialNo.trim() !== ""
+          ? (i as { serialNo: string }).serialNo.trim().slice(0, 80)
+          : null,
+      serialIsn:
+        typeof (i as { serialIsn?: unknown }).serialIsn === "string" &&
+        (i as { serialIsn: string }).serialIsn.trim() !== ""
+          ? (i as { serialIsn: string }).serialIsn.trim().slice(0, 80)
           : null,
     }))
     .filter((i) => i.productId.length > 0 && i.quantity > 0);
@@ -1485,6 +1501,27 @@ export async function POST(request: NextRequest) {
     await tx.appOrderSource.create({
       data: { cartNumber: cartId, docNo: sokDocNo, source: orderSource },
     });
+
+    // Which physical unit each serial-tracked line took. Inside the same
+    // transaction as the document itself, so a bill can never exist with
+    // its serials missing — for a warranty claim or a return, the number on
+    // the box is the only thing tying the customer to this line.
+    const serialLines = items.filter((i) => i.serialNo || i.serialIsn);
+    if (serialLines.length > 0) {
+      for (const [idx, line] of serialLines.entries()) {
+        await tx.$executeRaw`
+          INSERT INTO app_order_serial (
+            doc_no, line_number, item_code, serial_number, isn,
+            warehouse_code, location_code, created_by
+          ) VALUES (
+            ${sokDocNo}, ${idx + 1}, ${line.productId},
+            ${line.serialNo ?? null}, ${line.serialIsn ?? null},
+            ${line.warehouseCode}, ${line.locationCode},
+            ${employee.employeeCode ?? ""}
+          )
+        `;
+      }
+    }
 
     const cartProductIds = new Set(items.map((i) => i.productId));
     for (const pr of priceRequests) {
