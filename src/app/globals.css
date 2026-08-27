@@ -8014,3 +8014,108 @@ a {
     font-size: 11px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   POS: sidebar collapses to an icon rail
+   The sale needs three columns (catalogue / cart / checkout). At 264px
+   the sidebar squeezed all three down to their minimum widths, so names
+   wrapped to three lines and the category chips ran off the edge. On
+   /orders/new only, the rail drops to 72px and hands ~190px back.
+   Everything stays reachable — icons keep their title/aria labels.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (min-width: 768px) {
+  .pos-compact-nav .sbd-shell {
+    width: 72px;
+  }
+  .pos-compact-nav .sbd-inner {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* Brand: keep the mark, drop the wordmark. */
+  .pos-compact-nav .sbd-brand {
+    justify-content: center;
+    margin: 0 8px;
+    padding: 0 0 14px;
+    gap: 0;
+  }
+  .pos-compact-nav .sbd-brand-text { display: none; }
+
+  /* Nav items become square icon buttons. */
+  .pos-compact-nav .sbd-nav { padding-left: 8px; padding-right: 8px; }
+  .pos-compact-nav .sbd-section-label { display: none; }
+  .pos-compact-nav .sbd-item {
+    justify-content: center;
+    gap: 0;
+    min-height: 46px;
+    padding: 9px 0;
+    border-radius: 12px;
+  }
+  .pos-compact-nav .sbd-item-label,
+  .pos-compact-nav .sbd-item-chevron,
+  .pos-compact-nav .sbd-item-dot { display: none; }
+
+  /* Collapsed groups can't show a submenu in 72px — the group button
+     still opens the section on the full-width pages. */
+  .pos-compact-nav .sbd-sub { display: none; }
+
+  /* Footer: avatar only, logout as an icon button. */
+  .pos-compact-nav .sbd-foot { padding-left: 8px; padding-right: 8px; }
+  .pos-compact-nav .sbd-user { justify-content: center; gap: 0; }
+  .pos-compact-nav .sbd-user-text { display: none; }
+  .pos-compact-nav .sbd-logout {
+    justify-content: center;
+    gap: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .pos-compact-nav .sbd-logout span { display: none; }
+}
+
+/* ── Catalogue tiles: fit the column instead of fighting it ──────────
+   Long Lao product names were taking three lines and pushing the price
+   row into a wrap ("12,990,000 ກີບ /" then "ໜ່ວຍ"). Name is capped at
+   two lines and the unit moves up to the code line, which has room. */
+.pos-ctile-name {
+  -webkit-line-clamp: 2;
+}
+.pos-ctile-foot {
+  flex-wrap: nowrap;
+}
+.pos-ctile-price {
+  white-space: nowrap;
+}
+.pos-ctile-unit {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--odoo-text-soft);
+}
+
+/* Category names are long ("ອາໄຫຼ່ ອຸປະກອນ ເຄື່ອງມື"). Truncate the label
+   and keep the count pinned, so a chip can never run past the column. */
+.pos-catalog-chip {
+  max-width: 158px;
+  overflow: hidden;
+  font-size: 12px;
+  padding: 0 12px;
+}
+.pos-catalog-chip > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pos-catalog-chip-count {
+  flex-shrink: 0;
+}
+
+/* With the rail reclaimed there is room to let the catalogue breathe. */
+@media (min-width: 1180px) {
+  .pos-shell2.pos-has-catalog {
+    grid-template-columns:
+      minmax(380px, 1.05fr)
+      minmax(430px, 1fr)
+      minmax(340px, 400px);
+  }
+}

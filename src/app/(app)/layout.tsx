@@ -86,7 +86,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   }
 
   return (
-    <div className="min-h-screen bg-background text-odoo-text md:flex">
+    <div
+      className={
+        "min-h-screen bg-background text-odoo-text md:flex" +
+        // POS needs every pixel for its three columns (catalogue / cart /
+        // checkout). On that route the sidebar collapses to an icon rail,
+        // giving the sale back ~190px. Nav is still one tap away.
+        (isOnPosPath ? " pos-compact-nav" : "")
+      }
+    >
       {/* Desktop: sidebar. Mobile: hidden entirely (no drawer / no top bar) — the
           bottom navigation + profile page replace it. */}
       <div className="hidden md:contents">
