@@ -39,6 +39,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const isOnPosPath =
     pathname === "/orders/new" || pathname.startsWith("/orders/new/");
   // POS-locked staff may also open their own profile + bonus/sales views.
+  // A user assigned to one side of the counter has exactly one work
+  // screen, and the shared dashboard is not it — they also get no sidebar
+  // on desktop, so landing on "/" leaves them with nothing to click. Send
+  // them to their screen however they arrive: a fresh login, an old
+  // session, a bookmark or the app icon. Routing this at login alone only
+  // fixed the first of those.
+  if (side && pathname === "/") {
+    redirect(roleHome);
+  }
   const posAllowed =
     !pathname ||
     (isSelfServePath(pathname) && isPathAllowedForSide(side, pathname));
