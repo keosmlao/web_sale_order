@@ -260,8 +260,6 @@ function PosScreen({
   // product picker seeded with the query; a barcode-looking value is added
   // straight to the cart.
   const [quickSearch, setQuickSearch] = useState("");
-  // Category filter for the always-on catalogue column (≥1180px). Empty = all.
-  const [catalogCategory, setCatalogCategory] = useState("");
 
   // Barcode scanning. A USB/Bluetooth scanner behaves like a keyboard that
   // types the code in a tight burst and ends with Enter. We buffer keystrokes
@@ -751,31 +749,6 @@ function PosScreen({
   // catalogue over the wire to pick those was the page's main cost.
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [catalogBusy, setCatalogBusy] = useState(true);
-  const [catalogCategories, setCatalogCategories] = useState<
-    Array<{ code: string; label: string; count: number }>
-  >([]);
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/products?facets=1");
-        if (!res.ok) return;
-        const data = (await res.json()) as Array<{
-          code: string;
-          label: string;
-          count: number;
-        }>;
-        if (!cancelled) setCatalogCategories(data);
-      } catch {
-        // chips are a convenience — search still works without them
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   useEffect(() => {
     if (!warehouseCode) return;
     let cancelled = false;
@@ -788,7 +761,6 @@ function PosScreen({
             const params = new URLSearchParams({
               warehouses: salesWarehouses.join(","),
               q: quickSearch.trim(),
-              category: catalogCategory,
               limit: "60",
             });
             const res = await fetch(`/api/products?${params.toString()}`);
@@ -808,7 +780,7 @@ function PosScreen({
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [warehouseCode, salesWarehouses, quickSearch, catalogCategory]);
+  }, [warehouseCode, salesWarehouses, quickSearch]);
 
   // The inline dropdown shows the first few of the same server result.
   const quickResults = useMemo(
@@ -2273,35 +2245,6 @@ function PosScreen({
               ພ້ອມຍິງ
             </span>
           </form>
-          <div className="pos-catalog-chips">
-            <button
-              type="button"
-              onClick={() => setCatalogCategory("")}
-              className={
-                "pos-catalog-chip" +
-                (catalogCategory === "" ? " pos-catalog-chip-on" : "")
-              }
-            >
-              ທັງໝົດ
-            </button>
-            {catalogCategories.map((cat) => (
-              <button
-                key={cat.code}
-                type="button"
-                onClick={() =>
-                  setCatalogCategory((cur) => (cur === cat.code ? "" : cat.code))
-                }
-                className={
-                  "pos-catalog-chip" +
-                  (catalogCategory === cat.code ? " pos-catalog-chip-on" : "")
-                }
-                title={cat.label}
-              >
-                <span className="truncate">{shortCategoryLabel(cat.label)}</span>
-                <span className="pos-catalog-chip-count">{cat.count}</span>
-              </button>
-            ))}
-          </div>
         </div>
 
         <div className="pos-catalog-body">
@@ -2309,7 +2252,56 @@ function PosScreen({
             <div className="pos-catalog-empty">ກຳລັງໂຫລດສິນຄ້າ...</div>
           ) : catalogProducts.length === 0 ? (
             <div className="pos-catalog-empty">ບໍ່ພົບສິນຄ້າ</div>
+          ) : !quickSearch.trim() ? (
+            // Browsing: cards. Nothing is being looked for, so the eye
+            // scans shapes and prices rather than reading a list.
+            <div className="pos-catalog-grid">
+              {catalogProducts.map((p) => {
+                const isSet = isAirSetProduct(p);
+                const out = p.stock <= 0 && !isSet;
+                const low = !out && p.stock > 0 && p.stock <= 5;
+                const inCartQty = cartQtyByProduct.get(p.id) ?? 0;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={out}
+                    onClick={() => void addProduct(p)}
+                    className={
+                      "pos-ctile" +
+                      (inCartQty > 0 ? " pos-ctile-in" : "") +
+                      (out ? " pos-ctile-out" : "")
+                    }
+                  >
+                    <span className="pos-ctile-name">{p.name}</span>
+                    <span className="pos-ctile-foot">
+                      <span className="pos-ctile-price">
+                        {moneyFmt.format(p.price)}
+                        <em>ກີບ</em>
+                      </span>
+                      {inCartQty > 0 ? (
+                        <span className="pos-ctile-qty">
+                          {moneyFmt.format(inCartQty)}
+                        </span>
+                      ) : (
+                        <span
+                          className={
+                            "pos-ctile-stock" +
+                            (out ? " is-none" : low ? " is-low" : " is-ok")
+                          }
+                        >
+                          <i aria-hidden />
+                          {isSet ? "ຊຸດ" : out ? "ໝົດ" : moneyFmt.format(p.stock)}
+                        </span>
+                      )}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
           ) : (
+            // Searching: a list. The answer is being compared against a
+            // query, and names read faster in a column than in boxes.
             <table className="pos-catalog-table">
               <thead>
                 <tr>
