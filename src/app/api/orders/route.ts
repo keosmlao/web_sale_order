@@ -7,7 +7,7 @@ import { STOCK_BALANCE_AS_OF_DATE } from "@/lib/inventory-config";
 import { notifyByRole } from "@/lib/notify";
 import { publishNewOrder } from "@/lib/order-events";
 import { parseOrderRemark } from "@/lib/order-remark";
-import { canBeSalesperson, roleFromEmployee } from "@/lib/roles";
+import { canBeSalesperson, roleFromEmployee, counterSide } from "@/lib/roles";
 import { applyPromotions } from "@/lib/promotions-engine";
 
 const DEFAULT_SIDE_CODE = "200";
@@ -439,6 +439,14 @@ export async function POST(request: NextRequest) {
   const employee = await getEmployeeFromRequest(request);
   if (!employee) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  // The other half of the split enforced in cashier/settle: whoever works
+  // the register does not raise bills.
+  if (counterSide(employee) === "register") {
+    return NextResponse.json(
+      { error: "ຜູ້ຮັບເງິນສ້າງບິນຂາຍບໍ່ໄດ້ — ຕ້ອງໃຫ້ພະນັກງານຂາຍເປັນຄົນເຮັດ" },
+      { status: 403 },
+    );
   }
 
   const body = (await request.json().catch(() => null)) as

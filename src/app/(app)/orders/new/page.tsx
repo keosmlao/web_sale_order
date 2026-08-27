@@ -2304,400 +2304,373 @@ function PosScreen({
         </div>
       </div>
 
-      <div className="pos-order pos-order-left">
-        <div className="pos-flow-panel">
-          <div className="pos-flow-list">
-            {/* Tappable wizard steps. On mobile only the active step's segment is
-                visible (pos-mstep-* CSS); on desktop everything shows anyway, so
-                tapping just moves the highlight. */}
-            <button
-              type="button"
-              onClick={() => setMStep(1)}
-              className={
-                "pos-step-card " +
-                (mStep === 1 ? "pos-step-active" : customer ? "pos-step-done" : "")
-              }
-            >
-              <span className="pos-step-badge">1</span>
-              <div className="min-w-0">
-                <div className="pos-step-title">ລູກຄ້າ</div>
-                <div className="pos-step-text">
-                  {customer ? customer.name : "ຂ້າມໄດ້ (walk-in)"}
+      {/* One sale rail: cart and checkout share a column, so the screen is
+          two panes (catalogue | sale) instead of three. The middle column
+          used to sit empty whenever the cart was. */}
+      <div className="pos-sale-rail">
+        <div className="pos-order pos-order-left">
+          <div className="pos-flow-panel">
+            <div className="pos-flow-list">
+              {/* Tappable wizard steps. On mobile only the active step's segment is
+                  visible (pos-mstep-* CSS); on desktop everything shows anyway, so
+                  tapping just moves the highlight. */}
+              <button
+                type="button"
+                onClick={() => setMStep(1)}
+                className={
+                  "pos-step-card " +
+                  (mStep === 1 ? "pos-step-active" : customer ? "pos-step-done" : "")
+                }
+              >
+                <span className="pos-step-badge">1</span>
+                <div className="min-w-0">
+                  <div className="pos-step-title">ລູກຄ້າ</div>
+                  <div className="pos-step-text">
+                    {customer ? customer.name : "ຂ້າມໄດ້ (walk-in)"}
+                  </div>
                 </div>
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => setMStep(2)}
-              className={
-                "pos-step-card " +
-                (mStep === 2 ? "pos-step-active" : items.length > 0 ? "pos-step-done" : "")
-              }
-            >
-              <span className="pos-step-badge">2</span>
-              <div className="min-w-0">
-                <div className="pos-step-title">ສິນຄ້າ</div>
-                <div className="pos-step-text">
-                  {items.length > 0
-                    ? `${items.length} ລາຍການ · ${moneyFmt.format(totalQty)} ${totalQtyUnit}`
-                    : "ຄົ້ນຫາ / ສະແກນ ເພີ່ມສິນຄ້າ"}
+              </button>
+              <button
+                type="button"
+                onClick={() => setMStep(2)}
+                className={
+                  "pos-step-card " +
+                  (mStep === 2 ? "pos-step-active" : items.length > 0 ? "pos-step-done" : "")
+                }
+              >
+                <span className="pos-step-badge">2</span>
+                <div className="min-w-0">
+                  <div className="pos-step-title">ສິນຄ້າ</div>
+                  <div className="pos-step-text">
+                    {items.length > 0
+                      ? `${items.length} ລາຍການ · ${moneyFmt.format(totalQty)} ${totalQtyUnit}`
+                      : "ຄົ້ນຫາ / ສະແກນ ເພີ່ມສິນຄ້າ"}
+                  </div>
                 </div>
-              </div>
-            </button>
-            <button
-              type="button"
-              onClick={() => items.length > 0 && setMStep(3)}
-              className={
-                "pos-step-card " +
-                (mStep === 3
-                  ? "pos-step-active"
-                  : items.length === 0
-                    ? "pos-step-disabled"
-                    : "")
-              }
-            >
-              <span className="pos-step-badge">3</span>
-              <div className="min-w-0">
-                <div className="pos-step-title">ສະຫຼຸບ</div>
-                <div className="pos-step-text">
-                  ກວດ ແລະ ສົ່ງບິນ
+              </button>
+              <button
+                type="button"
+                onClick={() => items.length > 0 && setMStep(3)}
+                className={
+                  "pos-step-card " +
+                  (mStep === 3
+                    ? "pos-step-active"
+                    : items.length === 0
+                      ? "pos-step-disabled"
+                      : "")
+                }
+              >
+                <span className="pos-step-badge">3</span>
+                <div className="min-w-0">
+                  <div className="pos-step-title">ສະຫຼຸບ</div>
+                  <div className="pos-step-text">
+                    ກວດ ແລະ ສົ່ງບິນ
+                  </div>
                 </div>
-              </div>
-            </button>
-          </div>
-        </div>
-        <div className="pos-order-header">
-          <div className="pos-order-title">
-            <div>
-              <div className="text-base font-bold text-odoo-text-strong">ກະຕ່າຂາຍ</div>
-            </div>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <span className="odoo-pill odoo-pill-muted">
-                {items.length} ລາຍການ · {moneyFmt.format(totalQty)} {totalQtyUnit}
-              </span>
+              </button>
             </div>
           </div>
-          {customer ? (
-            <button
-              type="button"
-              onClick={() => {
-                setCustomerOpen(true);
-                setCustomerQuery("");
-              }}
-              className="pos-customer-card"
-            >
-              <div className="min-w-0">
-                <div className="text-[10px] font-bold uppercase tracking-widest text-odoo-primary">
-                  ລູກຄ້າ
-                </div>
-                <div className="mt-0.5 truncate font-bold text-odoo-text-strong">
-                  {customer.name}
-                </div>
-                <div className="font-mono text-[11px] text-odoo-text-muted">
-                  {customer.id}
-                  {customer.phone ? ` · ${customer.phone}` : ""}
-                </div>
+          <div className="pos-order-header">
+            <div className="pos-order-title">
+              <div>
+                <div className="text-base font-bold text-odoo-text-strong">ກະຕ່າຂາຍ</div>
               </div>
-              {customer.discountPct > 0 ? (
-                <span className="odoo-pill odoo-pill-success">
-                  −{customer.discountPct}%
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <span className="odoo-pill odoo-pill-muted">
+                  {items.length} ລາຍການ · {moneyFmt.format(totalQty)} {totalQtyUnit}
                 </span>
-              ) : null}
-              <span className="odoo-pill odoo-pill-muted">
-                {moneyFmt.format(customer.pointBalance ?? 0)} ແຕ້ມ
-              </span>
-            </button>
-          ) : (
-            <div className="flex flex-wrap items-center gap-2">
+              </div>
+            </div>
+            {customer ? (
               <button
                 type="button"
                 onClick={() => {
                   setCustomerOpen(true);
                   setCustomerQuery("");
                 }}
-                className="pos-customer-empty flex-1"
+                className="pos-customer-card"
               >
-                + ເລືອກລູກຄ້າ (ສະມາຊິກ)
+                <div className="min-w-0">
+                  <div className="text-[10px] font-bold uppercase tracking-widest text-odoo-primary">
+                    ລູກຄ້າ
+                  </div>
+                  <div className="mt-0.5 truncate font-bold text-odoo-text-strong">
+                    {customer.name}
+                  </div>
+                  <div className="font-mono text-[11px] text-odoo-text-muted">
+                    {customer.id}
+                    {customer.phone ? ` · ${customer.phone}` : ""}
+                  </div>
+                </div>
+                {customer.discountPct > 0 ? (
+                  <span className="odoo-pill odoo-pill-success">
+                    −{customer.discountPct}%
+                  </span>
+                ) : null}
+                <span className="odoo-pill odoo-pill-muted">
+                  {moneyFmt.format(customer.pointBalance ?? 0)} ແຕ້ມ
+                </span>
               </button>
-              <div className="text-[11px] text-odoo-text-muted">
-                ບໍ່ບັງຄັບ — ຖ້າບໍ່ເລືອກຈະຂາຍແບບ walk-in (ບໍ່ໄດ້ສ່ວນຫຼຸດ/ແຕ້ມ)
-              </div>
-            </div>
-          )}
-          <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-odoo-text-muted">
-            <span className="truncate">
-              ຜູ້ຂາຍ: {salespersonName}
-            </span>
-            {selectedLine ? (
-              <span className="shrink-0 font-mono">
-                ເລືອກ #{selectedLineIdx !== null ? selectedLineIdx + 1 : ""}
-              </span>
-            ) : null}
-          </div>
-        </div>
-
-        <form
-          className="pos-search-bar"
-          onSubmit={(e) => {
-            e.preventDefault();
-            submitQuickSearch();
-          }}
-        >
-          <span className="pos-search-bar-icon" aria-hidden>
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="11" cy="11" r="7" />
-              <path d="m20 20-3-3" />
-            </svg>
-          </span>
-          <input
-            type="text"
-            inputMode="search"
-            value={quickSearch}
-            onChange={(e) => setQuickSearch(e.target.value)}
-            placeholder="ຄົ້ນຫາສິນຄ້າ / barcode / ລະຫັດ..."
-            className="pos-search-bar-input"
-            aria-label="ຄົ້ນຫາສິນຄ້າ"
-          />
-          {quickSearch ? (
-            <button
-              type="button"
-              onClick={() => setQuickSearch("")}
-              className="pos-search-bar-clear"
-              aria-label="ລຶບ"
-            >
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 6 6 18M6 6l12 12" />
-              </svg>
-            </button>
-          ) : null}
-          <button type="submit" className="pos-search-bar-btn">
-            ຄົ້ນຫາ
-          </button>
-        </form>
-
-        {/* Inline live results — tap to add straight to the cart (search-first
-            flow). Appears only while typing; the picker modal + scanner still
-            work as before. */}
-        {quickSearch.trim() && quickResults.length > 0 ? (
-          <div className="pos-quick-results" role="listbox">
-            {quickResults.map((p) => {
-              const out = p.stock <= 0 && !isAirSetProduct(p);
-              return (
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
                 <button
-                  key={p.id}
                   type="button"
-                  disabled={out}
                   onClick={() => {
-                    void addProduct(p);
-                    setQuickSearch("");
+                    setCustomerOpen(true);
+                    setCustomerQuery("");
                   }}
-                  className="pos-quick-result"
+                  className="pos-customer-empty flex-1"
                 >
-                  <div className="min-w-0">
-                    <div className="pos-quick-result-name">{p.name}</div>
-                    <div className="pos-quick-result-meta">
-                      <span className="font-mono">{p.code}</span>
-                      {p.brand ? <span>{p.brand}</span> : null}
-                      {isAirSetProduct(p) ? (
-                        <span className="pos-unit-badge">ຊຸດ</span>
-                      ) : null}
-                    </div>
-                  </div>
-                  <div className="pos-quick-result-right">
-                    <span
-                      className={
-                        "pos-quick-result-stock" + (out ? " is-out" : "")
-                      }
-                    >
-                      {isAirSetProduct(p)
-                        ? "ຊຸດ"
-                        : out
-                          ? "ໝົດ"
-                          : `stock ${moneyFmt.format(p.stock)}`}
-                    </span>
-                    <span className="pos-quick-result-price font-mono">
-                      {moneyFmt.format(p.price)}
-                    </span>
-                  </div>
+                  + ເລືອກລູກຄ້າ (ສະມາຊິກ)
                 </button>
-              );
-            })}
-          </div>
-        ) : null}
-
-        <div className="pos-add-bar">
-          <button
-            type="button"
-            onClick={openProductPicker}
-            disabled={loadingProducts}
-            className="pos-add-big"
-          >
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M12 5v14" />
-              <path d="M5 12h14" />
-            </svg>
-            <span>
-              {loadingProducts ? "ກຳລັງໂຫລດສິນຄ້າ..." : "ເພີ່ມສິນຄ້າ"}
-            </span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setPromoListOpen(true)}
-            className="pos-promo-chip pos-add-promo"
-            title="ໂປຣໂມຊັນ"
-          >
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M20.59 13.41 13 21l-9-9V4h8l8.59 8.59a2 2 0 0 1 0 2.82Z" />
-              <circle cx="8" cy="8" r="1.5" />
-            </svg>
-            <span>ໂປຣ</span>
-            {currentPromotions.length > 0 ? (
-              <span className="pos-promo-chip-count">{currentPromotions.length}</span>
-            ) : null}
-          </button>
-          <div className="pos-scan-hint" title="ຍິງ barcode ໄດ້ເລີຍ — ບໍ່ຕ້ອງກົດຫຍັງ">
-            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-              <path d="M3 5v14M7 5v14M11 5v14M15 5v14M19 5v14" />
-            </svg>
-            <span>ພ້ອມຍິງ barcode</span>
-          </div>
-        </div>
-
-        <div className="pos-order-lines m-3 rounded-2xl border border-slate-200 bg-white shadow-sm">
-          {items.length === 0 ? (
-            <div className="pos-cart-empty">
-              <div className="pos-cart-empty-inner">
-                <div className="pos-cart-empty-icon" aria-hidden>
-                  <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="9" cy="21" r="1" />
-                    <circle cx="20" cy="21" r="1" />
-                    <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
-                  </svg>
-                </div>
-                <div className="mt-2 text-sm font-black text-odoo-text-strong">
-                  ກະຕ່າຍັງວ່າງ
-                </div>
-                <div className="mt-1 text-[12px] text-odoo-text-muted">
-                  ກົດ “ເພີ່ມສິນຄ້າ” ດ້ານເທິງ ເພື່ອເລືອກສິນຄ້າ ແລະ ເລືອກສາງ/location.
+                <div className="text-[11px] text-odoo-text-muted">
+                  ບໍ່ບັງຄັບ — ຖ້າບໍ່ເລືອກຈະຂາຍແບບ walk-in (ບໍ່ໄດ້ສ່ວນຫຼຸດ/ແຕ້ມ)
                 </div>
               </div>
+            )}
+            <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-odoo-text-muted">
+              <span className="truncate">
+                ຜູ້ຂາຍ: {salespersonName}
+              </span>
+              {selectedLine ? (
+                <span className="shrink-0 font-mono">
+                  ເລືອກ #{selectedLineIdx !== null ? selectedLineIdx + 1 : ""}
+                </span>
+              ) : null}
             </div>
-          ) : (
-            <div className="pos-clines">
-                {items.map((line, idx) => {
-                  const selected = selectedLineIdx === idx;
-                  const pricing = linePricing[idx];
-                  // Classify the line so cashier can tell at a glance which
-                  // item is being sold (with or without a promo price) vs.
-                  // which one is being given away for free. The engine
-                  // already does the math; we just read amount/discount to
-                  // tag the line.
-                  const hasPromo = !!pricing && !!pricing.promoLabel;
-                  const isFreeBonus =
-                    hasPromo &&
-                    pricing.gross > 0 &&
-                    pricing.amount === 0 &&
-                    pricing.promoDiscount >= pricing.gross;
-                  const isPromoSold = hasPromo && !isFreeBonus;
-                  // Per-line discount (member % + promo) = full value minus
-                  // the net the engine resolved. Surfaced in its own column
-                  // so the cashier sees price → discount → net per item.
-                  const lineDiscount = pricing
-                    ? Math.max(0, pricing.gross - pricing.amount)
-                    : 0;
-                  // Whether this product is flagged for a special-price
-                  // request (awaiting manager approval).
-                  const hasPriceRequest = Object.prototype.hasOwnProperty.call(
-                    priceRequests,
-                    line.productId,
-                  );
-                  return (
-                    <Fragment key={`${line.productId}-${idx}`}>
-                      <div
-                        onClick={() => setSelectedLineIdx(idx)}
+          </div>
+
+          <form
+            className="pos-search-bar"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitQuickSearch();
+            }}
+          >
+            <span className="pos-search-bar-icon" aria-hidden>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3-3" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              inputMode="search"
+              value={quickSearch}
+              onChange={(e) => setQuickSearch(e.target.value)}
+              placeholder="ຄົ້ນຫາສິນຄ້າ / barcode / ລະຫັດ..."
+              className="pos-search-bar-input"
+              aria-label="ຄົ້ນຫາສິນຄ້າ"
+            />
+            {quickSearch ? (
+              <button
+                type="button"
+                onClick={() => setQuickSearch("")}
+                className="pos-search-bar-clear"
+                aria-label="ລຶບ"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            ) : null}
+            <button type="submit" className="pos-search-bar-btn">
+              ຄົ້ນຫາ
+            </button>
+          </form>
+
+          {/* Inline live results — tap to add straight to the cart (search-first
+              flow). Appears only while typing; the picker modal + scanner still
+              work as before. */}
+          {quickSearch.trim() && quickResults.length > 0 ? (
+            <div className="pos-quick-results" role="listbox">
+              {quickResults.map((p) => {
+                const out = p.stock <= 0 && !isAirSetProduct(p);
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={out}
+                    onClick={() => {
+                      void addProduct(p);
+                      setQuickSearch("");
+                    }}
+                    className="pos-quick-result"
+                  >
+                    <div className="min-w-0">
+                      <div className="pos-quick-result-name">{p.name}</div>
+                      <div className="pos-quick-result-meta">
+                        <span className="font-mono">{p.code}</span>
+                        {p.brand ? <span>{p.brand}</span> : null}
+                        {isAirSetProduct(p) ? (
+                          <span className="pos-unit-badge">ຊຸດ</span>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="pos-quick-result-right">
+                      <span
                         className={
-                          "pos-cline" +
-                          (selected ? " pos-cline-selected" : "") +
-                          (isFreeBonus ? " pos-cline-bonus" : "") +
-                          (isPromoSold ? " pos-cline-promo" : "")
+                          "pos-quick-result-stock" + (out ? " is-out" : "")
                         }
                       >
-                        <div className="pos-cline-main">
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={
-                                "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide " +
-                                (isFreeBonus
-                                  ? "bg-emerald-100 text-emerald-700"
-                                  : isPromoSold
-                                    ? "bg-indigo-100 text-indigo-700"
-                                    : "bg-odoo-surface-muted text-odoo-text-muted")
-                              }
-                            >
-                              {isFreeBonus ? "ແຖມ" : isPromoSold ? "ໂປຣ" : "ຂາຍ"}
-                            </span>
-                            <span className="pos-cart-name text-xs font-semibold text-odoo-text-strong">
-                              {line.productName}
-                            </span>
-                          </div>
-                          <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] font-bold text-odoo-text-muted">
-                            <span>{line.productId}</span>
-                            {isAirSetLine(line) ? (
-                              <span className="pos-unit-badge">ຫົວໜ່ວຍ: ຊຸດ</span>
-                            ) : null}
-                          </div>
-                          {hasPromo ? (
-                            <div className="mt-1 text-[10px] font-semibold text-odoo-success">
-                              {pricing.promoLabel || "Promotion"}
-                            </div>
-                          ) : null}
-                          {line.promoBonusOfCode ? null : (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPriceRequestIdx(idx);
-                                setPriceRequestReason(
-                                  priceRequests[line.productId] ?? "",
-                                );
-                              }}
-                              className={
-                                "mt-1 inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold transition " +
-                                (hasPriceRequest
-                                  ? "border-amber-300 bg-amber-50 text-amber-700"
-                                  : "border-odoo-border bg-odoo-surface-muted text-odoo-text-muted hover:border-odoo-primary")
-                              }
-                            >
-                              <svg
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                className="h-3 w-3"
+                        {isAirSetProduct(p)
+                          ? "ຊຸດ"
+                          : out
+                            ? "ໝົດ"
+                            : `stock ${moneyFmt.format(p.stock)}`}
+                      </span>
+                      <span className="pos-quick-result-price font-mono">
+                        {moneyFmt.format(p.price)}
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+
+          <div className="pos-add-bar">
+            <button
+              type="button"
+              onClick={openProductPicker}
+              disabled={loadingProducts}
+              className="pos-add-big"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
+              <span>
+                {loadingProducts ? "ກຳລັງໂຫລດສິນຄ້າ..." : "ເພີ່ມສິນຄ້າ"}
+              </span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setPromoListOpen(true)}
+              className="pos-promo-chip pos-add-promo"
+              title="ໂປຣໂມຊັນ"
+            >
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M20.59 13.41 13 21l-9-9V4h8l8.59 8.59a2 2 0 0 1 0 2.82Z" />
+                <circle cx="8" cy="8" r="1.5" />
+              </svg>
+              <span>ໂປຣ</span>
+              {currentPromotions.length > 0 ? (
+                <span className="pos-promo-chip-count">{currentPromotions.length}</span>
+              ) : null}
+            </button>
+            <div className="pos-scan-hint" title="ຍິງ barcode ໄດ້ເລີຍ — ບໍ່ຕ້ອງກົດຫຍັງ">
+              <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                <path d="M3 5v14M7 5v14M11 5v14M15 5v14M19 5v14" />
+              </svg>
+              <span>ພ້ອມຍິງ barcode</span>
+            </div>
+          </div>
+
+          <div className="pos-order-lines m-3 rounded-2xl border border-slate-200 bg-white shadow-sm">
+            {items.length === 0 ? (
+              <div className="pos-cart-empty">
+                <div className="pos-cart-empty-inner">
+                  <div className="pos-cart-empty-icon" aria-hidden>
+                    <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                      <circle cx="9" cy="21" r="1" />
+                      <circle cx="20" cy="21" r="1" />
+                      <path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6" />
+                    </svg>
+                  </div>
+                  <div className="mt-2 text-sm font-black text-odoo-text-strong">
+                    ກະຕ່າຍັງວ່າງ
+                  </div>
+                  <div className="mt-1 text-[12px] text-odoo-text-muted">
+                    ກົດ “ເພີ່ມສິນຄ້າ” ດ້ານເທິງ ເພື່ອເລືອກສິນຄ້າ ແລະ ເລືອກສາງ/location.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="pos-clines">
+                  {items.map((line, idx) => {
+                    const selected = selectedLineIdx === idx;
+                    const pricing = linePricing[idx];
+                    // Classify the line so cashier can tell at a glance which
+                    // item is being sold (with or without a promo price) vs.
+                    // which one is being given away for free. The engine
+                    // already does the math; we just read amount/discount to
+                    // tag the line.
+                    const hasPromo = !!pricing && !!pricing.promoLabel;
+                    const isFreeBonus =
+                      hasPromo &&
+                      pricing.gross > 0 &&
+                      pricing.amount === 0 &&
+                      pricing.promoDiscount >= pricing.gross;
+                    const isPromoSold = hasPromo && !isFreeBonus;
+                    // Per-line discount (member % + promo) = full value minus
+                    // the net the engine resolved. Surfaced in its own column
+                    // so the cashier sees price → discount → net per item.
+                    const lineDiscount = pricing
+                      ? Math.max(0, pricing.gross - pricing.amount)
+                      : 0;
+                    // Whether this product is flagged for a special-price
+                    // request (awaiting manager approval).
+                    const hasPriceRequest = Object.prototype.hasOwnProperty.call(
+                      priceRequests,
+                      line.productId,
+                    );
+                    return (
+                      <Fragment key={`${line.productId}-${idx}`}>
+                        <div
+                          onClick={() => setSelectedLineIdx(idx)}
+                          className={
+                            "pos-cline" +
+                            (selected ? " pos-cline-selected" : "") +
+                            (isFreeBonus ? " pos-cline-bonus" : "") +
+                            (isPromoSold ? " pos-cline-promo" : "")
+                          }
+                        >
+                          <div className="pos-cline-main">
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={
+                                  "shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide " +
+                                  (isFreeBonus
+                                    ? "bg-emerald-100 text-emerald-700"
+                                    : isPromoSold
+                                      ? "bg-indigo-100 text-indigo-700"
+                                      : "bg-odoo-surface-muted text-odoo-text-muted")
+                                }
                               >
-                                <path d="M20.59 13.41 13 21l-9-9V4h8l8.59 8.59a2 2 0 0 1 0 2.82Z" />
-                                <circle cx="8" cy="8" r="1.5" />
-                              </svg>
-                              <span>
-                                {hasPriceRequest
-                                  ? "ລໍຖ້າອະນຸມັດລາຄາ"
-                                  : "ຂໍລາຄາພິເສດ"}
+                                {isFreeBonus ? "ແຖມ" : isPromoSold ? "ໂປຣ" : "ຂາຍ"}
                               </span>
-                            </button>
-                          )}
-                          <div className="pos-cline-chips">
-                            <div className="flex flex-col items-start gap-1">
+                              <span className="pos-cart-name text-xs font-semibold text-odoo-text-strong">
+                                {line.productName}
+                              </span>
+                            </div>
+                            <div className="mt-0.5 flex items-center gap-2 font-mono text-[10px] font-bold text-odoo-text-muted">
+                              <span>{line.productId}</span>
+                              {isAirSetLine(line) ? (
+                                <span className="pos-unit-badge">ຫົວໜ່ວຍ: ຊຸດ</span>
+                              ) : null}
+                            </div>
+                            {hasPromo ? (
+                              <div className="mt-1 text-[10px] font-semibold text-odoo-success">
+                                {pricing.promoLabel || "Promotion"}
+                              </div>
+                            ) : null}
+                            {line.promoBonusOfCode ? null : (
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setLineSalespersonPickerIdx(idx);
-                                  setLineSalespersonQuery("");
+                                  setPriceRequestIdx(idx);
+                                  setPriceRequestReason(
+                                    priceRequests[line.productId] ?? "",
+                                  );
                                 }}
-                                className="inline-flex items-center gap-1 rounded border border-odoo-border bg-odoo-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-odoo-text-strong transition hover:border-odoo-primary"
-                                aria-label="ປ່ຽນພະນັກງານຂາຍ"
+                                className={
+                                  "mt-1 inline-flex items-center gap-1 rounded border px-1.5 py-0.5 text-[10px] font-semibold transition " +
+                                  (hasPriceRequest
+                                    ? "border-amber-300 bg-amber-50 text-amber-700"
+                                    : "border-odoo-border bg-odoo-surface-muted text-odoo-text-muted hover:border-odoo-primary")
+                                }
                               >
                                 <svg
                                   viewBox="0 0 24 24"
@@ -2706,462 +2679,494 @@ function PosScreen({
                                   strokeWidth="1.8"
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
-                                  className="h-3 w-3 text-odoo-text-muted"
+                                  className="h-3 w-3"
                                 >
-                                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                                  <circle cx="12" cy="7" r="4" />
+                                  <path d="M20.59 13.41 13 21l-9-9V4h8l8.59 8.59a2 2 0 0 1 0 2.82Z" />
+                                  <circle cx="8" cy="8" r="1.5" />
                                 </svg>
                                 <span>
-                                  {(() => {
-                                    const emp = employees.find(
-                                      (e) => e.employeeCode === line.salespersonCode,
-                                    );
-                                    return (
-                                      emp?.fullnameLo?.trim() ||
-                                      emp?.nickname?.trim() ||
-                                      emp?.employeeCode ||
-                                      line.salespersonCode ||
-                                      "ເລືອກພະນັກງານ"
-                                    );
-                                  })()}
+                                  {hasPriceRequest
+                                    ? "ລໍຖ້າອະນຸມັດລາຄາ"
+                                    : "ຂໍລາຄາພິເສດ"}
                                 </span>
                               </button>
-                              {line.buildFromComponents ? null : (
-                              <button
-                                type="button"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void openWarehousePickerForLine(idx);
-                                }}
-                                disabled={line.loadingLocations}
-                                className="inline-flex items-center gap-1 rounded border border-odoo-border bg-odoo-surface-muted px-1.5 py-0.5 text-left transition hover:border-odoo-primary disabled:opacity-60"
-                                aria-label="ປ່ຽນສາງ / location"
-                                title="ກົດເພື່ອປ່ຽນສາງ"
-                              >
-                                <svg
-                                  viewBox="0 0 24 24"
-                                  fill="none"
-                                  stroke="currentColor"
-                                  strokeWidth="1.8"
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  className="h-3 w-3 shrink-0 text-odoo-text-muted"
+                            )}
+                            <div className="pos-cline-chips">
+                              <div className="flex flex-col items-start gap-1">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setLineSalespersonPickerIdx(idx);
+                                    setLineSalespersonQuery("");
+                                  }}
+                                  className="inline-flex items-center gap-1 rounded border border-odoo-border bg-odoo-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-odoo-text-strong transition hover:border-odoo-primary"
+                                  aria-label="ປ່ຽນພະນັກງານຂາຍ"
                                 >
-                                  <path d="M3 9 12 4l9 5-9 5-9-5Z" />
-                                  <path d="M3 9v6l9 5 9-5V9" />
-                                </svg>
-                              {line.loadingLocations ? (
-                                <span className="text-[10px] text-odoo-text-muted">
-                                  ກຳລັງໂຫລດ stock...
-                                </span>
-                              ) : line.locations.length === 0 ? (
-                                line.warehouseStock > 0 ? (
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.8"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className="h-3 w-3 text-odoo-text-muted"
+                                  >
+                                    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                    <circle cx="12" cy="7" r="4" />
+                                  </svg>
+                                  <span>
+                                    {(() => {
+                                      const emp = employees.find(
+                                        (e) => e.employeeCode === line.salespersonCode,
+                                      );
+                                      return (
+                                        emp?.fullnameLo?.trim() ||
+                                        emp?.nickname?.trim() ||
+                                        emp?.employeeCode ||
+                                        line.salespersonCode ||
+                                        "ເລືອກພະນັກງານ"
+                                      );
+                                    })()}
+                                  </span>
+                                </button>
+                                {line.buildFromComponents ? null : (
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void openWarehousePickerForLine(idx);
+                                  }}
+                                  disabled={line.loadingLocations}
+                                  className="inline-flex items-center gap-1 rounded border border-odoo-border bg-odoo-surface-muted px-1.5 py-0.5 text-left transition hover:border-odoo-primary disabled:opacity-60"
+                                  aria-label="ປ່ຽນສາງ / location"
+                                  title="ກົດເພື່ອປ່ຽນສາງ"
+                                >
+                                  <svg
+                                    viewBox="0 0 24 24"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="1.8"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    className="h-3 w-3 shrink-0 text-odoo-text-muted"
+                                  >
+                                    <path d="M3 9 12 4l9 5-9 5-9-5Z" />
+                                    <path d="M3 9v6l9 5 9-5V9" />
+                                  </svg>
+                                {line.loadingLocations ? (
                                   <span className="text-[10px] text-odoo-text-muted">
-                                    ສາງ {warehouseNames[line.warehouseCode] ?? line.warehouseCode}
+                                    ກຳລັງໂຫລດ stock...
                                   </span>
-                                ) : (
-                                  <span className="text-[10px] font-semibold text-odoo-danger">
-                                    ບໍ່ມີ stock
-                                  </span>
-                                )
-                              ) : (() => {
-                                // Hide conditions with zero balance. When the live
-                                // function shows nothing but the warehouse cache
-                                // does, synthesize a single "ສະພາບດີ" row so the
-                                // cart line stays visually consistent (always a
-                                // dropdown, never a plain text fallback).
-                                const nonEmpty = line.locations.filter(
-                                  (l) => l.balanceQty > 0,
-                                );
-                                const options: Array<{
-                                  code: string;
-                                  name: string;
-                                  qty: number;
-                                }> =
-                                  nonEmpty.length > 0
-                                    ? nonEmpty.map((l) => ({
-                                      code: l.location ?? "",
-                                      name: l.locationName ?? l.location ?? "—",
-                                      qty: l.balanceQty,
-                                    }))
-                                    : line.warehouseStock > 0
-                                      ? [
-                                        {
-                                          code: "",
-                                          name: "ສະພາບດີ",
-                                          qty: line.warehouseStock,
-                                        },
-                                      ]
-                                      : [];
-                                if (options.length === 0) {
-                                  return (
+                                ) : line.locations.length === 0 ? (
+                                  line.warehouseStock > 0 ? (
+                                    <span className="text-[10px] text-odoo-text-muted">
+                                      ສາງ {warehouseNames[line.warehouseCode] ?? line.warehouseCode}
+                                    </span>
+                                  ) : (
                                     <span className="text-[10px] font-semibold text-odoo-danger">
                                       ບໍ່ມີ stock
                                     </span>
+                                  )
+                                ) : (() => {
+                                  // Hide conditions with zero balance. When the live
+                                  // function shows nothing but the warehouse cache
+                                  // does, synthesize a single "ສະພາບດີ" row so the
+                                  // cart line stays visually consistent (always a
+                                  // dropdown, never a plain text fallback).
+                                  const nonEmpty = line.locations.filter(
+                                    (l) => l.balanceQty > 0,
                                   );
-                                }
-                                const sel = options.find(
-                                  (o) => o.code === line.locationCode,
-                                );
-                                const isGoodCondition =
-                                  sel?.code === "" || sel?.code.endsWith("01");
-                                return (
-                                  <span
-                                    className={
-                                      "text-[10px] font-semibold " +
-                                      (sel && !isGoodCondition
-                                        ? "text-odoo-warning"
-                                        : "text-odoo-text-muted")
-                                    }
-                                  >
-                                    ສາງ {warehouseNames[line.warehouseCode] ?? line.warehouseCode}
-                                    {" · "}
-                                    {sel?.name ?? "—"}
-                                    {" · "}
-                                    {moneyFmt.format(sel?.qty ?? line.warehouseStock)}
-                                  </span>
-                                );
-                              })()}
-                              </button>
-                              )}
-                              {(() => {
-                                const selectedLocation = line.locations.find(
-                                  (loc) => loc.location === line.locationCode,
-                                );
-                                if (!selectedLocation || selectedLocation.balanceQty >= line.quantity) return null;
-                                return (
-                                  <span className="text-[10px] font-semibold text-odoo-danger">
-                                    stock ບໍ່ພໍ
-                                  </span>
-                                );
-                              })()}
+                                  const options: Array<{
+                                    code: string;
+                                    name: string;
+                                    qty: number;
+                                  }> =
+                                    nonEmpty.length > 0
+                                      ? nonEmpty.map((l) => ({
+                                        code: l.location ?? "",
+                                        name: l.locationName ?? l.location ?? "—",
+                                        qty: l.balanceQty,
+                                      }))
+                                      : line.warehouseStock > 0
+                                        ? [
+                                          {
+                                            code: "",
+                                            name: "ສະພາບດີ",
+                                            qty: line.warehouseStock,
+                                          },
+                                        ]
+                                        : [];
+                                  if (options.length === 0) {
+                                    return (
+                                      <span className="text-[10px] font-semibold text-odoo-danger">
+                                        ບໍ່ມີ stock
+                                      </span>
+                                    );
+                                  }
+                                  const sel = options.find(
+                                    (o) => o.code === line.locationCode,
+                                  );
+                                  const isGoodCondition =
+                                    sel?.code === "" || sel?.code.endsWith("01");
+                                  return (
+                                    <span
+                                      className={
+                                        "text-[10px] font-semibold " +
+                                        (sel && !isGoodCondition
+                                          ? "text-odoo-warning"
+                                          : "text-odoo-text-muted")
+                                      }
+                                    >
+                                      ສາງ {warehouseNames[line.warehouseCode] ?? line.warehouseCode}
+                                      {" · "}
+                                      {sel?.name ?? "—"}
+                                      {" · "}
+                                      {moneyFmt.format(sel?.qty ?? line.warehouseStock)}
+                                    </span>
+                                  );
+                                })()}
+                                </button>
+                                )}
+                                {(() => {
+                                  const selectedLocation = line.locations.find(
+                                    (loc) => loc.location === line.locationCode,
+                                  );
+                                  if (!selectedLocation || selectedLocation.balanceQty >= line.quantity) return null;
+                                  return (
+                                    <span className="text-[10px] font-semibold text-odoo-danger">
+                                      stock ບໍ່ພໍ
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                             </div>
                           </div>
-                        </div>
 
-                        <div className="pos-cline-side">
-                          <div className="pos-cline-qty">
-                            <div className="pos-cart-stepper">
-                              {/* −/+ beside the field: on a counter tablet
-                                  the cashier adjusts by one far more often
-                                  than they type a number. A bonus line is
-                                  driven by its trigger, so it stays locked. */}
-                              <button
-                                type="button"
-                                disabled={!!line.promoBonusOfCode}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  updateLine(idx, {
-                                    quantity: Math.max(1, line.quantity - 1),
-                                  });
-                                }}
-                                className="pos-step-btn"
-                                aria-label="ຫຼຸດຈຳນວນ"
-                              >
-                                −
-                              </button>
-                              <input
-                                type="number"
-                                min={1}
-                                step={1}
-                                value={line.quantity}
-                                disabled={!!line.promoBonusOfCode}
-                                onClick={(e) => e.stopPropagation()}
-                                onChange={(e) =>
-                                  updateLine(idx, {
-                                    quantity: Math.max(
-                                      1,
-                                      Math.floor(Number(e.target.value) || 0),
-                                    ),
-                                  })
-                                }
-                                className={
-                                  "pos-qty-input" +
-                                  (line.promoBonusOfCode ? " opacity-60" : "")
-                                }
-                              />
-                              <button
-                                type="button"
-                                disabled={!!line.promoBonusOfCode}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  updateLine(idx, { quantity: line.quantity + 1 });
-                                }}
-                                className="pos-step-btn pos-step-btn-plus"
-                                aria-label="ເພີ່ມຈຳນວນ"
-                              >
-                                +
-                              </button>
+                          <div className="pos-cline-side">
+                            <div className="pos-cline-qty">
+                              <div className="pos-cart-stepper">
+                                {/* −/+ beside the field: on a counter tablet
+                                    the cashier adjusts by one far more often
+                                    than they type a number. A bonus line is
+                                    driven by its trigger, so it stays locked. */}
+                                <button
+                                  type="button"
+                                  disabled={!!line.promoBonusOfCode}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateLine(idx, {
+                                      quantity: Math.max(1, line.quantity - 1),
+                                    });
+                                  }}
+                                  className="pos-step-btn"
+                                  aria-label="ຫຼຸດຈຳນວນ"
+                                >
+                                  −
+                                </button>
+                                <input
+                                  type="number"
+                                  min={1}
+                                  step={1}
+                                  value={line.quantity}
+                                  disabled={!!line.promoBonusOfCode}
+                                  onClick={(e) => e.stopPropagation()}
+                                  onChange={(e) =>
+                                    updateLine(idx, {
+                                      quantity: Math.max(
+                                        1,
+                                        Math.floor(Number(e.target.value) || 0),
+                                      ),
+                                    })
+                                  }
+                                  className={
+                                    "pos-qty-input" +
+                                    (line.promoBonusOfCode ? " opacity-60" : "")
+                                  }
+                                />
+                                <button
+                                  type="button"
+                                  disabled={!!line.promoBonusOfCode}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    updateLine(idx, { quantity: line.quantity + 1 });
+                                  }}
+                                  className="pos-step-btn pos-step-btn-plus"
+                                  aria-label="ເພີ່ມຈຳນວນ"
+                                >
+                                  +
+                                </button>
+                              </div>
                             </div>
-                          </div>
-                          <div className="pos-cline-money">
-                            <span
-                              className={
-                                "font-mono text-sm font-bold " +
-                                (isFreeBonus
-                                  ? "text-emerald-700"
-                                  : isPromoSold
-                                    ? "text-odoo-primary"
-                                    : "text-odoo-text-strong")
-                              }
-                            >
-                              {moneyFmt.format(pricing ? pricing.amount : line.unitPrice * line.quantity)}
-                            </span>
-                            {lineDiscount > 0 ? (
-                              <div
+                            <div className="pos-cline-money">
+                              <span
                                 className={
-                                  "font-mono text-[10px] font-bold " +
+                                  "font-mono text-sm font-bold " +
                                   (isFreeBonus
                                     ? "text-emerald-700"
-                                    : "text-odoo-danger")
+                                    : isPromoSold
+                                      ? "text-odoo-primary"
+                                      : "text-odoo-text-strong")
                                 }
                               >
-                                − {moneyFmt.format(lineDiscount)}
-                              </div>
-                            ) : null}
-                            <div className="pos-cline-unit">
-                              <span className="font-bold text-odoo-text-strong">
-                                {moneyFmt.format(line.unitPrice)}
+                                {moneyFmt.format(pricing ? pricing.amount : line.unitPrice * line.quantity)}
                               </span>
-                              {line.unitName ? (
-                                <span className="ml-1 text-[10px] text-odoo-text-muted">
-                                  / {line.unitName}
-                                </span>
+                              {lineDiscount > 0 ? (
+                                <div
+                                  className={
+                                    "font-mono text-[10px] font-bold " +
+                                    (isFreeBonus
+                                      ? "text-emerald-700"
+                                      : "text-odoo-danger")
+                                  }
+                                >
+                                  − {moneyFmt.format(lineDiscount)}
+                                </div>
                               ) : null}
-                            </div>
-                          </div>
-                          <div className="pos-cline-del">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                removeLine(idx);
-                              }}
-                              disabled={!!line.promoBonusOfCode}
-                              className="pos-iconbtn text-odoo-danger hover:bg-odoo-danger-bg"
-                              aria-label="ລົບ"
-                              title={line.promoBonusOfCode ? "ສິນຄ້າແຖມ — ລົບສິນຄ້າຫຼັກເພື່ອລົບແຖມ" : undefined}
-                            >
-                              ✕
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                      {selected && isAirSetLine(line) ? (
-                        <div className="pos-cline-detail">
-                            <div className="pos-set-detail">
-                              <div className="pos-set-detail-head">
-                                <span>ລາຍລະອຽດຊຸດ</span>
-                                <strong>{line.setDetails.length} ລາຍການ</strong>
+                              <div className="pos-cline-unit">
+                                <span className="font-bold text-odoo-text-strong">
+                                  {moneyFmt.format(line.unitPrice)}
+                                </span>
+                                {line.unitName ? (
+                                  <span className="ml-1 text-[10px] text-odoo-text-muted">
+                                    / {line.unitName}
+                                  </span>
+                                ) : null}
                               </div>
-                              {line.loadingSetDetails ? (
-                                <div className="pos-set-detail-empty">
-                                  ກຳລັງໂຫລດລາຍລະອຽດຊຸດ...
-                                </div>
-                              ) : line.setDetailError ? (
-                                <div className="pos-set-detail-error">
-                                  {line.setDetailError}
-                                </div>
-                              ) : line.setDetails.length === 0 ? (
-                                <div className="pos-set-detail-empty">
-                                  ບໍ່ພົບລາຍການພາຍໃນຊຸດ
-                                </div>
-                              ) : (
-                                <div className="pos-set-detail-list">
-                                  {line.setDetails.map((detail) => (
-                                    <div
-                                      key={`${detail.lineNumber}-${detail.itemCode}`}
-                                      className="pos-set-detail-row"
-                                    >
-                                      <div className="min-w-0">
-                                        <div className="truncate font-semibold text-odoo-text-strong">
-                                          {detail.itemName}
-                                        </div>
-                                        <div className="font-mono text-[10px] text-odoo-text-muted">
-                                          {detail.itemCode}
-                                        </div>
-                                      </div>
-                                      <div className="text-right font-mono text-[11px] font-bold text-odoo-text-strong">
-                                        {moneyFmt.format(detail.quantity * line.quantity)}
-                                        {detail.unitCode ? ` ${detail.unitCode}` : ""}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
                             </div>
+                            <div className="pos-cline-del">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  removeLine(idx);
+                                }}
+                                disabled={!!line.promoBonusOfCode}
+                                className="pos-iconbtn text-odoo-danger hover:bg-odoo-danger-bg"
+                                aria-label="ລົບ"
+                                title={line.promoBonusOfCode ? "ສິນຄ້າແຖມ — ລົບສິນຄ້າຫຼັກເພື່ອລົບແຖມ" : undefined}
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          </div>
                         </div>
-                      ) : null}
-                    </Fragment>
-                  );
-                })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      <aside className="pos-checkout-col" id="pos-mobile-summary">
-        <div className="pos-order-summary pos-checkout-card">
-          <div className="px-4 py-3">
-            <div className="space-y-1 text-sm">
-              {/* Gross before any discount, then the line-level discount,
-                  then the post-discount subtotal — so the cashier sees the
-                  full → discount → net breakdown. */}
-              <SummaryRow
-                label="ມູນຄ່າເຕັມ (ກ່ອນຫຼຸດ)"
-                value={moneyFmt.format(grossTotal)}
-              />
-              {lineDiscountTotal > 0 ? (
-                <SummaryRow
-                  label="ສ່ວນຫຼຸດ"
-                  value={`− ${moneyFmt.format(lineDiscountTotal)}`}
-                />
-              ) : null}
-              <SummaryRow
-                label="ລວມລາຍການ"
-                value={moneyFmt.format(afterLineDiscounts)}
-              />
-              {appliedExtraDiscount > 0 ? (
-                <SummaryRow
-                  label="ສ່ວນຫຼຸດທ້າຍບິນ"
-                  value={`− ${moneyFmt.format(appliedExtraDiscount)}`}
-                />
-              ) : null}
-              {customer && loyaltyConfig.isActive && earnedPoints > 0 ? (
-                <SummaryRow
-                  label={`ໄດ້${loyaltyConfig.pointName ?? "ແຕ້ມສະສົມ"}`}
-                  value={`${moneyFmt.format(earnedPoints)} ແຕ້ມ`}
-                />
-              ) : null}
-              <div className="pos-total-line">
-                <div className="text-xs font-bold uppercase tracking-widest text-odoo-text-strong">
-                  ລວມຍອດ
-                </div>
-                <div className="flex items-baseline gap-1.5">
-                  <div className="font-mono text-2xl font-bold text-odoo-primary">
-                    {moneyFmt.format(total)}
-                  </div>
-                  <div className="text-xs font-semibold text-odoo-text-muted">
-                    ກີບ
-                  </div>
-                </div>
+                        {selected && isAirSetLine(line) ? (
+                          <div className="pos-cline-detail">
+                              <div className="pos-set-detail">
+                                <div className="pos-set-detail-head">
+                                  <span>ລາຍລະອຽດຊຸດ</span>
+                                  <strong>{line.setDetails.length} ລາຍການ</strong>
+                                </div>
+                                {line.loadingSetDetails ? (
+                                  <div className="pos-set-detail-empty">
+                                    ກຳລັງໂຫລດລາຍລະອຽດຊຸດ...
+                                  </div>
+                                ) : line.setDetailError ? (
+                                  <div className="pos-set-detail-error">
+                                    {line.setDetailError}
+                                  </div>
+                                ) : line.setDetails.length === 0 ? (
+                                  <div className="pos-set-detail-empty">
+                                    ບໍ່ພົບລາຍການພາຍໃນຊຸດ
+                                  </div>
+                                ) : (
+                                  <div className="pos-set-detail-list">
+                                    {line.setDetails.map((detail) => (
+                                      <div
+                                        key={`${detail.lineNumber}-${detail.itemCode}`}
+                                        className="pos-set-detail-row"
+                                      >
+                                        <div className="min-w-0">
+                                          <div className="truncate font-semibold text-odoo-text-strong">
+                                            {detail.itemName}
+                                          </div>
+                                          <div className="font-mono text-[10px] text-odoo-text-muted">
+                                            {detail.itemCode}
+                                          </div>
+                                        </div>
+                                        <div className="text-right font-mono text-[11px] font-bold text-odoo-text-strong">
+                                          {moneyFmt.format(detail.quantity * line.quantity)}
+                                          {detail.unitCode ? ` ${detail.unitCode}` : ""}
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                          </div>
+                        ) : null}
+                      </Fragment>
+                    );
+                  })}
               </div>
-            </div>
-
-            {/* ≤640px: compact trigger that opens the delivery sheet. */}
-            <button
-              type="button"
-              onClick={() => setDeliverySheetOpen(true)}
-              className="pos-delivery-trigger mt-3 flex w-full items-center justify-between gap-2 rounded-xl border border-odoo-border bg-odoo-surface-muted px-3 py-2.5 text-left"
-            >
-              <span className="flex min-w-0 items-center gap-2 text-[12px] font-bold text-odoo-text-strong">
-                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-                  <rect x="1" y="3" width="15" height="13" rx="1" />
-                  <path d="M16 8h4l3 3v5h-7z" />
-                  <circle cx="5.5" cy="18.5" r="2" />
-                  <circle cx="18.5" cy="18.5" r="2" />
-                </svg>
-                <span>ຂົນສົ່ງ · ໝາຍເຫດ</span>
-              </span>
-              <span className="flex min-w-0 items-center gap-1 text-[11px] font-semibold text-odoo-text-muted">
-                <span className="max-w-32 truncate">{selectedTransportName}</span>
-                <span aria-hidden>›</span>
-              </span>
-            </button>
-
-            {/* >640px: delivery round summary + fields inline, as before. */}
-            <div className="pos-delivery-inline">
-              {/* ສະຫຼຸບບິນຈັດສົ່ງ ຕາມຮອບ ຂອງວັນຮັບສິນຄ້າ — ດຶງຈາກ TMS */}
-              <DeliveryTodayCard date={receiveDate || undefined} />
-
-              {/* ຂົນສົ່ງ · ໝາຍເຫດ — ຍ້າຍລົງລຸ່ມຍອດລວມ */}
-              <div className="mt-3 overflow-hidden rounded-md border border-odoo-border">
-                <button
-                  type="button"
-                  onClick={() => setExtrasOpen((v) => !v)}
-                  className="flex w-full items-center justify-between gap-2 bg-odoo-surface-muted px-3 py-2.5 text-left text-[12px] font-bold text-odoo-text-strong transition hover:brightness-95"
-                >
-                  <span className="flex items-center gap-2">
-                    <svg
-                      viewBox="0 0 24 24"
-                      width="15"
-                      height="15"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      aria-hidden
-                    >
-                      <rect x="1" y="3" width="15" height="13" rx="1" />
-                      <path d="M16 8h4l3 3v5h-7z" />
-                      <circle cx="5.5" cy="18.5" r="2" />
-                      <circle cx="18.5" cy="18.5" r="2" />
-                    </svg>
-                    <span>ຂົນສົ່ງ · ໝາຍເຫດ</span>
-                  </span>
-                  <span className="text-odoo-text-muted">
-                    {extrasOpen ? "▲" : "▼"}
-                  </span>
-                </button>
-                {extrasOpen ? (
-                  <div className="border-t border-odoo-border bg-odoo-surface-muted px-3 py-3">
-                    {deliveryFormFields}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-
-            {submitError ? (
-              <div className="odoo-alert-danger mt-2 px-3 py-2 text-xs font-semibold">
-                {submitError}
-              </div>
-            ) : null}
-
-            <div className="pos-action-row">
-              <button
-                type="button"
-                onClick={() => {
-                  if (selectedLineIdx !== null) removeLine(selectedLineIdx);
-                }}
-                disabled={selectedLineIdx === null}
-                className="pos-iconaction pos-iconaction-danger"
-                title="ລົບລາຍການທີ່ເລືອກ"
-              >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 6h18" />
-                  <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                  <path d="m5 6 1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setItems([]);
-                  setSelectedLineIdx(null);
-                }}
-                disabled={items.length === 0}
-                className="pos-iconaction"
-                title="ລ້າງກະຕ່າທັງໝົດ"
-              >
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 3v5h5" />
-                  <path d="M3.5 13a9 9 0 1 0 .8-5" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                onClick={submit}
-                disabled={!canSubmit}
-                className="pos-cta"
-              >
-                <span>{submitting ? "ກຳລັງສ້າງ..." : "ສົ່ງໄປຮັບເງິນ"}</span>
-                <span aria-hidden>→</span>
-              </button>
-            </div>
+            )}
           </div>
         </div>
-      </aside>
+
+        <aside className="pos-checkout-col" id="pos-mobile-summary">
+          <div className="pos-order-summary pos-checkout-card">
+            <div className="px-4 py-3">
+              <div className="space-y-1 text-sm">
+                {/* Gross before any discount, then the line-level discount,
+                    then the post-discount subtotal — so the cashier sees the
+                    full → discount → net breakdown. */}
+                <SummaryRow
+                  label="ມູນຄ່າເຕັມ (ກ່ອນຫຼຸດ)"
+                  value={moneyFmt.format(grossTotal)}
+                />
+                {lineDiscountTotal > 0 ? (
+                  <SummaryRow
+                    label="ສ່ວນຫຼຸດ"
+                    value={`− ${moneyFmt.format(lineDiscountTotal)}`}
+                  />
+                ) : null}
+                <SummaryRow
+                  label="ລວມລາຍການ"
+                  value={moneyFmt.format(afterLineDiscounts)}
+                />
+                {appliedExtraDiscount > 0 ? (
+                  <SummaryRow
+                    label="ສ່ວນຫຼຸດທ້າຍບິນ"
+                    value={`− ${moneyFmt.format(appliedExtraDiscount)}`}
+                  />
+                ) : null}
+                {customer && loyaltyConfig.isActive && earnedPoints > 0 ? (
+                  <SummaryRow
+                    label={`ໄດ້${loyaltyConfig.pointName ?? "ແຕ້ມສະສົມ"}`}
+                    value={`${moneyFmt.format(earnedPoints)} ແຕ້ມ`}
+                  />
+                ) : null}
+                <div className="pos-total-line">
+                  <div className="text-xs font-bold uppercase tracking-widest text-odoo-text-strong">
+                    ລວມຍອດ
+                  </div>
+                  <div className="flex items-baseline gap-1.5">
+                    <div className="font-mono text-2xl font-bold text-odoo-primary">
+                      {moneyFmt.format(total)}
+                    </div>
+                    <div className="text-xs font-semibold text-odoo-text-muted">
+                      ກີບ
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* ≤640px: compact trigger that opens the delivery sheet. */}
+              <button
+                type="button"
+                onClick={() => setDeliverySheetOpen(true)}
+                className="pos-delivery-trigger mt-3 flex w-full items-center justify-between gap-2 rounded-xl border border-odoo-border bg-odoo-surface-muted px-3 py-2.5 text-left"
+              >
+                <span className="flex min-w-0 items-center gap-2 text-[12px] font-bold text-odoo-text-strong">
+                  <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+                    <rect x="1" y="3" width="15" height="13" rx="1" />
+                    <path d="M16 8h4l3 3v5h-7z" />
+                    <circle cx="5.5" cy="18.5" r="2" />
+                    <circle cx="18.5" cy="18.5" r="2" />
+                  </svg>
+                  <span>ຂົນສົ່ງ · ໝາຍເຫດ</span>
+                </span>
+                <span className="flex min-w-0 items-center gap-1 text-[11px] font-semibold text-odoo-text-muted">
+                  <span className="max-w-32 truncate">{selectedTransportName}</span>
+                  <span aria-hidden>›</span>
+                </span>
+              </button>
+
+              {/* >640px: delivery round summary + fields inline, as before. */}
+              <div className="pos-delivery-inline">
+                {/* ສະຫຼຸບບິນຈັດສົ່ງ ຕາມຮອບ ຂອງວັນຮັບສິນຄ້າ — ດຶງຈາກ TMS */}
+                <DeliveryTodayCard date={receiveDate || undefined} />
+
+                {/* ຂົນສົ່ງ · ໝາຍເຫດ — ຍ້າຍລົງລຸ່ມຍອດລວມ */}
+                <div className="mt-3 overflow-hidden rounded-md border border-odoo-border">
+                  <button
+                    type="button"
+                    onClick={() => setExtrasOpen((v) => !v)}
+                    className="flex w-full items-center justify-between gap-2 bg-odoo-surface-muted px-3 py-2.5 text-left text-[12px] font-bold text-odoo-text-strong transition hover:brightness-95"
+                  >
+                    <span className="flex items-center gap-2">
+                      <svg
+                        viewBox="0 0 24 24"
+                        width="15"
+                        height="15"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        aria-hidden
+                      >
+                        <rect x="1" y="3" width="15" height="13" rx="1" />
+                        <path d="M16 8h4l3 3v5h-7z" />
+                        <circle cx="5.5" cy="18.5" r="2" />
+                        <circle cx="18.5" cy="18.5" r="2" />
+                      </svg>
+                      <span>ຂົນສົ່ງ · ໝາຍເຫດ</span>
+                    </span>
+                    <span className="text-odoo-text-muted">
+                      {extrasOpen ? "▲" : "▼"}
+                    </span>
+                  </button>
+                  {extrasOpen ? (
+                    <div className="border-t border-odoo-border bg-odoo-surface-muted px-3 py-3">
+                      {deliveryFormFields}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+
+              {submitError ? (
+                <div className="odoo-alert-danger mt-2 px-3 py-2 text-xs font-semibold">
+                  {submitError}
+                </div>
+              ) : null}
+
+              <div className="pos-action-row">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (selectedLineIdx !== null) removeLine(selectedLineIdx);
+                  }}
+                  disabled={selectedLineIdx === null}
+                  className="pos-iconaction pos-iconaction-danger"
+                  title="ລົບລາຍການທີ່ເລືອກ"
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18" />
+                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                    <path d="m5 6 1 14a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-14" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setItems([]);
+                    setSelectedLineIdx(null);
+                  }}
+                  disabled={items.length === 0}
+                  className="pos-iconaction"
+                  title="ລ້າງກະຕ່າທັງໝົດ"
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 3v5h5" />
+                    <path d="M3.5 13a9 9 0 1 0 .8-5" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  onClick={submit}
+                  disabled={!canSubmit}
+                  className="pos-cta"
+                >
+                  <span>{submitting ? "ກຳລັງສ້າງ..." : "ສົ່ງໄປຮັບເງິນ"}</span>
+                  <span aria-hidden>→</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </aside>
+      </div>
 
       {/* Mobile-only sticky quick-pay bar — keeps the running total and the
           pay action reachable without scrolling past the cart/summary. Sits

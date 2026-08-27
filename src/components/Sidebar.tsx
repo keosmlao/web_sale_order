@@ -4,7 +4,13 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { logoutAction } from "@/app/login/actions";
-import { type AppRole, isPrivilegedRole, SELF_SERVE_HREFS } from "@/lib/roles";
+import {
+  type AppRole,
+  type CounterSide,
+  isPrivilegedRole,
+  SELF_SERVE_HREFS,
+  isHrefAllowedForSide,
+} from "@/lib/roles";
 
 type NavLeaf = {
   href: string;
@@ -429,9 +435,10 @@ type SidebarProps = {
   role: AppRole;
   // Menu keys (hrefs) hidden for this role via /settings/menu-visibility.
   hiddenMenuKeys?: string[];
+  side?: CounterSide | null;
 };
 
-export default function Sidebar({ displayName, employeeCode, subtitle, role, hiddenMenuKeys }: SidebarProps) {
+export default function Sidebar({ displayName, employeeCode, subtitle, role, hiddenMenuKeys, side = null }: SidebarProps) {
   const pathname = usePathname();
   const router = useRouter();
   const [pendingHref, setPendingHref] = useState<string | null>(null);
@@ -452,10 +459,14 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
     // company-wide and is hidden for non-privileged roles (and blocked at the
     // route level by AppLayout).
     const privileged = isPrivilegedRole(role);
+    // isHrefAllowedForSide also keeps the register out of a salesperson's
+    // menu and the POS out of a register user's — selling and taking the
+    // money are separate jobs (roles.ts).
     const allowed = (leaf: NavLeaf) =>
       (!leaf.roles || leaf.roles.includes(role)) &&
       !hiddenSet.has(leaf.href) &&
-      (privileged || SELF_SERVE_HREFS.includes(leaf.href));
+      (privileged || SELF_SERVE_HREFS.includes(leaf.href)) &&
+      isHrefAllowedForSide(side, leaf.href);
     return sections
       .map((s) => ({
         ...s,
@@ -470,7 +481,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
           ),
       }))
       .filter((s) => s.items.length > 0);
-  }, [role, hiddenSet]);
+  }, [role, hiddenSet, side]);
 
   const isHrefActive = useCallback(
     (href: string) => {

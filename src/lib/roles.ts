@@ -153,3 +153,65 @@ export function isSelfServePath(pathname: string): boolean {
   if (pathname === "/reports/incentives") return true;
   return false;
 }
+
+// ── Selling and taking the money are different jobs ──────────────────
+// The books already keep them apart: settle writes sale_code (who sold)
+// and cashier_code (who took the money) as separate columns. Access did
+// not — one person could ring a bill up and then receive payment on it
+// themselves, so the two columns could name the same employee.
+//
+// A salesperson gets the POS and never the register; a 'pc' is the
+// register and never the POS. Heads and managers are unaffected — they
+// supervise both and need to be able to stand in at either.
+// Which side of the counter is this user on? Derived ONLY from an explicit
+// app_role, never from position_code. That matters: position_code defaults
+// everyone to "salesperson", and enforcing the split on a default would shut
+// the whole shop out of the register overnight. Until someone is explicitly
+// marked, they keep the access they have today and nothing changes for them.
+export type CounterSide = "pos" | "register";
+
+export function counterSide(emp: {
+  appRole: string | null | undefined;
+}): CounterSide | null {
+  const explicit = (emp.appRole ?? "").trim().toLowerCase();
+  if (explicit === "pc") return "register";
+  if (explicit === "salesperson") return "pos";
+  return null;
+}
+
+const POS_PATHS = ["/orders/new"] as const;
+const CASHIER_PATHS = ["/cashier"] as const;
+
+function matchesAny(pathname: string, roots: readonly string[]): boolean {
+  return roots.some(
+    (root) => pathname === root || pathname.startsWith(root + "/"),
+  );
+}
+
+// Where a role lands after login, and where it is sent back to when it asks
+// for a screen that is not its job.
+export function homePathForSide(side: CounterSide | null): string {
+  if (side === "register") return "/cashier";
+  if (side === "pos") return "/orders/new";
+  return "/";
+}
+
+// The register is off-limits to the sales floor and the POS is off-limits to
+// the register — but only once someone has actually been assigned a side.
+export function isPathAllowedForSide(
+  side: CounterSide | null,
+  pathname: string,
+): boolean {
+  if (side === "pos" && matchesAny(pathname, CASHIER_PATHS)) return false;
+  if (side === "register" && matchesAny(pathname, POS_PATHS)) return false;
+  return true;
+}
+
+// Menu counterpart — Sidebar / BottomNav filter their links through this so a
+// link a user cannot open is never shown in the first place.
+export function isHrefAllowedForSide(
+  side: CounterSide | null,
+  href: string,
+): boolean {
+  return isPathAllowedForSide(side, href);
+}

@@ -1,7 +1,14 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { requireEmployee } from "@/lib/auth";
-import { roleFromEmployee, isPrivilegedRole, isSelfServePath } from "@/lib/roles";
+import {
+  roleFromEmployee,
+  isPrivilegedRole,
+  isSelfServePath,
+  counterSide,
+  isPathAllowedForSide,
+  homePathForSide,
+} from "@/lib/roles";
 import { getHiddenMenuKeys } from "@/lib/menu-visibility";
 import Sidebar from "@/components/Sidebar";
 import BottomNav from "@/components/BottomNav";
@@ -20,6 +27,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // normal layout.
   const explicitAppRole = (employee.appRole ?? "").trim().toLowerCase();
   const posOnly = explicitAppRole === "pc" || explicitAppRole === "salesperson";
+  // Selling and taking the money are separate jobs: a 'pc' works the
+  // register and never the POS, a salesperson the reverse. See roles.ts.
+  const side = counterSide(employee);
+  const roleHome = homePathForSide(side);
+  const isRegisterUser = side === "register";
   // Only redirect when we are *certain* the user is not on the POS path.
   // If x-pathname is empty (proxy didn't run, edge case during dev HMR,
   // or transient), skip the redirect — otherwise we'd loop indefinitely
@@ -28,12 +40,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     pathname === "/orders/new" || pathname.startsWith("/orders/new/");
   // POS-locked staff may also open their own profile + bonus/sales views.
   const posAllowed =
-    isOnPosPath ||
-    pathname === "/profile" || pathname.startsWith("/profile/") ||
-    pathname.startsWith("/reports/my-") ||
-    pathname === "/reports/incentives";
+    !pathname ||
+    (isSelfServePath(pathname) && isPathAllowedForSide(side, pathname));
   if (posOnly && pathname && !posAllowed) {
-    redirect("/orders/new");
+    redirect(roleHome);
   }
   // Regular salespeople (position-derived, not the POS-locked cashier users
   // handled above) keep the normal layout + Home dashboard, but may only reach
@@ -42,8 +52,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // everything. As with posOnly, skip the redirect when x-pathname is empty
   // (proxy didn't run) so we never loop the page into a blank render.
   const privileged = isPrivilegedRole(role);
-  if (!privileged && !posOnly && pathname && !isSelfServePath(pathname)) {
-    redirect("/");
+  if (
+    !privileged &&
+    !posOnly &&
+    pathname &&
+    (!isSelfServePath(pathname) || !isPathAllowedForSide(side, pathname))
+  ) {
+    redirect(roleHome);
   }
   const displayName = employee.fullnameLo || employee.fullnameEn || employee.employeeCode || "—";
   const subtitle = employee.nickname && employee.nickname !== "0" ? employee.nickname : undefined;
@@ -74,8 +89,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <main className="min-h-screen pb-20 md:pb-0">{children}</main>
         {/* POS-locked staff still get to their profile / bonus via a slim bottom bar. */}
         <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-odoo-border bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_10px_rgba(0,0,0,0.06)] md:hidden">
-          <a href="/orders/new" className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-bold ${isOnPosPath ? "text-odoo-primary" : "text-odoo-text-muted"}`}>
-            <span className="text-lg">🛒</span> ຂາຍ
+          {/* The register user's "work" tab is the register, not the POS. */}
+          <a href={roleHome} className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-bold ${(isRegisterUser ? pathname.startsWith("/cashier") : isOnPosPath) ? "text-odoo-primary" : "text-odoo-text-muted"}`}>
+            <span className="text-lg">{isRegisterUser ? "💵" : "🛒"}</span> {isRegisterUser ? "ຮັບເງິນ" : "ຂາຍ"}
           </a>
           <a href="/profile" className={`flex flex-1 flex-col items-center gap-0.5 py-2 text-[11px] font-bold ${pathname.startsWith("/profile") ? "text-odoo-primary" : "text-odoo-text-muted"}`}>
             <span className="text-lg">👤</span> ໂປຣໄຟລ໌
@@ -99,6 +115,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           bottom navigation + profile page replace it. */}
       <div className="hidden md:contents">
         <Sidebar
+          side={side}
           displayName={displayName}
           employeeCode={employee.employeeCode ?? "—"}
           subtitle={subtitle}
@@ -107,7 +124,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         />
       </div>
       <main className="min-w-0 flex-1 pb-20 md:h-screen md:overflow-y-auto md:pb-0">{children}</main>
-      <BottomNav role={role} />
+      <BottomNav role={role} side={side} />
       <OrderNotifier selfEmployeeCode={employee.employeeCode ?? null} />
     </div>
   );

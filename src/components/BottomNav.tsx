@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { type AppRole, isPrivilegedRole } from "@/lib/roles";
+import {
+  type AppRole,
+  type CounterSide,
+  isPrivilegedRole,
+  isHrefAllowedForSide,
+} from "@/lib/roles";
 
 type Tab = { href: string; label: string; icon: ReactNode; match: (p: string) => boolean };
 
@@ -18,14 +23,23 @@ const INVENTORY_TAB: Tab = { href: "/inventory", label: "ສະຕັອກ", ma
 const CASHIER_TAB: Tab = { href: "/cashier", label: "ຮັບເງິນ", match: (p) => p.startsWith("/cashier"), icon: icon(<><rect x="2" y="6" width="20" height="12" rx="2" /><circle cx="12" cy="12" r="2.5" /><path d="M6 10v.01M18 14v.01" /></>) };
 const PROFILE_TAB: Tab = { href: "/profile", label: "ໂປຣໄຟລ໌", match: (p) => p.startsWith("/profile"), icon: icon(<><circle cx="12" cy="8" r="4" /><path d="M4 21a8 8 0 0 1 16 0" /></>) };
 
-export default function BottomNav({ role }: { role: AppRole }) {
+export default function BottomNav({
+  role,
+  side = null,
+}: {
+  role: AppRole;
+  side?: CounterSide | null;
+}) {
   const pathname = usePathname() ?? "/";
+  // Selling and taking the money are separate jobs (roles.ts): the sales
+  // floor never gets the register tab and the register never gets the POS
+  // tab. Managers and heads keep both, plus stock lookup.
   const tabs: Tab[] = [
     HOME_TAB,
     SELL_TAB,
     isPrivilegedRole(role) ? INVENTORY_TAB : CASHIER_TAB,
     PROFILE_TAB,
-  ];
+  ].filter((t) => isHrefAllowedForSide(side, t.href));
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex border-t border-odoo-border bg-white pb-[env(safe-area-inset-bottom)] shadow-[0_-2px_10px_rgba(0,0,0,0.06)] md:hidden">
       {tabs.map((t) => {

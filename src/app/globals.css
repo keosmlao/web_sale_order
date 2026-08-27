@@ -8363,3 +8363,54 @@ a {
     justify-content: flex-start;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   POS "Option A" — two panes, not three
+   The three-column shell (catalogue | cart | checkout) left the middle
+   column empty whenever the cart was, which is most of the time between
+   sales. Cart and checkout now share one rail, and the catalogue takes
+   the width that frees up (four tiles across instead of three).
+   ═══════════════════════════════════════════════════════════════════ */
+@media (min-width: 1180px) {
+  .pos-shell2.pos-has-catalog {
+    grid-template-columns: minmax(0, 1fr) minmax(430px, 500px);
+  }
+
+  .pos-sale-rail {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    max-height: 100dvh;
+    overflow: hidden;
+    background: #eef2f7;
+  }
+  /* The cart takes the slack and scrolls; checkout keeps its natural
+     height pinned to the bottom of the rail. */
+  .pos-sale-rail .pos-order-left {
+    flex: 1 1 auto;
+    min-height: 0;
+    height: auto;
+    max-height: none;
+    border-right: 0;
+  }
+  .pos-sale-rail .pos-checkout-col {
+    flex: 0 0 auto;
+    padding: 0 12px 12px;
+  }
+
+  /* In a 500px rail the row can't hold name and controls side by side —
+     stack them, the way the phone layout already does. */
+  .pos-sale-rail .pos-cline {
+    flex-direction: column;
+    gap: 9px;
+  }
+  .pos-sale-rail .pos-cline-side {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .pos-sale-rail .pos-cline-money {
+    align-items: flex-end;
+  }
+}

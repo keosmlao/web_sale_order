@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
+import { counterSide } from "@/lib/roles";
 import { notifyEmployees } from "@/lib/notify";
 import {
   ACCEPTED_CURRENCIES,
@@ -202,6 +203,16 @@ export async function POST(request: NextRequest) {
   const employee = await getEmployeeFromRequest(request);
   if (!employee) {
     return NextResponse.json({ error: "ບໍ່ມີສິດເຂົ້າໃຊ້" }, { status: 401 });
+  }
+  // Selling and taking the money are separate jobs. The sales floor is
+  // blocked from the register in the menu and at the route, but that is
+  // presentation — this is the control that actually holds, so a
+  // salesperson cannot settle a bill by calling the endpoint directly.
+  if (counterSide(employee) === "pos") {
+    return NextResponse.json(
+      { error: "ພະນັກງານຂາຍຮັບເງິນບໍ່ໄດ້ — ຕ້ອງໃຫ້ຜູ້ຮັບເງິນເປັນຄົນເຮັດ" },
+      { status: 403 },
+    );
   }
 
   const body = (await request.json().catch(() => null)) as
