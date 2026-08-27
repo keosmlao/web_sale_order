@@ -230,6 +230,8 @@ function PosScreen({
   // product picker seeded with the query; a barcode-looking value is added
   // straight to the cart.
   const [quickSearch, setQuickSearch] = useState("");
+  // Category filter for the always-on catalogue column (≥1180px). Empty = all.
+  const [catalogCategory, setCatalogCategory] = useState("");
 
   // Barcode scanning. A USB/Bluetooth scanner behaves like a keyboard that
   // types the code in a tight burst and ends with Enter. We buffer keystrokes
@@ -707,6 +709,60 @@ function PosScreen({
     });
     return matched.slice(0, 8);
   }, [products, quickSearch]);
+
+  // ── Catalogue column ───────────────────────────────────────────────
+  // On a wide screen the products are on-screen the whole time instead of
+  // behind the "ເພີ່ມສິນຄ້າ" modal: tap a tile, it lands in the cart. The
+  // column shares `quickSearch` with the search bar, so typing narrows the
+  // grid rather than opening a second results surface.
+  const catalogCategories = useMemo(() => {
+    const map = new Map<string, { code: string; label: string; count: number }>();
+    for (const p of products) {
+      if (isExcludedPosCategory(p)) continue;
+      const code = productCategoryCode(p);
+      if (!code) continue;
+      const found = map.get(code);
+      if (found) found.count += 1;
+      else map.set(code, { code, label: productCategoryLabel(p), count: 1 });
+    }
+    return [...map.values()].sort((a, b) => b.count - a.count).slice(0, 12);
+  }, [products]);
+
+  const catalogProducts = useMemo(() => {
+    const q = quickSearch.trim().toLowerCase();
+    const matched = products.filter((p) => {
+      if (isExcludedPosCategory(p)) return false;
+      if (catalogCategory && productCategoryCode(p) !== catalogCategory) {
+        return false;
+      }
+      if (!q) return true;
+      const searchable = [
+        p.name,
+        p.code,
+        p.brand ?? "",
+        p.unitName ?? "",
+        p.category ?? "",
+        p.categoryName ?? "",
+        p.groupMain ?? "",
+        p.groupMainName ?? "",
+        productCategoryLabel(p),
+      ]
+        .join(" ")
+        .toLowerCase();
+      return searchable.includes(q);
+    });
+    return matched.slice(0, 60);
+  }, [products, catalogCategory, quickSearch]);
+
+  // Quantity already in the cart, per product — drives the tile badge so the
+  // cashier can see what is on the bill without reading the cart.
+  const cartQtyByProduct = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const line of items) {
+      map.set(line.productId, (map.get(line.productId) ?? 0) + line.quantity);
+    }
+    return map;
+  }, [items]);
 
   const currentPromotions = useMemo(() => {
     const now = new Date();
@@ -2057,7 +2113,7 @@ function PosScreen({
     transportTypes.find((t) => t.code === transportCode)?.name ?? "ຍັງບໍ່ເລືອກ";
 
   return (
-    <div className={`pos-shell2 pos-mstep-${mStep}`}>
+    <div className={`pos-shell2 pos-has-catalog pos-mstep-${mStep}`}>
       <header className="pos-mobile-appbar">
         <div className="pos-mobile-appbar-icon" aria-hidden>
           <svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -2092,6 +2148,162 @@ function PosScreen({
           <span className="min-w-0 truncate">{scanFeedback.text}</span>
         </div>
       ) : null}
+      {/* Catalogue column — visible from 1180px up (CSS). Below that the
+          screen falls back to the search-first flow + picker modal. */}
+      <div className="pos-catalog-col">
+        <div className="pos-catalog-head">
+          <div className="pos-catalog-title">
+            <span>ສິນຄ້າ</span>
+            <span className="pos-catalog-count">
+              {loadingProducts ? "…" : `${catalogProducts.length} ລາຍການ`}
+            </span>
+          </div>
+
+          {/* Search belongs above the grid it filters. The cart column keeps
+              its own copy for narrow screens, where this column is hidden;
+              both write the same `quickSearch` state. */}
+          <form
+            className="pos-catalog-search"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitQuickSearch();
+            }}
+          >
+            <span className="pos-catalog-search-icon" aria-hidden>
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="11" cy="11" r="7" />
+                <path d="m20 20-3-3" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              inputMode="search"
+              value={quickSearch}
+              onChange={(e) => setQuickSearch(e.target.value)}
+              placeholder="ຄົ້ນຫາຊື່ / ລະຫັດ / ຍິງ barcode ໄດ້ເລີຍ"
+              className="pos-catalog-search-input"
+              aria-label="ຄົ້ນຫາສິນຄ້າ"
+            />
+            {quickSearch ? (
+              <button
+                type="button"
+                onClick={() => setQuickSearch("")}
+                className="pos-catalog-search-clear"
+                aria-label="ລຶບ"
+              >
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 6 6 18M6 6l12 12" />
+                </svg>
+              </button>
+            ) : null}
+            <span className="pos-catalog-scan" title="ຍິງ barcode ໄດ້ເລີຍ — ບໍ່ຕ້ອງກົດຫຍັງ">
+              <i aria-hidden />
+              ພ້ອມຍິງ
+            </span>
+          </form>
+          <div className="pos-catalog-chips">
+            <button
+              type="button"
+              onClick={() => setCatalogCategory("")}
+              className={
+                "pos-catalog-chip" +
+                (catalogCategory === "" ? " pos-catalog-chip-on" : "")
+              }
+            >
+              ທັງໝົດ
+            </button>
+            {catalogCategories.map((cat) => (
+              <button
+                key={cat.code}
+                type="button"
+                onClick={() =>
+                  setCatalogCategory((cur) => (cur === cat.code ? "" : cat.code))
+                }
+                className={
+                  "pos-catalog-chip" +
+                  (catalogCategory === cat.code ? " pos-catalog-chip-on" : "")
+                }
+                title={cat.label}
+              >
+                <span className="truncate">{cat.label}</span>
+                <span className="pos-catalog-chip-count">{cat.count}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="pos-catalog-body">
+          {loadingProducts ? (
+            <div className="pos-catalog-empty">ກຳລັງໂຫລດສິນຄ້າ...</div>
+          ) : catalogProducts.length === 0 ? (
+            <div className="pos-catalog-empty">ບໍ່ພົບສິນຄ້າ</div>
+          ) : (
+            <div className="pos-catalog-grid">
+              {catalogProducts.map((p) => {
+                const isSet = isAirSetProduct(p);
+                const out = p.stock <= 0 && !isSet;
+                const low = !out && p.stock > 0 && p.stock <= 5;
+                const inCartQty = cartQtyByProduct.get(p.id) ?? 0;
+                return (
+                  <button
+                    key={p.id}
+                    type="button"
+                    disabled={out}
+                    onClick={() => void addProduct(p)}
+                    className={
+                      "pos-ctile" +
+                      (inCartQty > 0 ? " pos-ctile-in" : "") +
+                      (out ? " pos-ctile-out" : "")
+                    }
+                  >
+                    <span className="pos-ctile-top">
+                      <span className="pos-ctile-cat">
+                        {productCategoryLabel(p)}
+                      </span>
+                      <span
+                        className={
+                          "pos-ctile-stock" +
+                          (out
+                            ? " is-none"
+                            : low
+                              ? " is-low"
+                              : " is-ok")
+                        }
+                      >
+                        <i aria-hidden />
+                        {isSet ? "ຊຸດ" : out ? "ໝົດ" : moneyFmt.format(p.stock)}
+                      </span>
+                    </span>
+
+                    <span className="pos-ctile-name">{p.name}</span>
+
+                    <span className="pos-ctile-meta">
+                      <span className="pos-ctile-code">{p.code}</span>
+                      {p.unitName ? (
+                        <span className="pos-ctile-unit">/ {p.unitName}</span>
+                      ) : null}
+                      {p.brand ? <span className="truncate">{p.brand}</span> : null}
+                    </span>
+
+                    <span className="pos-ctile-foot">
+                      <span className="pos-ctile-price">
+                        {moneyFmt.format(p.price)}
+                        <em>ກີບ</em>
+                      </span>
+                      {inCartQty > 0 ? (
+                        <span className="pos-ctile-qty">
+                          {moneyFmt.format(inCartQty)}
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="pos-order pos-order-left">
         <div className="pos-flow-panel">
           <div className="pos-flow-list">
@@ -2371,18 +2583,7 @@ function PosScreen({
               </div>
             </div>
           ) : (
-            <table className="pos-cart-table">
-              <thead>
-                <tr>
-                  <th className="pos-cart-th-product">ສິນຄ້າ</th>
-                  <th className="pos-cart-th-price">ລາຄາ/ໜ່ວຍ</th>
-                  <th className="pos-cart-th-qty">ຈຳນວນ</th>
-                  <th className="pos-cart-th-total">ສ່ວນຫຼຸດ / ລວມ</th>
-                  <th className="pos-cart-th-seller">ພະນັກງານ / ສາງ</th>
-                  <th className="pos-cart-th-actions" aria-hidden></th>
-                </tr>
-              </thead>
-              <tbody>
+            <div className="pos-clines">
                 {items.map((line, idx) => {
                   const selected = selectedLineIdx === idx;
                   const pricing = linePricing[idx];
@@ -2412,16 +2613,16 @@ function PosScreen({
                   );
                   return (
                     <Fragment key={`${line.productId}-${idx}`}>
-                      <tr
+                      <div
                         onClick={() => setSelectedLineIdx(idx)}
                         className={
-                          "pos-cart-row" +
-                          (selected ? " pos-cart-row-selected" : "") +
-                          (isFreeBonus ? " pos-cart-row-bonus" : "") +
-                          (isPromoSold ? " pos-cart-row-promo" : "")
+                          "pos-cline" +
+                          (selected ? " pos-cline-selected" : "") +
+                          (isFreeBonus ? " pos-cline-bonus" : "") +
+                          (isPromoSold ? " pos-cline-promo" : "")
                         }
                       >
-                        <td className="pos-cart-cell pos-cart-product">
+                        <div className="pos-cline-main">
                           <div className="flex items-center gap-2">
                             <span
                               className={
@@ -2486,236 +2687,268 @@ function PosScreen({
                               </span>
                             </button>
                           )}
-                        </td>
-                        <td className="pos-cart-cell pos-cart-price">
-                          <span className="font-bold text-odoo-text-strong">
-                            {moneyFmt.format(line.unitPrice)}
-                          </span>
-                          {line.unitName ? (
-                            <span className="ml-1 text-[10px] text-odoo-text-muted">
-                              / {line.unitName}
-                            </span>
-                          ) : null}
-                        </td>
-                        <td className="pos-cart-cell pos-cart-qty">
-                          <div className="pos-cart-stepper">
-                            <input
-                              type="number"
-                              min={1}
-                              step={1}
-                              value={line.quantity}
-                              disabled={!!line.promoBonusOfCode}
-                              onClick={(e) => e.stopPropagation()}
-                              onChange={(e) =>
-                                updateLine(idx, {
-                                  quantity: Math.max(
-                                    1,
-                                    Math.floor(Number(e.target.value) || 0),
-                                  ),
-                                })
-                              }
-                              className={
-                                "pos-qty-input" +
-                                (line.promoBonusOfCode ? " opacity-60" : "")
-                              }
-                            />
-                          </div>
-                        </td>
-                        <td className="pos-cart-cell pos-cart-total">
-                          <span
-                            className={
-                              "font-mono text-sm font-bold " +
-                              (isFreeBonus
-                                ? "text-emerald-700"
-                                : isPromoSold
-                                  ? "text-odoo-primary"
-                                  : "text-odoo-text-strong")
-                            }
-                          >
-                            {moneyFmt.format(pricing ? pricing.amount : line.unitPrice * line.quantity)}
-                          </span>
-                          {lineDiscount > 0 ? (
-                            <div
-                              className={
-                                "font-mono text-[10px] font-bold " +
-                                (isFreeBonus
-                                  ? "text-emerald-700"
-                                  : "text-odoo-danger")
-                              }
-                            >
-                              − {moneyFmt.format(lineDiscount)}
-                            </div>
-                          ) : null}
-                        </td>
-                        <td className="pos-cart-cell pos-cart-seller">
-                          <div className="flex flex-col items-start gap-1">
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setLineSalespersonPickerIdx(idx);
-                                setLineSalespersonQuery("");
-                              }}
-                              className="inline-flex items-center gap-1 rounded border border-odoo-border bg-odoo-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-odoo-text-strong transition hover:border-odoo-primary"
-                              aria-label="ປ່ຽນພະນັກງານຂາຍ"
-                            >
-                              <svg
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                className="h-3 w-3 text-odoo-text-muted"
+                          <div className="pos-cline-chips">
+                            <div className="flex flex-col items-start gap-1">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLineSalespersonPickerIdx(idx);
+                                  setLineSalespersonQuery("");
+                                }}
+                                className="inline-flex items-center gap-1 rounded border border-odoo-border bg-odoo-surface-muted px-1.5 py-0.5 text-[10px] font-semibold text-odoo-text-strong transition hover:border-odoo-primary"
+                                aria-label="ປ່ຽນພະນັກງານຂາຍ"
                               >
-                                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-                                <circle cx="12" cy="7" r="4" />
-                              </svg>
-                              <span>
-                                {(() => {
-                                  const emp = employees.find(
-                                    (e) => e.employeeCode === line.salespersonCode,
-                                  );
-                                  return (
-                                    emp?.fullnameLo?.trim() ||
-                                    emp?.nickname?.trim() ||
-                                    emp?.employeeCode ||
-                                    line.salespersonCode ||
-                                    "ເລືອກພະນັກງານ"
-                                  );
-                                })()}
-                              </span>
-                            </button>
-                            {line.buildFromComponents ? null : (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                void openWarehousePickerForLine(idx);
-                              }}
-                              disabled={line.loadingLocations}
-                              className="inline-flex items-center gap-1 rounded border border-odoo-border bg-odoo-surface-muted px-1.5 py-0.5 text-left transition hover:border-odoo-primary disabled:opacity-60"
-                              aria-label="ປ່ຽນສາງ / location"
-                              title="ກົດເພື່ອປ່ຽນສາງ"
-                            >
-                              <svg
-                                viewBox="0 0 24 24"
-                                fill="none"
-                                stroke="currentColor"
-                                strokeWidth="1.8"
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                className="h-3 w-3 shrink-0 text-odoo-text-muted"
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.8"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  className="h-3 w-3 text-odoo-text-muted"
+                                >
+                                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                                  <circle cx="12" cy="7" r="4" />
+                                </svg>
+                                <span>
+                                  {(() => {
+                                    const emp = employees.find(
+                                      (e) => e.employeeCode === line.salespersonCode,
+                                    );
+                                    return (
+                                      emp?.fullnameLo?.trim() ||
+                                      emp?.nickname?.trim() ||
+                                      emp?.employeeCode ||
+                                      line.salespersonCode ||
+                                      "ເລືອກພະນັກງານ"
+                                    );
+                                  })()}
+                                </span>
+                              </button>
+                              {line.buildFromComponents ? null : (
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void openWarehousePickerForLine(idx);
+                                }}
+                                disabled={line.loadingLocations}
+                                className="inline-flex items-center gap-1 rounded border border-odoo-border bg-odoo-surface-muted px-1.5 py-0.5 text-left transition hover:border-odoo-primary disabled:opacity-60"
+                                aria-label="ປ່ຽນສາງ / location"
+                                title="ກົດເພື່ອປ່ຽນສາງ"
                               >
-                                <path d="M3 9 12 4l9 5-9 5-9-5Z" />
-                                <path d="M3 9v6l9 5 9-5V9" />
-                              </svg>
-                            {line.loadingLocations ? (
-                              <span className="text-[10px] text-odoo-text-muted">
-                                ກຳລັງໂຫລດ stock...
-                              </span>
-                            ) : line.locations.length === 0 ? (
-                              line.warehouseStock > 0 ? (
+                                <svg
+                                  viewBox="0 0 24 24"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="1.8"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  className="h-3 w-3 shrink-0 text-odoo-text-muted"
+                                >
+                                  <path d="M3 9 12 4l9 5-9 5-9-5Z" />
+                                  <path d="M3 9v6l9 5 9-5V9" />
+                                </svg>
+                              {line.loadingLocations ? (
                                 <span className="text-[10px] text-odoo-text-muted">
-                                  ສາງ {warehouseNames[line.warehouseCode] ?? line.warehouseCode}
+                                  ກຳລັງໂຫລດ stock...
                                 </span>
-                              ) : (
-                                <span className="text-[10px] font-semibold text-odoo-danger">
-                                  ບໍ່ມີ stock
-                                </span>
-                              )
-                            ) : (() => {
-                              // Hide conditions with zero balance. When the live
-                              // function shows nothing but the warehouse cache
-                              // does, synthesize a single "ສະພາບດີ" row so the
-                              // cart line stays visually consistent (always a
-                              // dropdown, never a plain text fallback).
-                              const nonEmpty = line.locations.filter(
-                                (l) => l.balanceQty > 0,
-                              );
-                              const options: Array<{
-                                code: string;
-                                name: string;
-                                qty: number;
-                              }> =
-                                nonEmpty.length > 0
-                                  ? nonEmpty.map((l) => ({
-                                    code: l.location ?? "",
-                                    name: l.locationName ?? l.location ?? "—",
-                                    qty: l.balanceQty,
-                                  }))
-                                  : line.warehouseStock > 0
-                                    ? [
-                                      {
-                                        code: "",
-                                        name: "ສະພາບດີ",
-                                        qty: line.warehouseStock,
-                                      },
-                                    ]
-                                    : [];
-                              if (options.length === 0) {
-                                return (
+                              ) : line.locations.length === 0 ? (
+                                line.warehouseStock > 0 ? (
+                                  <span className="text-[10px] text-odoo-text-muted">
+                                    ສາງ {warehouseNames[line.warehouseCode] ?? line.warehouseCode}
+                                  </span>
+                                ) : (
                                   <span className="text-[10px] font-semibold text-odoo-danger">
                                     ບໍ່ມີ stock
                                   </span>
+                                )
+                              ) : (() => {
+                                // Hide conditions with zero balance. When the live
+                                // function shows nothing but the warehouse cache
+                                // does, synthesize a single "ສະພາບດີ" row so the
+                                // cart line stays visually consistent (always a
+                                // dropdown, never a plain text fallback).
+                                const nonEmpty = line.locations.filter(
+                                  (l) => l.balanceQty > 0,
                                 );
-                              }
-                              const sel = options.find(
-                                (o) => o.code === line.locationCode,
-                              );
-                              const isGoodCondition =
-                                sel?.code === "" || sel?.code.endsWith("01");
-                              return (
-                                <span
-                                  className={
-                                    "text-[10px] font-semibold " +
-                                    (sel && !isGoodCondition
-                                      ? "text-odoo-warning"
-                                      : "text-odoo-text-muted")
-                                  }
-                                >
-                                  ສາງ {warehouseNames[line.warehouseCode] ?? line.warehouseCode}
-                                  {" · "}
-                                  {sel?.name ?? "—"}
-                                  {" · "}
-                                  {moneyFmt.format(sel?.qty ?? line.warehouseStock)}
-                                </span>
-                              );
-                            })()}
-                            </button>
-                            )}
-                            {(() => {
-                              const selectedLocation = line.locations.find(
-                                (loc) => loc.location === line.locationCode,
-                              );
-                              if (!selectedLocation || selectedLocation.balanceQty >= line.quantity) return null;
-                              return (
-                                <span className="text-[10px] font-semibold text-odoo-danger">
-                                  stock ບໍ່ພໍ
-                                </span>
-                              );
-                            })()}
+                                const options: Array<{
+                                  code: string;
+                                  name: string;
+                                  qty: number;
+                                }> =
+                                  nonEmpty.length > 0
+                                    ? nonEmpty.map((l) => ({
+                                      code: l.location ?? "",
+                                      name: l.locationName ?? l.location ?? "—",
+                                      qty: l.balanceQty,
+                                    }))
+                                    : line.warehouseStock > 0
+                                      ? [
+                                        {
+                                          code: "",
+                                          name: "ສະພາບດີ",
+                                          qty: line.warehouseStock,
+                                        },
+                                      ]
+                                      : [];
+                                if (options.length === 0) {
+                                  return (
+                                    <span className="text-[10px] font-semibold text-odoo-danger">
+                                      ບໍ່ມີ stock
+                                    </span>
+                                  );
+                                }
+                                const sel = options.find(
+                                  (o) => o.code === line.locationCode,
+                                );
+                                const isGoodCondition =
+                                  sel?.code === "" || sel?.code.endsWith("01");
+                                return (
+                                  <span
+                                    className={
+                                      "text-[10px] font-semibold " +
+                                      (sel && !isGoodCondition
+                                        ? "text-odoo-warning"
+                                        : "text-odoo-text-muted")
+                                    }
+                                  >
+                                    ສາງ {warehouseNames[line.warehouseCode] ?? line.warehouseCode}
+                                    {" · "}
+                                    {sel?.name ?? "—"}
+                                    {" · "}
+                                    {moneyFmt.format(sel?.qty ?? line.warehouseStock)}
+                                  </span>
+                                );
+                              })()}
+                              </button>
+                              )}
+                              {(() => {
+                                const selectedLocation = line.locations.find(
+                                  (loc) => loc.location === line.locationCode,
+                                );
+                                if (!selectedLocation || selectedLocation.balanceQty >= line.quantity) return null;
+                                return (
+                                  <span className="text-[10px] font-semibold text-odoo-danger">
+                                    stock ບໍ່ພໍ
+                                  </span>
+                                );
+                              })()}
+                            </div>
                           </div>
-                        </td>
-                        <td className="pos-cart-cell pos-cart-actions">
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              removeLine(idx);
-                            }}
-                            disabled={!!line.promoBonusOfCode}
-                            className="pos-iconbtn text-odoo-danger hover:bg-odoo-danger-bg"
-                            aria-label="ລົບ"
-                            title={line.promoBonusOfCode ? "ສິນຄ້າແຖມ — ລົບສິນຄ້າຫຼັກເພື່ອລົບແຖມ" : undefined}
-                          >
-                            ✕
-                          </button>
-                        </td>
-                      </tr>
+                        </div>
+
+                        <div className="pos-cline-side">
+                          <div className="pos-cline-qty">
+                            <div className="pos-cart-stepper">
+                              {/* −/+ beside the field: on a counter tablet
+                                  the cashier adjusts by one far more often
+                                  than they type a number. A bonus line is
+                                  driven by its trigger, so it stays locked. */}
+                              <button
+                                type="button"
+                                disabled={!!line.promoBonusOfCode}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateLine(idx, {
+                                    quantity: Math.max(1, line.quantity - 1),
+                                  });
+                                }}
+                                className="pos-step-btn"
+                                aria-label="ຫຼຸດຈຳນວນ"
+                              >
+                                −
+                              </button>
+                              <input
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={line.quantity}
+                                disabled={!!line.promoBonusOfCode}
+                                onClick={(e) => e.stopPropagation()}
+                                onChange={(e) =>
+                                  updateLine(idx, {
+                                    quantity: Math.max(
+                                      1,
+                                      Math.floor(Number(e.target.value) || 0),
+                                    ),
+                                  })
+                                }
+                                className={
+                                  "pos-qty-input" +
+                                  (line.promoBonusOfCode ? " opacity-60" : "")
+                                }
+                              />
+                              <button
+                                type="button"
+                                disabled={!!line.promoBonusOfCode}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  updateLine(idx, { quantity: line.quantity + 1 });
+                                }}
+                                className="pos-step-btn pos-step-btn-plus"
+                                aria-label="ເພີ່ມຈຳນວນ"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                          <div className="pos-cline-money">
+                            <span
+                              className={
+                                "font-mono text-sm font-bold " +
+                                (isFreeBonus
+                                  ? "text-emerald-700"
+                                  : isPromoSold
+                                    ? "text-odoo-primary"
+                                    : "text-odoo-text-strong")
+                              }
+                            >
+                              {moneyFmt.format(pricing ? pricing.amount : line.unitPrice * line.quantity)}
+                            </span>
+                            {lineDiscount > 0 ? (
+                              <div
+                                className={
+                                  "font-mono text-[10px] font-bold " +
+                                  (isFreeBonus
+                                    ? "text-emerald-700"
+                                    : "text-odoo-danger")
+                                }
+                              >
+                                − {moneyFmt.format(lineDiscount)}
+                              </div>
+                            ) : null}
+                            <div className="pos-cline-unit">
+                              <span className="font-bold text-odoo-text-strong">
+                                {moneyFmt.format(line.unitPrice)}
+                              </span>
+                              {line.unitName ? (
+                                <span className="ml-1 text-[10px] text-odoo-text-muted">
+                                  / {line.unitName}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
+                          <div className="pos-cline-del">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                removeLine(idx);
+                              }}
+                              disabled={!!line.promoBonusOfCode}
+                              className="pos-iconbtn text-odoo-danger hover:bg-odoo-danger-bg"
+                              aria-label="ລົບ"
+                              title={line.promoBonusOfCode ? "ສິນຄ້າແຖມ — ລົບສິນຄ້າຫຼັກເພື່ອລົບແຖມ" : undefined}
+                            >
+                              ✕
+                            </button>
+                          </div>
+                        </div>
+                      </div>
                       {selected && isAirSetLine(line) ? (
-                        <tr className="pos-cart-detail-tr">
-                          <td colSpan={6} className="pos-cart-detail-cell">
+                        <div className="pos-cline-detail">
                             <div className="pos-set-detail">
                               <div className="pos-set-detail-head">
                                 <span>ລາຍລະອຽດຊຸດ</span>
@@ -2757,14 +2990,12 @@ function PosScreen({
                                 </div>
                               )}
                             </div>
-                          </td>
-                        </tr>
+                        </div>
                       ) : null}
                     </Fragment>
                   );
                 })}
-              </tbody>
-            </table>
+            </div>
           )}
         </div>
       </div>

@@ -7699,3 +7699,667 @@ a {
   .pr-table tr { break-inside: avoid; }
   .pr-sheet, .pr-sheet * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 }
+
+/* ═══════════════════════════════════════════════════════════════════
+   POS v3 — always-on catalogue column
+   The sale used to start with a modal: "ເພີ່ມສິນຄ້າ" → search → pick
+   warehouse → cart. On a wide screen the products now sit on-screen the
+   whole time and one tap puts a line on the bill; the modal stays for
+   the cases that need an explicit warehouse/location choice, and below
+   1180px nothing changes (search-first flow, as before).
+   ═══════════════════════════════════════════════════════════════════ */
+
+.pos-catalog-col { display: none; }
+
+@media (min-width: 1180px) {
+  .pos-shell2.pos-has-catalog {
+    grid-template-columns:
+      minmax(340px, 0.95fr)
+      minmax(420px, 1.05fr)
+      minmax(330px, 400px);
+  }
+
+  .pos-catalog-col {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    max-height: 100dvh;
+    overflow: hidden;
+    background: #f8fafc;
+    border-right: 1px solid #e6ebf2;
+  }
+
+  /* Everything is visible at once on a wide screen, so the 1-2-3 wizard
+     only costs vertical space. It stays on mobile, where the columns
+     stack and the steps genuinely navigate. */
+  .pos-shell2.pos-has-catalog .pos-flow-panel { display: none; }
+
+  /* One results surface, not two: the search bar now filters the grid. */
+  .pos-shell2.pos-has-catalog .pos-quick-results { display: none; }
+}
+
+.pos-catalog-head {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+  padding: 12px 14px 11px;
+  background: #ffffff;
+  border-bottom: 1px solid #e6ebf2;
+}
+
+.pos-catalog-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+.pos-catalog-title > span:first-child {
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--odoo-text-strong);
+}
+.pos-catalog-count {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--odoo-text-soft);
+}
+
+.pos-catalog-chips {
+  display: flex;
+  gap: 7px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+.pos-catalog-chips::-webkit-scrollbar { height: 5px; }
+.pos-catalog-chips::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+
+.pos-catalog-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
+  max-width: 190px;
+  height: 44px;
+  padding: 0 15px;
+  border: 1px solid var(--odoo-border-strong);
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--odoo-text);
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+.pos-catalog-chip:hover {
+  border-color: var(--odoo-primary);
+  background: var(--odoo-primary-50);
+  color: var(--odoo-primary-dark);
+}
+.pos-catalog-chip-on,
+.pos-catalog-chip-on:hover {
+  background: var(--odoo-primary);
+  border-color: var(--odoo-primary);
+  color: #ffffff;
+}
+.pos-catalog-chip-count {
+  font-size: 11px;
+  font-weight: 800;
+  opacity: 0.72;
+}
+
+.pos-catalog-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 14px;
+}
+
+.pos-catalog-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(152px, 1fr));
+  gap: 12px;
+}
+
+.pos-catalog-empty {
+  display: flex;
+  min-height: 180px;
+  align-items: center;
+  justify-content: center;
+  border: 1px dashed var(--odoo-border-strong);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.7);
+  color: var(--odoo-text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  padding: 24px;
+  text-align: center;
+}
+
+/* ── Tile ─────────────────────────────────────────────────────────── */
+.pos-ctile {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 9px;
+  min-height: 178px;
+  padding: 13px 14px 12px;
+  border: 1.5px solid #e6ebf2;
+  border-radius: 16px;
+  background: #ffffff;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, box-shadow 160ms ease, transform 90ms ease;
+}
+.pos-ctile:hover:not(:disabled) {
+  border-color: var(--odoo-primary);
+  box-shadow: 0 8px 20px rgba(43, 112, 181, 0.14);
+  transform: translateY(-1px);
+}
+.pos-ctile:active:not(:disabled) { transform: translateY(0); }
+.pos-ctile-in { border-color: var(--odoo-primary); }
+.pos-ctile-out {
+  background: var(--odoo-muted-bg);
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pos-ctile-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+.pos-ctile-cat {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--odoo-text-soft);
+}
+.pos-ctile-stock {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+}
+.pos-ctile-stock i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: currentColor;
+}
+.pos-ctile-stock.is-ok { color: var(--odoo-success-text); }
+.pos-ctile-stock.is-ok i { background: var(--odoo-success); }
+.pos-ctile-stock.is-low { color: var(--odoo-warning-text); }
+.pos-ctile-stock.is-low i { background: var(--odoo-warning); }
+.pos-ctile-stock.is-none { color: var(--odoo-danger-text); }
+.pos-ctile-stock.is-none i { background: var(--odoo-danger); }
+
+.pos-ctile-name {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1.45;
+  color: var(--odoo-text-strong);
+  text-wrap: pretty;
+}
+
+.pos-ctile-meta {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--odoo-text-soft);
+}
+.pos-ctile-code {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+}
+
+.pos-ctile-foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 9px;
+  border-top: 1px dashed var(--odoo-border-strong);
+}
+.pos-ctile-price {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  color: var(--odoo-primary-dark);
+}
+.pos-ctile-price em {
+  font-style: normal;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--odoo-text-soft);
+}
+.pos-ctile-qty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 26px;
+  height: 26px;
+  padding: 0 8px;
+  border-radius: 9px;
+  background: var(--odoo-primary);
+  color: #ffffff;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 900;
+}
+
+/* ── POS v3: touch sizing in the cart ────────────────────────────────
+   The cart shrank its controls to fit a 6-column table (32px buttons,
+   34px qty field). On a counter tablet those are under the 44px floor,
+   so they get missed. Widen them from 1180px up, where the catalogue
+   column is on and the cart column has the room. */
+@media (min-width: 1180px) {
+  /* Row-level controls (salesperson, warehouse, special price) are the
+     other thing a cashier taps mid-sale — they were 10px chips. The
+     stepper and delete button are sized with the cart-row rules below. */
+  .pos-shell2.pos-has-catalog .pos-cline-main button {
+    min-height: 32px;
+    padding: 5px 9px;
+    border-radius: 8px;
+    font-size: 11px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   POS: sidebar collapses to an icon rail
+   The sale needs three columns (catalogue / cart / checkout). At 264px
+   the sidebar squeezed all three down to their minimum widths, so names
+   wrapped to three lines and the category chips ran off the edge. On
+   /orders/new only, the rail drops to 72px and hands ~190px back.
+   Everything stays reachable — icons keep their title/aria labels.
+   ═══════════════════════════════════════════════════════════════════ */
+@media (min-width: 768px) {
+  .pos-compact-nav .sbd-shell {
+    width: 72px;
+  }
+  .pos-compact-nav .sbd-inner {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  /* Brand: keep the mark, drop the wordmark. */
+  .pos-compact-nav .sbd-brand {
+    justify-content: center;
+    margin: 0 8px;
+    padding: 0 0 14px;
+    gap: 0;
+  }
+  .pos-compact-nav .sbd-brand-text { display: none; }
+
+  /* Nav items become square icon buttons. */
+  .pos-compact-nav .sbd-nav { padding-left: 8px; padding-right: 8px; }
+  .pos-compact-nav .sbd-section-label { display: none; }
+  .pos-compact-nav .sbd-item {
+    justify-content: center;
+    gap: 0;
+    min-height: 46px;
+    padding: 9px 0;
+    border-radius: 12px;
+  }
+  .pos-compact-nav .sbd-item-label,
+  .pos-compact-nav .sbd-item-chevron,
+  .pos-compact-nav .sbd-item-dot { display: none; }
+
+  /* Collapsed groups can't show a submenu in 72px — the group button
+     still opens the section on the full-width pages. */
+  .pos-compact-nav .sbd-sub { display: none; }
+
+  /* Footer: avatar only, logout as an icon button. */
+  .pos-compact-nav .sbd-foot { padding-left: 8px; padding-right: 8px; }
+  .pos-compact-nav .sbd-user { justify-content: center; gap: 0; }
+  .pos-compact-nav .sbd-user-text { display: none; }
+  .pos-compact-nav .sbd-logout {
+    justify-content: center;
+    gap: 0;
+    padding-left: 0;
+    padding-right: 0;
+  }
+  .pos-compact-nav .sbd-logout span { display: none; }
+}
+
+/* ── Catalogue tiles: fit the column instead of fighting it ──────────
+   Long Lao product names were taking three lines and pushing the price
+   row into a wrap ("12,990,000 ກີບ /" then "ໜ່ວຍ"). Name is capped at
+   two lines and the unit moves up to the code line, which has room. */
+.pos-ctile-name {
+  -webkit-line-clamp: 2;
+}
+.pos-ctile-foot {
+  flex-wrap: nowrap;
+}
+.pos-ctile-price {
+  white-space: nowrap;
+}
+.pos-ctile-unit {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 800;
+  color: var(--odoo-text-soft);
+}
+
+/* Category names are long ("ອາໄຫຼ່ ອຸປະກອນ ເຄື່ອງມື"). Truncate the label
+   and keep the count pinned, so a chip can never run past the column. */
+.pos-catalog-chip {
+  max-width: 158px;
+  overflow: hidden;
+  font-size: 12px;
+  padding: 0 12px;
+}
+.pos-catalog-chip > span:first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pos-catalog-chip-count {
+  flex-shrink: 0;
+}
+
+/* With the rail reclaimed there is room to let the catalogue breathe. */
+@media (min-width: 1180px) {
+  .pos-shell2.pos-has-catalog {
+    grid-template-columns:
+      minmax(380px, 1.05fr)
+      minmax(430px, 1fr)
+      minmax(340px, 400px);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   POS: cart rows (was a 6-column table)
+   A table forced every control to table-cell size — 32px buttons, a
+   34px number field, 10px chips — and made the row unreadable at a
+   glance. The row is now two blocks: what was sold on the left, what
+   it costs and how many on the right.
+   ═══════════════════════════════════════════════════════════════════ */
+.pos-clines {
+  display: flex;
+  flex-direction: column;
+}
+
+.pos-cline {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--odoo-border);
+  background: var(--odoo-surface);
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.pos-cline:last-child { border-bottom: 0; }
+.pos-cline:hover { background: var(--odoo-surface-muted); }
+.pos-cline-selected {
+  background: var(--odoo-primary-50);
+  box-shadow: inset 3px 0 0 var(--odoo-primary);
+}
+.pos-cline-selected:hover { background: var(--odoo-primary-50); }
+/* Sold-at-a-promo-price vs given-away-free stay tinted, as before. */
+.pos-cline-promo { background: var(--odoo-warning-bg); }
+.pos-cline-promo:hover { background: var(--odoo-warning-bg); }
+.pos-cline-bonus { background: #f0fdf4; }
+.pos-cline-bonus:hover { background: #f0fdf4; }
+
+.pos-cline-main {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  flex-grow: 1;
+  min-width: 0;
+}
+.pos-cline-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+/* The seller / warehouse pickers were a vertical stack inside their own
+   cell; side by side they read as one metadata line. */
+.pos-cline-chips > div {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px !important;
+}
+
+.pos-cline-side {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.pos-cline-money {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 104px;
+}
+.pos-cline-unit {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--odoo-text-soft);
+  white-space: nowrap;
+}
+.pos-cline-del { display: flex; }
+
+.pos-cline-detail {
+  padding: 0 14px 13px;
+  background: var(--odoo-surface-muted);
+  border-bottom: 1px solid var(--odoo-border);
+}
+
+/* ── Stepper: −  [n]  + ─────────────────────────────────────────── */
+.pos-cart-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+  height: 44px;
+  border: 1.5px solid var(--odoo-border-strong);
+  border-radius: 12px;
+  background: var(--odoo-surface);
+  overflow: hidden;
+}
+.pos-step-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 100%;
+  flex-shrink: 0;
+  border: 0;
+  background: transparent;
+  color: var(--odoo-text);
+  font-size: 19px;
+  font-weight: 900;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.pos-step-btn:hover:not(:disabled) { background: var(--odoo-surface-muted); }
+.pos-step-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.pos-step-btn-plus {
+  background: var(--odoo-primary);
+  color: #ffffff;
+}
+.pos-step-btn-plus:hover:not(:disabled) { background: var(--odoo-primary-dark); }
+.pos-step-btn-plus:disabled { background: var(--odoo-text-soft); }
+
+.pos-cart-stepper .pos-qty-input {
+  width: 52px;
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 900;
+  color: var(--odoo-text-strong);
+}
+.pos-cart-stepper .pos-qty-input:focus {
+  outline: none;
+  background: var(--odoo-primary-50);
+}
+/* The spinners duplicate the −/+ buttons and steal width. */
+.pos-cart-stepper .pos-qty-input::-webkit-outer-spin-button,
+.pos-cart-stepper .pos-qty-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.pos-cart-stepper .pos-qty-input { -moz-appearance: textfield; }
+
+/* Delete stays a 44px target but reads as quiet until hovered. */
+.pos-cline-del .pos-iconbtn {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  border-radius: 11px;
+  color: var(--odoo-text-soft);
+}
+.pos-cline-del .pos-iconbtn:hover:not(:disabled) {
+  background: var(--odoo-danger-bg);
+  color: var(--odoo-danger);
+}
+
+/* On a phone the row stacks: money and stepper drop under the name. */
+@media (max-width: 640px) {
+  .pos-cline {
+    flex-direction: column;
+    gap: 10px;
+  }
+  .pos-cline-side {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+/* ── Catalogue search: the filter sits above the grid it filters ─────
+   The cart column keeps its own search bar for narrow screens (this
+   column is hidden there); above 1180px that copy and the redundant
+   "ເພີ່ມສິນຄ້າ" button step aside, since a tap on a tile is the fast
+   path and the picker modal is still on the promo/scan row. */
+.pos-catalog-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  height: 52px;
+  padding: 0 12px 0 13px;
+  border: 1.5px solid var(--odoo-border-strong);
+  border-radius: 14px;
+  background: var(--odoo-surface);
+  transition: border-color 140ms ease, box-shadow 140ms ease;
+}
+.pos-catalog-search:focus-within {
+  border-color: var(--odoo-primary);
+  box-shadow: 0 0 0 3px rgba(43, 112, 181, 0.12);
+}
+.pos-catalog-search-icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  color: var(--odoo-text-soft);
+}
+.pos-catalog-search-input {
+  flex-grow: 1;
+  min-width: 0;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--odoo-text-strong);
+  font-size: 14px;
+  font-weight: 700;
+}
+.pos-catalog-search-input:focus { outline: none; }
+.pos-catalog-search-input::placeholder {
+  color: var(--odoo-text-soft);
+  font-weight: 700;
+}
+.pos-catalog-search-clear {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--odoo-text-soft);
+  cursor: pointer;
+}
+.pos-catalog-search-clear:hover {
+  background: var(--odoo-muted-bg);
+  color: var(--odoo-text-strong);
+}
+.pos-catalog-scan {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  padding: 0 10px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--odoo-success-bg);
+  border: 1px solid var(--odoo-success-border);
+  color: var(--odoo-success-text);
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+.pos-catalog-scan i {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--odoo-success);
+}
+
+@media (min-width: 1180px) {
+  .pos-shell2.pos-has-catalog .pos-search-bar,
+  .pos-shell2.pos-has-catalog .pos-add-big,
+  .pos-shell2.pos-has-catalog .pos-scan-hint {
+    display: none;
+  }
+  /* Only the promo chip is left on that row, so let it sit inline. */
+  .pos-shell2.pos-has-catalog .pos-add-bar {
+    justify-content: flex-start;
+  }
+}

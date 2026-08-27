@@ -787,6 +787,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
                           <button
                             type="button"
                             aria-expanded={open}
+                            title={item.label}
                             onClick={() =>
                               setOpenGroups((prev) => ({
                                 ...prev,
@@ -838,6 +839,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
                           prefetch
                           onPointerEnter={() => router.prefetch(item.href)}
                           onClick={() => markPending(item.href)}
+                          title={item.label}
                           className={"sbd-item " + (active ? "sbd-item-active" : "")}
                         >
                           <span className="sbd-item-icon">{item.icon}</span>
