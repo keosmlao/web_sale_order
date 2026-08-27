@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { STOCK_BALANCE_AS_OF_DATE } from "@/lib/inventory-config";
+import { committedStockCte } from "@/lib/committed-stock";
 
 type BaseRow = {
   ic_code: string | null;
@@ -57,7 +58,7 @@ export async function POST(request: NextRequest) {
   }
 
   const body = (await request.json().catch(() => null)) as
-    | { codes?: unknown; warehouses?: unknown }
+    | { codes?: unknown; warehouses?: unknown; excludeDocNo?: unknown }
     | null;
 
   const codes = Array.isArray(body?.codes)
@@ -71,6 +72,10 @@ export async function POST(request: NextRequest) {
         .filter((w): w is string => typeof w === "string" && w.trim() !== "")
         .map((w) => w.trim())
     : [];
+
+  // An order being rewritten must not be counted against itself.
+  const excludeDocNo =
+    typeof body?.excludeDocNo === "string" ? body.excludeDocNo.trim() : "";
 
   if (codes.length === 0) {
     return NextResponse.json({ items: [] });
@@ -162,7 +167,8 @@ export async function POST(request: NextRequest) {
       GROUP BY ic_code
     `,
     prisma.$queryRaw<LocationRow[]>`
-      WITH shelves AS (
+      WITH committed AS (${committedStockCte(excludeDocNo)}),
+      shelves AS (
         SELECT sh.code AS location, sh.name_1 AS location_name,
                sh.whcode AS warehouse, wh.name_1 AS warehouse_name
         FROM ic_shelf sh
@@ -199,7 +205,13 @@ export async function POST(request: NextRequest) {
         s.warehouse_name,
         s.location,
         s.location_name,
-        COALESCE(b.balance_qty, 0) AS balance_qty,
+        -- What can still be sold, not what is standing there: a SOK is a
+        -- promise and only moves the shelf when it is settled, so an
+        -- unsettled order's units are already spoken for. Never negative.
+        GREATEST(
+          0,
+          FLOOR(COALESCE(b.balance_qty, 0) - COALESCE(cm.qty, 0))
+        ) AS balance_qty,
         COALESCE(b.ic_unit_code, c.ic_unit_code) AS ic_unit_code,
         b.average_cost,
         b.average_cost_end,
@@ -210,6 +222,10 @@ export async function POST(request: NextRequest) {
         ON b.ic_code = c.ic_code
         AND b.warehouse = s.warehouse
         AND b.location = s.location
+      LEFT JOIN committed cm
+        ON cm.item_code = c.ic_code
+        AND cm.wh_code = s.warehouse
+        AND cm.shelf_code = s.location
       ORDER BY c.ic_code, s.warehouse, s.location
     `,
   ]);

@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 import { STOCK_BALANCE_AS_OF_DATE } from "@/lib/inventory-config";
+import { committedStockCte } from "@/lib/committed-stock";
 
 // Per-item warehouse+location breakdown — called by the mobile app right
 // after the cashier picks a product, so the warehouse picker can show
@@ -23,6 +24,10 @@ export async function GET(request: NextRequest) {
   }
 
   const code = (request.nextUrl.searchParams.get("code") ?? "").trim();
+  // The order being edited must not be counted against itself.
+  const excludeDocNo = (
+    request.nextUrl.searchParams.get("excludeDocNo") ?? ""
+  ).trim();
   if (!code) {
     return NextResponse.json(
       { error: "Missing item code" },
@@ -31,12 +36,19 @@ export async function GET(request: NextRequest) {
   }
 
   const rows = await prisma.$queryRaw<Row[]>`
+    WITH committed AS (${committedStockCte(excludeDocNo)})
     SELECT
       b.warehouse,
       wh.name_1 AS warehouse_name,
       b.location,
       sh.name_1 AS location_name,
-      b.balance_qty::int AS balance_qty
+      -- What can still be sold: on the shelf, less what open orders have
+      -- already promised from that shelf. Never negative — an oversold
+      -- shelf is zero available, not a negative that reads as a credit.
+      GREATEST(
+        0,
+        FLOOR(COALESCE(b.balance_qty, 0) - COALESCE(c.qty, 0))
+      )::int AS balance_qty
     FROM public.sml_ic_function_stock_balance_warehouse_location(
       ${STOCK_BALANCE_AS_OF_DATE}::date,
       ${code},
@@ -45,8 +57,12 @@ export async function GET(request: NextRequest) {
     ) b
     LEFT JOIN ic_warehouse wh ON wh.code = b.warehouse
     LEFT JOIN ic_shelf sh ON sh.whcode = b.warehouse AND sh.code = b.location
-    WHERE COALESCE(b.balance_qty, 0) > 0
-    ORDER BY b.balance_qty DESC, b.warehouse, b.location
+    LEFT JOIN committed c
+      ON c.item_code = ${code}
+     AND c.wh_code = b.warehouse
+     AND c.shelf_code = b.location
+    WHERE COALESCE(b.balance_qty, 0) - COALESCE(c.qty, 0) >= 1
+    ORDER BY balance_qty DESC, b.warehouse, b.location
   `;
 
   return NextResponse.json({
