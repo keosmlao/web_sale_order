@@ -9218,3 +9218,16 @@ a {
   .pos-sale-rail .pos-delivery-trigger { font-size: 10.5px; }
   .pos-sale-rail .pos-action-row .pos-cta { font-size: 13px; }
 }
+
+/* The delete control sits in its own grid column, which was wider than
+   the button — so ✕ floated in the middle of it instead of lining up
+   with the right edge of the row above it. */
+@media (min-width: 1180px) {
+  .pos-sale-rail .pos-cline-del {
+    justify-content: flex-end;
+    align-items: center;
+  }
+  .pos-sale-rail .pos-cline-del .pos-iconbtn {
+    margin-right: -2px;
+  }
+}
