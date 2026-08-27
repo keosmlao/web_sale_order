@@ -614,6 +614,13 @@ function PosScreen({
       }
       if (!cancelled) setLoadingProducts(true);
       try {
+        // The full catalogue is only needed by promotion matching, the set
+        // builder and the picker modal — none of which the cashier can reach
+        // in the first second. The visible grid comes from the filtered
+        // endpoint, so hold this back and let the screen become usable
+        // first instead of racing it for the connection.
+        await new Promise((r) => setTimeout(r, 1200));
+        if (cancelled) return;
         const res = await fetch(
           `/api/products?warehouses=${encodeURIComponent(salesWarehouses.join(","))}`,
         );
@@ -696,7 +703,8 @@ function PosScreen({
   }, [products]);
 
   // Excluded-category test walks several string comparisons per product;
-  // it does not depend on the query, so resolve it once too.
+  // it does not depend on the query, so resolve it once too. Used by the
+  // picker modal, which still works off the background-loaded full list.
   const posProducts = useMemo(
     () => products.filter((p) => !isExcludedPosCategory(p)),
     [products],
@@ -723,58 +731,77 @@ function PosScreen({
   // inline right under the bar (tap a row → straight into the cart via
   // addProduct), so on mobile the cashier never has to open the picker modal.
   // Same matcher as the picker grid above, capped short for a tidy dropdown.
-  const quickResults = useMemo(() => {
-    const q = quickSearch.trim().toLowerCase();
-    if (!q) return [] as Product[];
-    const isAirQuery = q === "ແອ" || q === "air";
-    const matched: Product[] = [];
-    for (const p of posProducts) {
-      const searchable = productSearchIndex.get(p.id) ?? "";
-      const hit =
-        searchable.includes(q) ||
-        (isAirQuery &&
-          (searchable.includes("air") ||
-            p.category?.trim() === "032" ||
-            p.groupMain?.trim() === "12"));
-      if (!hit) continue;
-      matched.push(p);
-      // Only eight rows are ever rendered — stop scanning once they are in.
-      if (matched.length >= 8) break;
-    }
-    return matched;
-  }, [posProducts, productSearchIndex, quickSearch]);
 
   // ── Catalogue column ───────────────────────────────────────────────
-  // On a wide screen the products are on-screen the whole time instead of
-  // behind the "ເພີ່ມສິນຄ້າ" modal: tap a tile, it lands in the cart. The
-  // column shares `quickSearch` with the search bar, so typing narrows the
-  // grid rather than opening a second results surface.
-  const catalogCategories = useMemo(() => {
-    const map = new Map<string, { code: string; label: string; count: number }>();
-    for (const p of posProducts) {
-      const code = productCategoryCode(p);
-      if (!code) continue;
-      const found = map.get(code);
-      if (found) found.count += 1;
-      else map.set(code, { code, label: productCategoryLabel(p), count: 1 });
-    }
-    return [...map.values()].sort((a, b) => b.count - a.count).slice(0, 12);
-  }, [posProducts]);
+  // Fed by the server, not by filtering a 10.6k-row array in the browser.
+  // The grid renders 60 rows and the quick list 8; pulling the whole
+  // catalogue over the wire to pick those was the page's main cost.
+  const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
+  const [catalogBusy, setCatalogBusy] = useState(true);
+  const [catalogCategories, setCatalogCategories] = useState<
+    Array<{ code: string; label: string; count: number }>
+  >([]);
 
-  const catalogProducts = useMemo(() => {
-    const q = quickSearch.trim().toLowerCase();
-    const matched: Product[] = [];
-    for (const p of posProducts) {
-      if (catalogCategory && productCategoryCode(p) !== catalogCategory) {
-        continue;
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/products?facets=1");
+        if (!res.ok) return;
+        const data = (await res.json()) as Array<{
+          code: string;
+          label: string;
+          count: number;
+        }>;
+        if (!cancelled) setCatalogCategories(data);
+      } catch {
+        // chips are a convenience — search still works without them
       }
-      if (q && !(productSearchIndex.get(p.id) ?? "").includes(q)) continue;
-      matched.push(p);
-      // The grid renders 60; scanning past that buys nothing.
-      if (matched.length >= 60) break;
-    }
-    return matched;
-  }, [posProducts, productSearchIndex, catalogCategory, quickSearch]);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!warehouseCode) return;
+    let cancelled = false;
+    // Debounced so a burst of keystrokes is one query, not one per letter.
+    const timer = setTimeout(
+      () => {
+        (async () => {
+          if (!cancelled) setCatalogBusy(true);
+          try {
+            const params = new URLSearchParams({
+              warehouses: salesWarehouses.join(","),
+              q: quickSearch.trim(),
+              category: catalogCategory,
+              limit: "60",
+            });
+            const res = await fetch(`/api/products?${params.toString()}`);
+            if (!res.ok) throw new Error(`catalog ${res.status}`);
+            const data = (await res.json()) as Product[];
+            if (!cancelled) setCatalogProducts(data);
+          } catch {
+            if (!cancelled) setCatalogProducts([]);
+          } finally {
+            if (!cancelled) setCatalogBusy(false);
+          }
+        })();
+      },
+      quickSearch.trim() ? 220 : 0,
+    );
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [warehouseCode, salesWarehouses, quickSearch, catalogCategory]);
+
+  // The inline dropdown shows the first few of the same server result.
+  const quickResults = useMemo(
+    () => (quickSearch.trim() ? catalogProducts.slice(0, 8) : []),
+    [catalogProducts, quickSearch],
+  );
 
   // Quantity already in the cart, per product — drives the tile badge so the
   // cashier can see what is on the bill without reading the cart.
@@ -2177,7 +2204,7 @@ function PosScreen({
           <div className="pos-catalog-title">
             <span>ສິນຄ້າ</span>
             <span className="pos-catalog-count">
-              {loadingProducts ? "…" : `${catalogProducts.length} ລາຍການ`}
+              {catalogBusy ? "…" : `${catalogProducts.length} ລາຍການ`}
             </span>
           </div>
 
@@ -2255,7 +2282,7 @@ function PosScreen({
         </div>
 
         <div className="pos-catalog-body">
-          {loadingProducts ? (
+          {catalogBusy && catalogProducts.length === 0 ? (
             <div className="pos-catalog-empty">ກຳລັງໂຫລດສິນຄ້າ...</div>
           ) : catalogProducts.length === 0 ? (
             <div className="pos-catalog-empty">ບໍ່ພົບສິນຄ້າ</div>

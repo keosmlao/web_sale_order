@@ -118,6 +118,145 @@ async function queryCatalog(warehouseList: string): Promise<Catalog> {
     return products.filter(visibleInPos).map(toProduct);
   }
 
+
+// ── Filtered mode ────────────────────────────────────────────────────
+// The POS used to pull the whole catalogue — 10.6k rows, ~3MB — and do the
+// searching in the browser. The grid shows 60 at a time and the quick
+// results 8, so the browser was parsing three thousand kilobytes to render
+// sixty rows. These read straight from ic_inventory with the filter and the
+// limit applied in SQL. Barcode scans keep going to /api/inventory/barcode,
+// which resolves ic_inventory_barcode.
+async function queryCatalogPage(
+  warehouseList: string,
+  q: string,
+  category: string,
+  limit: number,
+): Promise<Catalog> {
+  const pattern = q ? `%${q}%` : "";
+  const products = await prisma.$queryRaw<ProductRow[]>`
+      WITH min_stock AS (
+        SELECT item_code, SUM(min_qty) AS minimum_stock
+        FROM app_stock_minimum
+        WHERE warehouse_code = ANY(string_to_array(${warehouseList}, ','))
+        GROUP BY item_code
+      ),
+      set_codes AS (
+        SELECT DISTINCT ic_set_code
+        FROM ic_inventory_set_detail
+        WHERE COALESCE(status, 0) <> 1
+      )
+      SELECT
+        i.code,
+        i.name_1,
+        i.unit_standard_name,
+        i.item_brand,
+        i.item_category,
+        cat.name_1 AS category_name,
+        i.group_main,
+        grp.name_1 AS group_main_name,
+        COALESCE(i.balance_qty, 0) AS balance_qty,
+        COALESCE(ms.minimum_stock, 0) AS minimum_stock,
+        price.sale_price_kip,
+        (sc.ic_set_code IS NOT NULL) AS has_set
+      FROM ic_inventory i
+      LEFT JOIN ic_category cat ON cat.code = i.item_category
+      LEFT JOIN ic_group grp ON grp.code = i.group_main
+      LEFT JOIN min_stock ms ON ms.item_code = i.code
+      LEFT JOIN set_codes sc ON sc.ic_set_code = i.code
+      LEFT JOIN LATERAL (
+        SELECT ipp.sale_price1 AS sale_price_kip
+        FROM ic_inventory_price ipp
+        WHERE ipp.ic_code = i.code
+          AND ipp.currency_code = '02'
+          AND COALESCE(ipp.sale_price1, 0) > 0
+          AND COALESCE(ipp.status, 1) = 1
+        ORDER BY
+          COALESCE(ipp.to_date, '2099-12-31'::date) DESC,
+          COALESCE(ipp.from_date, '1900-01-01'::date) DESC,
+          COALESCE(ipp.create_date_time_now, ipp.create_now) DESC,
+          ipp.roworder DESC
+        LIMIT 1
+      ) price ON true
+      WHERE i.name_1 IS NOT NULL
+        AND COALESCE(i.status, 0) <> 1
+        AND (
+          COALESCE(i.balance_qty, 0) > 0
+          OR (
+            (i.item_category = '032' OR i.group_main = '12')
+            AND sc.ic_set_code IS NOT NULL
+          )
+        )
+        AND (
+          ${category} = ''
+          OR COALESCE(NULLIF(TRIM(i.group_main), ''), TRIM(i.item_category)) = ${category}
+        )
+        AND (
+          ${pattern} = ''
+          OR i.code ILIKE ${pattern}
+          OR COALESCE(i.name_1, '') ILIKE ${pattern}
+          OR COALESCE(i.item_brand, '') ILIKE ${pattern}
+        )
+      ORDER BY
+        CASE WHEN ${pattern} <> '' AND i.code ILIKE ${pattern} THEN 0 ELSE 1 END,
+        i.code
+      LIMIT ${limit}
+    `;
+  return products.filter(visibleInPos).map(toProduct);
+}
+
+type Facet = { code: string; label: string; count: number };
+
+// Category chips with their counts, computed in SQL over the same base
+// filter — the client used to derive these by walking all 10.6k rows.
+async function queryFacets(): Promise<Facet[]> {
+  const rows = await prisma.$queryRaw<
+    Array<{ code: string | null; label: string | null; n: bigint }>
+  >`
+      WITH set_codes AS (
+        SELECT DISTINCT ic_set_code
+        FROM ic_inventory_set_detail
+        WHERE COALESCE(status, 0) <> 1
+      )
+      SELECT
+        COALESCE(NULLIF(TRIM(i.group_main), ''), TRIM(i.item_category)) AS code,
+        COALESCE(NULLIF(grp.name_1, ''), cat.name_1) AS label,
+        COUNT(*)::bigint AS n
+      FROM ic_inventory i
+      LEFT JOIN ic_category cat ON cat.code = i.item_category
+      LEFT JOIN ic_group grp ON grp.code = i.group_main
+      LEFT JOIN set_codes sc ON sc.ic_set_code = i.code
+      WHERE i.name_1 IS NOT NULL
+        AND COALESCE(i.status, 0) <> 1
+        AND (
+          COALESCE(i.balance_qty, 0) > 0
+          OR (
+            (i.item_category = '032' OR i.group_main = '12')
+            AND sc.ic_set_code IS NOT NULL
+          )
+        )
+      GROUP BY 1, 2
+      HAVING COALESCE(NULLIF(TRIM(i.group_main), ''), TRIM(i.item_category)) <> ''
+      ORDER BY n DESC
+      LIMIT 12
+    `;
+  return rows.map((r) => ({
+    code: r.code ?? "",
+    label: (r.label ?? "").trim() || `ໝວດ ${r.code ?? ""}`,
+    count: Number(r.n),
+  }));
+}
+
+const FACET_TTL_MS = 300_000;
+let facetCache: { data: Facet[]; expires: number } | null = null;
+
+async function loadFacets(): Promise<Facet[]> {
+  const now = Date.now();
+  if (facetCache && facetCache.expires > now) return facetCache.data;
+  const data = await queryFacets();
+  facetCache = { data, expires: Date.now() + FACET_TTL_MS };
+  return data;
+}
+
 // The POS catalog (prices + a display-cache of stock) is the same for every
 // cashier and changes slowly, but the query is heavy (~0.9s: a DISTINCT ON over
 // ~750k price-history rows) and it ran on every sales-page open. Cache the
@@ -175,6 +314,27 @@ export async function GET(request: NextRequest) {
       ? requestedWarehouses
       : await getConfiguredSalesWarehouses();
   const warehouseList = salesWarehouses.join(",");
+
+  const params = request.nextUrl.searchParams;
+  if (params.get("facets") === "1") {
+    return NextResponse.json(await loadFacets(), {
+      headers: { "Cache-Control": "private, max-age=120" },
+    });
+  }
+
+  const q = (params.get("q") ?? "").trim();
+  const category = (params.get("category") ?? "").trim();
+  const limitRaw = Number(params.get("limit"));
+  const wantsPage = params.has("limit") || q !== "" || category !== "";
+  if (wantsPage) {
+    const limit = Number.isFinite(limitRaw)
+      ? Math.min(Math.max(Math.floor(limitRaw), 1), 200)
+      : 60;
+    const page = await queryCatalogPage(warehouseList, q, category, limit);
+    return NextResponse.json(page, {
+      headers: { "Cache-Control": "private, max-age=15" },
+    });
+  }
 
   const products = await loadCatalog(warehouseList);
   // The catalog is ~4MB; let the browser reuse it for a short window so
