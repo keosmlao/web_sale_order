@@ -186,6 +186,11 @@ async function queryCatalogPage(
             AND sc.ic_set_code IS NOT NULL
           )
         )
+        -- Office supplies and marketing materials are not sold at the
+        -- counter. This lived in the browser until the search moved into
+        -- SQL; without it here they came back into the grid.
+        AND COALESCE(NULLIF(grp.name_1, ''), cat.name_1, '') NOT ILIKE '%ເຄື່ອງໃຊ້ຫ້ອງການ%'
+        AND COALESCE(NULLIF(grp.name_1, ''), cat.name_1, '') NOT ILIKE '%ອຸປະກອນການຕະຫຼາດ%'
         -- Nothing without a price belongs in a grid whose purpose is
         -- "tap to sell". They stay in the full catalogue, so a scan of one
         -- still resolves and can say why it cannot be sold.
@@ -244,6 +249,8 @@ async function queryFacets(): Promise<Facet[]> {
             AND sc.ic_set_code IS NOT NULL
           )
         )
+        AND COALESCE(NULLIF(grp.name_1, ''), cat.name_1, '') NOT ILIKE '%ເຄື່ອງໃຊ້ຫ້ອງການ%'
+        AND COALESCE(NULLIF(grp.name_1, ''), cat.name_1, '') NOT ILIKE '%ອຸປະກອນການຕະຫຼາດ%'
       GROUP BY 1, 2
       HAVING COALESCE(NULLIF(TRIM(i.group_main), ''), TRIM(i.item_category)) <> ''
       ORDER BY n DESC

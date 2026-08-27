@@ -165,6 +165,19 @@ const EXCLUDED_POS_CATEGORY_LABELS = [
 // parenthetical restating the same place — "ສາງຂົວຫຼວງ 1(ໜ້າຮ້ານຂົວຫຼວງ)".
 // Printed under a "ສາງ " label that read "ສາງ ສາງຂົວຫຼວງ 1(ໜ້າຮ້ານ…)", which
 // is three words of noise on a cart line that has none to spare.
+// Category names come out of the ERP as compound phrases —
+// "ປະປາ ໄຟຟ້າ ອຸປະກອນກໍ່ສ້າງ ກະເສດ" is 31 characters. Set side by side in
+// chips they all truncated to an ellipsis and became indistinguishable,
+// and the row still ran off the edge. There are only seven of them, so the
+// leading word is enough to tell them apart; the full name stays on the
+// chip's title for anyone who wants it.
+function shortCategoryLabel(label: string) {
+  const clean = label.trim().replace(/\s+/g, " ");
+  if (clean.length <= 14) return clean;
+  const first = clean.split(" ")[0];
+  return first.length >= 4 ? first : clean.slice(0, 14);
+}
+
 function shortWarehouseLabel(name: string | undefined, code: string) {
   const raw = (name ?? "").trim();
   if (!raw) return code;
@@ -2284,7 +2297,7 @@ function PosScreen({
                 }
                 title={cat.label}
               >
-                <span className="truncate">{cat.label}</span>
+                <span className="truncate">{shortCategoryLabel(cat.label)}</span>
                 <span className="pos-catalog-chip-count">{cat.count}</span>
               </button>
             ))}

@@ -8859,3 +8859,14 @@ a {
     min-width: 0;
   }
 }
+
+/* Category chips: with the labels cut to their leading word all seven fit
+   without scrolling, so drop the max-width that was forcing an ellipsis
+   and let them wrap rather than run off the edge. */
+.pos-catalog-chips {
+  flex-wrap: wrap;
+  overflow-x: visible;
+}
+.pos-catalog-chip {
+  max-width: none;
+}
