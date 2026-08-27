@@ -15,6 +15,9 @@ type Row = {
   location: string | null;
   location_name: string | null;
   balance_qty: number | null;
+  on_hand: number | null;
+  committed_qty: number | null;
+  held_by: string | null;
 };
 
 export async function GET(request: NextRequest) {
@@ -48,7 +51,10 @@ export async function GET(request: NextRequest) {
       GREATEST(
         0,
         FLOOR(COALESCE(b.balance_qty, 0) - COALESCE(c.qty, 0))
-      )::int AS balance_qty
+      )::int AS balance_qty,
+      FLOOR(COALESCE(b.balance_qty, 0))::int AS on_hand,
+      COALESCE(c.qty, 0)::int AS committed_qty,
+      c.held_by
     FROM public.sml_ic_function_stock_balance_warehouse_location(
       ${STOCK_BALANCE_AS_OF_DATE}::date,
       ${code},
@@ -61,7 +67,7 @@ export async function GET(request: NextRequest) {
       ON c.item_code = ${code}
      AND c.wh_code = b.warehouse
      AND c.shelf_code = b.location
-    WHERE COALESCE(b.balance_qty, 0) - COALESCE(c.qty, 0) >= 1
+    WHERE COALESCE(b.balance_qty, 0) >= 1
     ORDER BY balance_qty DESC, b.warehouse, b.location
   `;
 
@@ -73,6 +79,12 @@ export async function GET(request: NextRequest) {
       location: r.location,
       locationName: r.location_name,
       balanceQty: r.balance_qty ?? 0,
+      // What is on the shelf and what is already promised off it, so the
+      // picker can say "1 there, 4 waiting on a receipt" instead of just
+      // refusing.
+      onHand: r.on_hand ?? 0,
+      committedQty: r.committed_qty ?? 0,
+      heldBy: r.held_by,
     })),
   });
 }

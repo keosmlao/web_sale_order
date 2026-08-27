@@ -23,9 +23,26 @@ export function committedStockCte(excludeDocNo?: string | null) {
       d.item_code,
       d.wh_code,
       d.shelf_code,
-      SUM(COALESCE(d.qty, 0)) AS qty
+      SUM(COALESCE(d.qty, 0)) AS qty,
+      -- Who is holding it, so the shelf figure can say more than "gone".
+      -- The line's own salesperson wins over the bill's: a cart can
+      -- credit several sellers.
+      STRING_AGG(
+        DISTINCT COALESCE(
+          NULLIF(TRIM(e.fullname_lo), ''),
+          NULLIF(TRIM(e.fullname_en), ''),
+          NULLIF(TRIM(d.sale_code), ''),
+          NULLIF(TRIM(t.sale_code), '')
+        ),
+        ', '
+      ) AS held_by
     FROM ic_trans t
     JOIN ic_trans_detail d ON d.doc_no = t.doc_no
+    LEFT JOIN odg_employee e
+      ON e.employee_code = COALESCE(
+           NULLIF(TRIM(d.sale_code), ''),
+           NULLIF(TRIM(t.sale_code), '')
+         )
     WHERE t.doc_format_code = 'SOK'
       -- 0 = waiting to be paid. 1 is settled (the shelf already moved)
       -- and 2 is cancelled, so neither holds anything.
