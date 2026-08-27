@@ -12,8 +12,8 @@
 //   1. pubspec.yaml   version: x.y.z+BUILD
 //   2. BUILD below, plus VERSION and the note
 // Then rebuild the APK and copy it to public/downloads/odg-sale.apk.
-const VERSION = "1.0.7";
-const BUILD = 8;
+const VERSION = "1.0.8";
+const BUILD = 9;
 
 export const APP_RELEASE = {
   version: VERSION,
@@ -21,5 +21,5 @@ export const APP_RELEASE = {
   // Not a separate decision — the published build IS the floor.
   minBuildNumber: BUILD,
   downloadUrl: "/downloads/odg-sale.apk",
-  notes: "ໜ້າຂາຍຈັດວາງຄືເວັບ — 2 ຖັນ, ສິນຄ້າ 4 ໃບຕໍ່ແຖວ",
+  notes: "ແທັບເລັດໃຊ້ໜ້າຈໍເຕັມແລ້ວ — ບໍ່ບີບເປັນຖັນແຄບ 720px ອີກ",
 } as const;
