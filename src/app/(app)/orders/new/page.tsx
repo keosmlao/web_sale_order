@@ -1217,8 +1217,13 @@ function PosScreen({
   function submitQuickSearch() {
     const q = quickSearch.trim();
     if (!q) return;
+    // Barcodes are digits; serial numbers are not — "3TE65K250828018BJ450110"
+    // failed the digits-only test and opened the picker instead of going
+    // straight into the cart. Anything long enough and written without
+    // spaces is treated as something to resolve and add.
     const looksLikeCode =
       /^[0-9]{6,}$/.test(q) ||
+      /^[A-Za-z0-9][A-Za-z0-9._/-]{7,}$/.test(q) ||
       products.some((p) => p.id === q || p.code === q);
     if (looksLikeCode) {
       void resolveScanAndAdd(q);

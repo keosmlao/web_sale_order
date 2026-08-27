@@ -32,10 +32,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ found: false });
   }
 
-  // Resolve barcode → ic_code (preferred), then fall back to direct item code.
+  // Resolve barcode → ic_code (preferred), then a serial number, then fall
+  // back to a direct item code. Serials are what is printed on the unit for
+  // televisions and air conditioners, so they are as likely to be scanned
+  // at the counter as the shelf barcode.
   const rows = await prisma.$queryRaw<ItemRow[]>`
     WITH resolved AS (
       SELECT ic_code AS code FROM ic_inventory_barcode WHERE barcode = ${code}
+      UNION ALL
+      SELECT item_code AS code FROM sn_inventory WHERE sn = ${code}
       UNION ALL
       SELECT code FROM ic_inventory WHERE code = ${code}
     )
