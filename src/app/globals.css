@@ -9095,3 +9095,27 @@ a {
     height: 44px;
   }
 }
+
+/* The table was laying itself out from its content, so a long product
+   name pushed it wider than the column and the price ran under the sale
+   rail. Fixed layout makes the declared widths hold and the name
+   truncate inside them. */
+.pos-catalog-table {
+  table-layout: fixed;
+}
+.pos-cat-name {
+  max-width: 0; /* with table-layout:fixed this lets the cell shrink */
+}
+.pos-cat-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 11" tablets: three cards to a row, not four. At ~620px of catalogue a
+   quarter is 145px, which is narrower than the names need. */
+@media (min-width: 1180px) and (max-height: 900px) {
+  .pos-shell2.pos-has-catalog .pos-catalog-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
