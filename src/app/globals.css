@@ -9231,3 +9231,23 @@ a {
     margin-right: -2px;
   }
 }
+
+/* Warehouse names are the one thing on a cart line that must read in
+   full — picking the wrong warehouse ships from the wrong place. The
+   chip row was nowrap with an ellipsis, so "ສາງຂົວຫຼວງ 2(ຫຼັງຮ້ານ)" came
+   out as "ສາງ ດອນ…". It wraps now and nothing is cut. */
+@media (min-width: 1180px) {
+  .pos-sale-rail .pos-cline-chips,
+  .pos-sale-rail .pos-cline-chips > div {
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+  .pos-sale-rail .pos-cline-chips button {
+    max-width: none;
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    text-align: left;
+    line-height: 1.3;
+  }
+}

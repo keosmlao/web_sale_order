@@ -2776,7 +2776,6 @@ function PosScreen({
                               </div>
                             )}
                             <div className="pos-cline-chips">
-                              <span className="pos-cline-code">{line.productId}</span>
                               <div className="flex flex-col items-start gap-1">
                                 <button
                                   type="button"
@@ -2846,7 +2845,7 @@ function PosScreen({
                                 ) : line.locations.length === 0 ? (
                                   line.warehouseStock > 0 ? (
                                     <span className="text-[10px] text-odoo-text-muted">
-                                      ສາງ {shortWarehouseLabel(warehouseNames[line.warehouseCode], line.warehouseCode)}
+                                      {warehouseNames[line.warehouseCode] ?? line.warehouseCode}
                                     </span>
                                   ) : (
                                     <span className="text-[10px] font-semibold text-odoo-danger">
@@ -2903,7 +2902,7 @@ function PosScreen({
                                           : "text-odoo-text-muted")
                                       }
                                     >
-                                      ສາງ {shortWarehouseLabel(warehouseNames[line.warehouseCode], line.warehouseCode)}
+                                      {warehouseNames[line.warehouseCode] ?? line.warehouseCode}
                                       {" · "}
                                       {sel?.name ?? "—"}
                                       {" · "}
