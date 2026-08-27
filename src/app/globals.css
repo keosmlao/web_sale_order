@@ -9396,7 +9396,14 @@ a {
   display: flex;
   align-items: center;
   justify-content: center;
+  /* flex-shrink must be off. The tile is a column flex container, so a
+     child sized only by aspect-ratio is free to be shrunk to nothing —
+     which is what happened: the photo collapsed to zero height and the
+     tile rendered as a name with white space under it. min-height also
+     covers WebViews that do not honour aspect-ratio. */
+  flex: 0 0 auto;
   aspect-ratio: 1 / 1;
+  min-height: 104px;
   width: 100%;
   overflow: hidden;
   border-radius: 11px;
@@ -9451,5 +9458,8 @@ a {
 @media (min-width: 1180px) {
   .pos-shell2.pos-has-catalog .pos-ctile {
     min-height: 232px;
+  }
+  .pos-shell2.pos-has-catalog .pos-ctile-photo {
+    min-height: 128px;
   }
 }
