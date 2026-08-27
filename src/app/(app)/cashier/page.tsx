@@ -2300,13 +2300,34 @@ function SuccessModal({
             </span>
           </div>
         ) : null}
-        <button
-          type="button"
-          onClick={onClose}
-          className="odoo-btn odoo-btn-primary mt-5 w-full justify-center"
-        >
-          ຕົກລົງ
-        </button>
+        {/* Taking the money is not the last step — handing over the receipt
+            is. settle already returns the CAKAP number this modal is
+            showing, and /cashier/receipts/[docNo] renders and prints it,
+            but the only way in was a 10px link in the queue table that
+            appears after the fact. Opening in a new tab leaves the queue
+            where it is, ready for the next customer. */}
+        <div className="mt-5 flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            className="odoo-btn flex-1 justify-center"
+          >
+            ຕົກລົງ
+          </button>
+          <a
+            href={`/cashier/receipts/${encodeURIComponent(success.docNo)}`}
+            target="_blank"
+            rel="noopener"
+            className="odoo-btn odoo-btn-primary flex-1 justify-center gap-2"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+              <path d="M6 9V3h12v6" />
+              <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
+              <path d="M6 14h12v7H6z" />
+            </svg>
+            ພິມໃບຮັບເງິນ
+          </a>
+        </div>
       </div>
     </div>
   );
