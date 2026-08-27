@@ -96,11 +96,24 @@ type SetWarehouseAvailability = {
   }>;
 };
 
+type SerialUnit = {
+  sn: string;
+  isn: string | null;
+  location: string | null;
+  rack: string | null;
+};
+
 type Line = {
-  // Set when the line was added by scanning a serial number. The unit is
-  // identified, so the receipt and the picker can name it.
+  // Set when the line was added by scanning a serial number, or picked off
+  // the ISN list below. The unit is identified, so the receipt, the picker
+  // and the WMS issue-out on settle can all name it.
   serialNo?: string | null;
   serialIsn?: string | null;
+  // On-hand serial-tracked units of this item in this line's warehouse.
+  // Empty means the item is not serial-tracked there — most are not — so
+  // the ISN control only appears when there is something to choose.
+  serialOptions?: SerialUnit[];
+  loadingSerials?: boolean;
   productId: string;
   productName: string;
   unitName: string | null;
@@ -416,6 +429,9 @@ function PosScreen({
   // Sent to /api/orders as `promoSelections` so the server honours the same
   // decision at settlement. Mirrored into a ref so the async add / bonus
   // flow reads the latest choice without waiting for a re-render.
+  // Which line's ISN list is open, if any.
+  const [serialPickerIdx, setSerialPickerIdx] = useState<number | null>(null);
+  const [serialQuery, setSerialQuery] = useState("");
   const [promoChoice, setPromoChoice] = useState<Record<string, string | null>>(
     {},
   );
@@ -814,11 +830,61 @@ function PosScreen({
     return customers;
   }, [customers]);
 
+  // On-hand serial units for a line, from the WMS ledger.
+  //
+  // The storefront tracks its own units by ISN, and a bill that names one
+  // is what lets the settle step issue that exact unit out of 1101. A
+  // scan already fills this in; picking a warehouse by hand did not, so
+  // the counter had no way to say which of eight identical fridges left
+  // the shop. This is that way.
+  async function fetchSerialsForLine(
+    idx: number,
+    productId: string,
+    whCode: string,
+  ) {
+    setItems((prev) => {
+      const next = [...prev];
+      const target = next[idx];
+      if (!target || target.productId !== productId) return prev;
+      next[idx] = { ...target, loadingSerials: true };
+      return next;
+    });
+    let units: SerialUnit[] = [];
+    try {
+      const params = new URLSearchParams({ code: productId, warehouse: whCode });
+      const res = await fetch(`/api/inventory/serials?${params.toString()}`);
+      if (res.ok) {
+        const data = await res.json();
+        units = (data?.items ?? []) as SerialUnit[];
+      }
+    } catch {
+      units = [];
+    }
+    setItems((prev) => {
+      const next = [...prev];
+      const target = next[idx];
+      if (!target || target.productId !== productId) return prev;
+      // A serial already on the line (scanned, or picked before the
+      // warehouse changed) only stands if this warehouse still holds it.
+      const stillHere =
+        target.serialNo && units.some((u) => u.sn === target.serialNo);
+      next[idx] = {
+        ...target,
+        serialOptions: units,
+        loadingSerials: false,
+        serialNo: stillHere ? target.serialNo : null,
+        serialIsn: stillHere ? target.serialIsn : null,
+      };
+      return next;
+    });
+  }
+
   async function fetchLocationsForProduct(
     idx: number,
     productId: string,
     whCode: string,
   ) {
+    void fetchSerialsForLine(idx, productId, whCode);
     setItems((prev) => {
       const next = [...prev];
       const target = next[idx];
@@ -2849,7 +2915,34 @@ function PosScreen({
                                   is what the storefront's own paperwork goes
                                   by, so it is shown for 1101; anywhere else
                                   the serial itself is the useful handle. */}
-                              {line.serialNo || line.serialIsn ? (
+                              {(line.serialOptions?.length ?? 0) > 0 ? (
+                                // Serial-tracked here, so which unit is
+                                // being sold is part of the bill, not a
+                                // detail for the warehouse to settle later.
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSerialPickerIdx(idx);
+                                  }}
+                                  className={
+                                    "pos-cline-serial pos-cline-serial-btn" +
+                                    (line.serialNo ? "" : " is-unset")
+                                  }
+                                >
+                                  {line.serialNo
+                                    ? line.warehouseCode ===
+                                          DEFAULT_WAREHOUSE_CODE &&
+                                      line.serialIsn
+                                      ? `ISN ${line.serialIsn}`
+                                      : `SN ${line.serialNo}`
+                                    : `${
+                                        line.serialOptions?.some((u) => u.isn)
+                                          ? "ເລືອກ ISN"
+                                          : "ເລືອກ serial"
+                                      } (${line.serialOptions?.length})`}
+                                </button>
+                              ) : line.serialNo || line.serialIsn ? (
                                 <span className="pos-cline-serial">
                                   {line.warehouseCode === DEFAULT_WAREHOUSE_CODE &&
                                   line.serialIsn
@@ -3626,6 +3719,65 @@ function PosScreen({
             onClose={() => {
               setLineSalespersonPickerIdx(null);
               setLineSalespersonQuery("");
+            }}
+          />
+        );
+      })() : null}
+      {serialPickerIdx !== null ? (() => {
+        const idx = serialPickerIdx;
+        const target = items[idx];
+        if (!target) return null;
+        const units = target.serialOptions ?? [];
+        const storefront = target.warehouseCode === DEFAULT_WAREHOUSE_CODE;
+        return (
+          <ToolbarPickerModal
+            // Only 115 of the 767 units standing in 1101 have an ISN on
+            // file; the rest are known by serial alone. Name the list
+            // after what it actually holds rather than promising an ISN
+            // that was never recorded.
+            title={
+              storefront && units.some((u) => u.isn)
+                ? "ເລືອກ ISN"
+                : "ເລືອກ serial"
+            }
+            query={serialQuery}
+            setQuery={setSerialQuery}
+            options={units
+              .filter((u) => {
+                const q = serialQuery.trim().toLowerCase();
+                if (!q) return true;
+                return (
+                  (u.isn ?? "").toLowerCase().includes(q) ||
+                  u.sn.toLowerCase().includes(q)
+                );
+              })
+              .map((u) => ({
+                id: u.sn,
+                // The storefront's paperwork goes by ISN, so that leads
+                // there; the serial is what identifies the unit anywhere
+                // else, and it stays on the line either way.
+                primary: storefront && u.isn ? `ISN ${u.isn}` : u.sn,
+                secondary: [
+                  storefront && u.isn ? u.sn : null,
+                  u.location,
+                  u.rack,
+                ]
+                  .filter(Boolean)
+                  .join(" · "),
+              }))}
+            selectedId={target.serialNo ?? ""}
+            onPick={(id) => {
+              const unit = units.find((u) => u.sn === id);
+              updateLine(idx, {
+                serialNo: unit?.sn ?? null,
+                serialIsn: unit?.isn ?? null,
+              });
+              setSerialPickerIdx(null);
+              setSerialQuery("");
+            }}
+            onClose={() => {
+              setSerialPickerIdx(null);
+              setSerialQuery("");
             }}
           />
         );

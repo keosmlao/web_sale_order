@@ -9490,3 +9490,19 @@ a {
     border-right-color: transparent;
   }
 }
+
+/* The serial chip doubles as the picker button once the item turns out to
+   be serial-tracked in this warehouse. Unset reads as something still to
+   do, not as a neutral label. */
+.pos-cline-serial-btn {
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+.pos-cline-serial-btn:hover {
+  border-color: var(--odoo-primary);
+}
+.pos-cline-serial-btn.is-unset {
+  background: var(--odoo-warning-bg);
+  border-color: var(--odoo-warning-border);
+  color: var(--odoo-warning-text);
+}
