@@ -405,6 +405,20 @@ const sections: NavSection[] = [
             ),
           },
           {
+            // The beta APK is installed by hand, so the page that hands it
+            // over has to be findable — it was a URL you had to know.
+            href: "/beta",
+            label: "ແອັບລຸ້ນທົດລອງ",
+            roles: ["manager"],
+            icon: (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
+                <rect x="6" y="2" width="12" height="20" rx="2.5" />
+                <path d="M12 7v7" />
+                <path d="m9 11 3 3 3-3" />
+              </svg>
+            ),
+          },
+          {
             href: "/settings/menu-visibility",
             label: "ການສະແດງເມນູ",
             roles: ["manager"],
