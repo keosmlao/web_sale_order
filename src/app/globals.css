@@ -9847,3 +9847,37 @@ a {
   font-weight: 800;
   color: var(--odoo-success-text);
 }
+
+/* Cash quick-amounts: the exact figure, then the round-ups a drawer
+   actually produces. */
+.settle-cash-quick {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 8px;
+}
+.settle-cash-quick-btn {
+  flex: 1 1 auto;
+  min-width: 5.5rem;
+  padding: 7px 10px;
+  border: 1px solid var(--odoo-border-strong);
+  border-radius: 9px;
+  background: var(--odoo-surface);
+  font-size: 12px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--odoo-text);
+  cursor: pointer;
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+.settle-cash-quick-btn:hover:not(:disabled) {
+  border-color: var(--odoo-success);
+  background: var(--odoo-success-bg);
+  color: var(--odoo-success-text);
+}
+.settle-cash-quick-btn.is-on {
+  border-color: var(--odoo-success);
+  background: var(--odoo-success);
+  color: #fff;
+}
+.settle-cash-quick-btn:disabled { opacity: 0.5; cursor: default; }

@@ -2020,13 +2020,11 @@ function SettleForm({
                 <i className="settle-step">1</i>
                 ຮັບເງິນ
               </span>
-              <strong className="settle-pay-curtag">
-                {remainingDue > 0
-                  ? `ຍັງຂາດ ${moneyFmt.format(remainingDue)}`
-                  : changeDue > 0
-                    ? `ທອນ ${moneyFmt.format(changeDue)}`
-                    : "ຄົບພໍດີ"}
-              </strong>
+              {tenderRows.length > 0 ? (
+                <strong className="settle-pay-curtag">
+                  {tenderRows.length} ວິທີ
+                </strong>
+              ) : null}
             </div>
 
             {tenderRows.length === 0 ? (
@@ -2067,6 +2065,47 @@ function SettleForm({
                 </button>
               </div>
             ))}
+
+            {/* Counting cash out of a customer's hand is where the typing
+                actually happens. "ພໍດີ" is the common case; the round-ups
+                are what someone hands over when they do not have it exact,
+                and each one is the smallest note-sized figure that covers
+                what is left — so the change works itself out. */}
+            {cashNow > 0 && remainingDue + cashNow > 0 ? (
+              <div className="settle-cash-quick">
+                {(() => {
+                  // What cash still has to cover, ignoring what is already
+                  // typed into it.
+                  const need = Math.max(0, remainingDue + cashNow - 0);
+                  const steps = [10000, 100000, 1000000];
+                  const opts: Array<{ label: string; value: number }> = [
+                    { label: "ພໍດີ", value: need },
+                  ];
+                  for (const step of steps) {
+                    const up = Math.ceil(need / step) * step;
+                    // Only worth a button if it is actually more than the
+                    // exact figure and not a repeat of a smaller step.
+                    if (up > need && !opts.some((o) => o.value === up)) {
+                      opts.push({ label: moneyFmt.format(up), value: up });
+                    }
+                  }
+                  return opts.slice(0, 4).map((o) => (
+                    <button
+                      key={o.value}
+                      type="button"
+                      className={
+                        "settle-cash-quick-btn" +
+                        (cashNow === o.value ? " is-on" : "")
+                      }
+                      disabled={!canSettle}
+                      onClick={() => setInput(cashKey, o.value)}
+                    >
+                      {o.label}
+                    </button>
+                  ));
+                })()}
+              </div>
+            ) : null}
 
             {/* Only the methods not already on the bill. Cash is always
                 offered — it is the one that can absorb an overpayment. */}
