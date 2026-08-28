@@ -32,7 +32,9 @@ export default async function ReceiptPage({
           ← ກັບໄປໜ້າຮັບເງິນ
         </Link>
         <div className="flex items-center gap-2">
-          <VoidButton docNo={docNo} />
+          {/* Voiding unwinds documents this app wrote. A receipt raised
+              inside SML has none of them — it is corrected in SML. */}
+          {receipt.origin === "pos" ? <VoidButton docNo={docNo} /> : null}
           <PrintButton />
         </div>
       </div>

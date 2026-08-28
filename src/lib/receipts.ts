@@ -10,6 +10,7 @@ import { prisma } from "@/lib/prisma";
 
 type HeaderRow = {
   doc_no: string;
+  doc_format_code: string | null;
   doc_date: Date | null;
   doc_time: string | null;
   create_date_time_now: Date | null;
@@ -89,8 +90,11 @@ export type ReceiptDetail = {
   branchCode: string | null;
   departmentCode: string | null;
   sourceSokDocNo: string | null;
-  // Channel that created the originating SOK order: 'web' | 'app' | null.
+  // Channel that created the originating SOK order: 'web' | 'app' | null —
+  // or 'sml' when the receipt itself was raised inside SML.
   source: string | null;
+  // Where the receipt was raised: at this till, or inside SML.
+  origin: "pos" | "sml";
   totals: {
     amountThb: number;
     amountKip: number;
@@ -141,6 +145,7 @@ export async function fetchReceipt(
   const headerRows = await prisma.$queryRaw<HeaderRow[]>`
     SELECT
       t.doc_no,
+      t.doc_format_code,
       t.doc_date,
       t.doc_time,
       t.create_date_time_now,
@@ -151,9 +156,21 @@ export async function fetchReceipt(
       NULLIF(t.sale_code, '') AS sale_code,
       sp.fullname_lo AS salesperson_name_lo,
       sp.nickname AS salesperson_nickname,
-      NULLIF(t.cashier_code, '') AS cashier_code,
-      ca.fullname_lo AS cashier_name_lo,
-      ca.nickname AS cashier_nickname,
+      -- On our own CAKAP the cashier is cashier_code. On a bill born in
+      -- SML that column is the selling clerk; the login that received the
+      -- money is what SML stamps into last_editor_code.
+      CASE
+        WHEN t.doc_format_code = 'CAKAP' THEN NULLIF(t.cashier_code, '')
+        ELSE COALESCE(NULLIF(TRIM(t.last_editor_code), ''), NULLIF(t.cashier_code, ''))
+      END AS cashier_code,
+      CASE
+        WHEN t.doc_format_code = 'CAKAP' THEN ca.fullname_lo
+        ELSE COALESCE(ed.fullname_lo, ca.fullname_lo)
+      END AS cashier_name_lo,
+      CASE
+        WHEN t.doc_format_code = 'CAKAP' THEN ca.nickname
+        ELSE COALESCE(ed.nickname, ca.nickname)
+      END AS cashier_nickname,
       NULLIF(t.branch_code, '') AS branch_code,
       NULLIF(t.department_code, '') AS department_code,
       t.total_amount,
@@ -181,8 +198,14 @@ export async function fetchReceipt(
     LEFT JOIN ar_customer ar ON ar.code = t.cust_code
     LEFT JOIN odg_employee sp ON sp.employee_code = NULLIF(t.sale_code, '')
     LEFT JOIN odg_employee ca ON ca.employee_code = NULLIF(t.cashier_code, '')
+    LEFT JOIN odg_employee ed
+      ON ed.employee_code = NULLIF(TRIM(t.last_editor_code), '')
+    -- Any flag-44 receipt, not only our CAKAPs: the history list now links
+    -- to bills raised inside SML too. Prefer the CAKAP row should a doc_no
+    -- ever collide across formats.
     WHERE t.doc_no = ${docNo}
-      AND t.doc_format_code = 'CAKAP'
+      AND t.trans_flag = 44
+    ORDER BY (t.doc_format_code = 'CAKAP') DESC
     LIMIT 1
   `;
   const header = headerRows[0];
@@ -232,7 +255,7 @@ export async function fetchReceipt(
       SELECT cash_amount, tranfer_amount, total_amount_pay, money_change
       FROM cb_trans
       WHERE doc_no = ${docNo}
-        AND doc_format_code = 'CAKAP'
+        AND trans_flag = 44
       LIMIT 1
     `,
   ]);
@@ -269,7 +292,10 @@ export async function fetchReceipt(
     branchCode: header.branch_code,
     departmentCode: header.department_code,
     sourceSokDocNo: header.source_sok_doc_no,
-    source: header.source ?? null,
+    source:
+      header.source ??
+      (header.doc_format_code === "CAKAP" ? null : "sml"),
+    origin: header.doc_format_code === "CAKAP" ? ("pos" as const) : ("sml" as const),
     totals: {
       amountThb: header.total_amount ? Number(header.total_amount) : 0,
       amountKip: header.total_amount_2 ? Number(header.total_amount_2) : 0,

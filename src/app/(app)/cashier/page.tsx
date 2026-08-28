@@ -703,9 +703,10 @@ function OrdersView({
           actually press. The cards ARE the filter now: press one to see
           that pile, press it again for everything.
 
-          On a phone five cards stacked two screens tall before the first
-          order appeared, so below sm the same filters render as one wrap
-          row of chips — label and count, the active one filled. */}
+          On a phone the cards are simply gone — five of them stacked two
+          screens tall, and the owner had them taken out rather than
+          shrunk. The active-filter chip by the search box still says what
+          is in force and clears it. */}
       {(() => {
         const filterDefs = [
           ["PENDING", "ລໍຖ້າຮັບເງິນ", "amber"],
@@ -718,27 +719,6 @@ function OrdersView({
         >;
         return (
           <>
-            <div className="mb-3 flex flex-wrap gap-1.5 sm:hidden">
-              {filterDefs.map(([status, label]) => (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() =>
-                    onStatusFilterChange(
-                      statusFilter === status ? "ALL" : status,
-                    )
-                  }
-                  className={
-                    "rounded-full px-3 py-1.5 text-xs font-bold transition " +
-                    (statusFilter === status
-                      ? "bg-odoo-primary text-white"
-                      : "bg-white text-odoo-text border border-odoo-border")
-                  }
-                >
-                  {label} {counts[status]}
-                </button>
-              ))}
-            </div>
             <div className="mb-4 hidden gap-3 sm:grid sm:grid-cols-5">
               {filterDefs.map(([status, label, tone]) => (
                 <SummaryCard
