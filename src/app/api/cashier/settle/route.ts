@@ -1265,16 +1265,19 @@ export async function POST(request: NextRequest) {
       // name one bin, so an item split across bins takes the first: that is
       // the document, not the stock, and the serial ledger still issues each
       // unit from where it actually sat.
-      const binRows = await tx.$queryRaw<
-        Array<{ item_code: string; location_code: string | null }>
+      const allocRows = await tx.$queryRaw<
+        Array<{
+          item_code: string;
+          location_code: string | null;
+          serial_number: string | null;
+        }>
       >`
-        SELECT DISTINCT item_code, location_code
+        SELECT item_code, location_code, serial_number
         FROM app_order_serial
         WHERE doc_no = ${cart.doc_no}
-          AND COALESCE(location_code, '') <> ''
       `;
       const binByItem = new Map<string, string>();
-      for (const row of binRows) {
+      for (const row of allocRows) {
         const bin = (row.location_code ?? "").trim();
         if (bin && !binByItem.has(row.item_code)) {
           binByItem.set(row.item_code, bin);
@@ -1307,6 +1310,77 @@ export async function POST(request: NextRequest) {
             ${binByItem.get(it.item_code) ?? ""},
             ${(it.wh_code ?? "").trim()}, ${userCode},
             0, -1, NOW(), to_char(NOW(), 'HH24:MI')
+          )
+        `;
+      }
+
+      // 5c. The issue document itself — ໃບຈ່າຍ (OUT).
+      //
+      // The DP rows above are the ledger. They are not what the warehouse's
+      // "ຖ້າຈ່າຍ" queue reads: a bill leaves that queue when an OUT document
+      // in wms_product_out references it, which is why a counter sale sat
+      // there waiting to be picked long after the customer had walked out
+      // with the goods in their hands.
+      //
+      // So the till raises it, exactly as the WMS's own ຢືນຢັນຈ່າຍ does:
+      // both documents, one after the other, in this transaction. doc_type
+      // 44 is the sale — the same flag the bill carries — and status 1 is
+      // issued, because at the counter it is. Numbered from the table's own
+      // sequence, the way OUT260731-00072 was.
+      const outDocRows = await tx.$queryRaw<Array<{ doc_no: string }>>`
+        SELECT 'OUT' || to_char(CURRENT_DATE, 'YYMMDD') || '-' ||
+               lpad(nextval('public.wms_product_out_roworder_seq')::text, 5, '0')
+               AS doc_no
+      `;
+      const outDocNo = outDocRows[0]?.doc_no ?? "";
+      await tx.$executeRaw`
+        INSERT INTO wms_product_out (
+          doc_no, doc_date, doc_time, status,
+          warehouse_code, branch_code, customer_code,
+          create_datetime, creator_code, total_amount,
+          ref_doc_no, doc_type, create_date_time_now
+        ) VALUES (
+          ${outDocNo}, CURRENT_DATE, to_char(NOW(), 'HH24:MI'), 1,
+          ${issueWh}, ${branchCode}, ${custCode},
+          NOW(), ${userCode}, 0,
+          ${docNo}, 44, NOW()
+        )
+      `;
+      for (const it of items) {
+        const issueQty = Number(it.qty ?? 0);
+        if (!(issueQty > 0)) continue;
+        const shelf = (it.shelf_code ?? "").trim();
+        const bin = binByItem.get(it.item_code) ?? "";
+        // The lines carry the walk as one string — "120102|120102-B0409|",
+        // shelf then bin then a trailing bar — and the bin again on its own
+        // in box_code. Without a bin there is only the shelf to give.
+        const shelfPath = bin ? `${shelf}|${bin}|` : shelf;
+        await tx.$executeRaw`
+          INSERT INTO wms_product_out_detail (
+            doc_no, doc_date, doc_time, item_code, item_name, unit_code,
+            qty, price, sum_amount, box_code, shelf_code, ref_doc_no,
+            create_date_time_now
+          ) VALUES (
+            ${outDocNo}, CURRENT_DATE, '',
+            ${it.item_code}, ${it.item_name ?? it.item_code},
+            ${it.unit_code ?? ""},
+            ${issueQty}, 0, 0, ${bin}, ${shelfPath}, '',
+            NOW()
+          )
+        `;
+      }
+      // Which units left, by their serial. The WMS records the printed
+      // serial here, not the ISN — the ISN is the ledger's business, and
+      // section 11b below is where it nets the unit off the shelf.
+      for (const alloc of allocRows) {
+        const serial = (alloc.serial_number ?? "").trim();
+        if (!serial) continue;
+        await tx.$executeRaw`
+          INSERT INTO wms_product_out_serial_detail (
+            ref_out_doc, ref_out_date, item_code, serial_number,
+            create_date_time_now
+          ) VALUES (
+            ${outDocNo}, CURRENT_DATE, ${alloc.item_code}, ${serial}, NOW()
           )
         `;
       }
