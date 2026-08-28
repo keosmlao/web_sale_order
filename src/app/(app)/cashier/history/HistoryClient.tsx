@@ -454,7 +454,7 @@ export default function HistoryClient() {
                 ) : null}
                 <div className="mt-2.5 flex gap-2">
                   <Link
-                    href={`/cashier/receipts/${encodeURIComponent(r.docNo)}`}
+                    href={`/cashier/receipts/${encodeURIComponent(r.docNo)}?view=pay`}
                     className="odoo-btn odoo-btn-secondary h-10 flex-1 justify-center"
                   >
                     ລາຍລະອຽດ
@@ -580,7 +580,7 @@ export default function HistoryClient() {
                         the receipt with the print dialog already up. */}
                     <span className="inline-flex items-center gap-1">
                       <Link
-                        href={`/cashier/receipts/${encodeURIComponent(r.docNo)}`}
+                        href={`/cashier/receipts/${encodeURIComponent(r.docNo)}?view=pay`}
                         className="odoo-btn odoo-btn-secondary !px-2 !py-1 !text-[11px]"
                       >
                         ລາຍລະອຽດ
