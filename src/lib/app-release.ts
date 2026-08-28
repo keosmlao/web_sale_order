@@ -21,8 +21,8 @@
 // stopped being used, not because it was wrong — bring it back if
 // releasing straight to the shop starts to sting.
 
-const VERSION = "3.5.9";
-const BUILD = 52;
+const VERSION = "3.6.0";
+const BUILD = 53;
 
 export const APP_RELEASE = {
   version: VERSION,
@@ -30,5 +30,5 @@ export const APP_RELEASE = {
   // Not a separate decision — the published build IS the floor.
   minBuildNumber: BUILD,
   downloadUrl: "/downloads/odg-sale.apk",
-  notes: "ລາຍການບິນເປັນຮູບໃບບິນ ຍອດເງິນເຫັນຈະແຈ້ງ · ຕ້ອງເລືອກລູກຄ້າກ່ອນຈຶ່ງເພີ່ມສິນຄ້າ",
+  notes: "ໜ້າຫຼັກໃໝ່ — ຕົວເລກຄືກັບເວັບ (ຍອດຂາຍຈິງ, ເປົ້າ, ອັນດັບ) · ລາຍການບິນເປັນຮູບໃບບິນ",
 } as const;
