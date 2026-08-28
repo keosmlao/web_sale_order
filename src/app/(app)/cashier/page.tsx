@@ -639,6 +639,35 @@ function CashierClientInner({
   );
 }
 
+// One label out of an order's line-level codes: the single value when the
+// lines agree, a count when they do not. Shared by the desktop table cells
+// and the phone cards so the two never drift.
+function orderWarehouseLabel(o: CashierOrder): string {
+  const warehouses = new Map<string, string>();
+  for (const it of o.items) {
+    if (it.whCode) warehouses.set(it.whCode, it.whName ?? it.whCode);
+  }
+  return warehouses.size === 0
+    ? (o.warehouseName ?? o.warehouseCode ?? "—")
+    : warehouses.size === 1
+      ? Array.from(warehouses.values())[0]
+      : `ຫຼາຍສາງ (${warehouses.size})`;
+}
+
+function orderSalespersonLabel(o: CashierOrder): string {
+  const salespeople = new Map<string, string>();
+  for (const it of o.items) {
+    if (it.saleCode) {
+      salespeople.set(it.saleCode, it.salespersonName ?? it.saleCode);
+    }
+  }
+  return salespeople.size === 0
+    ? (o.salespersonName ?? o.userOwner ?? "—")
+    : salespeople.size === 1
+      ? Array.from(salespeople.values())[0]
+      : `ຫຼາຍຄົນ (${salespeople.size})`;
+}
+
 function OrdersView({
   counts,
   query,
@@ -707,7 +736,122 @@ function OrdersView({
           </div>
         </div>
 
-        <div className="overflow-x-auto rounded-md border border-odoo-border bg-odoo-surface">
+        {/* On a phone the table clipped at the customer column, which left
+            the two things a cashier actually acts on — the total and the
+            ຮັບຊຳລະ button — off the right edge of the screen. Below sm each
+            order is a bill-shaped card instead: number and status on top,
+            the total large, the action full-width under the thumb. */}
+        <div className="sm:hidden">
+          {filtered.length === 0 ? (
+            <p className="px-3 py-6 text-center text-sm text-odoo-text-muted">
+              ບໍ່ມີອໍເດີຂາຍ
+            </p>
+          ) : (
+            <ul className="flex flex-col gap-2.5">
+              {filtered.map((o) => {
+                const clickable =
+                  o.statusLabel === "PENDING" || o.statusLabel === "HELD";
+                const cardTint =
+                  o.statusLabel === "COMPLETED" || o.statusLabel === "SCHEDULED"
+                    ? "border-emerald-200 bg-emerald-50/40"
+                    : o.statusLabel === "CANCELLED"
+                      ? "border-rose-200 bg-rose-50/40 opacity-70"
+                      : o.statusLabel === "HELD"
+                        ? "border-amber-200 bg-amber-50/40"
+                        : "border-odoo-border bg-odoo-surface";
+                return (
+                  <li
+                    key={o.cartNumber}
+                    onClick={() => {
+                      if (clickable) onSelectCart(o.cartNumber);
+                    }}
+                    className={`rounded-xl border p-3 ${cardTint}${clickable ? " cursor-pointer active:bg-odoo-surface-muted/60" : ""}`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-mono text-[13px] font-bold">
+                        {o.docNo}
+                      </span>
+                      <StatusBadge status={o.statusLabel} />
+                    </div>
+                    {o.receiptDocNo ? (
+                      <a
+                        href={`/cashier/receipts/${encodeURIComponent(o.receiptDocNo)}`}
+                        className="mt-0.5 inline-block text-[11px] font-semibold text-odoo-primary"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {o.receiptDocNo} →
+                      </a>
+                    ) : null}
+                    <div className="mt-1.5 flex items-baseline justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="truncate text-sm font-semibold text-odoo-text-strong">
+                          {o.customerName ?? o.customerId ?? "—"}
+                        </div>
+                        {o.customerPhone ? (
+                          <div className="text-[11px] text-odoo-text-muted">
+                            {o.customerPhone}
+                          </div>
+                        ) : null}
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="font-mono text-base font-bold">
+                          {moneyFmt.format(o.totalAmount)}
+                        </div>
+                        {o.extraDiscount > 0 ? (
+                          <div className="text-[10px] font-semibold text-odoo-danger">
+                            −{moneyFmt.format(o.extraDiscount)}
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-odoo-text-muted">
+                      <span>{dateTimeFmt.format(new Date(o.createdAt))}</span>
+                      <span>·</span>
+                      <span>{orderWarehouseLabel(o)}</span>
+                      <span>·</span>
+                      <span>{orderSalespersonLabel(o)}</span>
+                      <span>·</span>
+                      <span>{moneyFmt.format(o.items.length)} ລາຍການ</span>
+                    </div>
+                    {o.statusLabel === "PENDING" ||
+                    o.statusLabel === "HELD" ||
+                    o.statusLabel === "CANCELLED" ||
+                    o.statusLabel === "COMPLETED" ? (
+                      <div
+                        className="mt-2.5 flex gap-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {clickable ? (
+                          <button
+                            type="button"
+                            onClick={() => onSelectCart(o.cartNumber)}
+                            className="odoo-btn odoo-btn-primary h-10 flex-1"
+                          >
+                            ຮັບຊຳລະ
+                          </button>
+                        ) : null}
+                        <button
+                          type="button"
+                          disabled={deletingCart === o.cartNumber}
+                          onClick={() => onDeleteOrder(o)}
+                          className={`odoo-btn odoo-btn-danger h-10${clickable ? "" : " flex-1"}`}
+                        >
+                          {deletingCart === o.cartNumber
+                            ? "ລົບ..."
+                            : o.statusLabel === "COMPLETED"
+                              ? "ລົບໃບຮັບ"
+                              : "ລົບ"}
+                        </button>
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <div className="hidden overflow-x-auto rounded-md border border-odoo-border bg-odoo-surface sm:block">
           <table className="w-full text-sm">
             <thead className="bg-odoo-surface-muted text-left text-[11px] font-bold uppercase tracking-wider text-odoo-text-muted">
               <tr>
@@ -788,48 +932,16 @@ function OrdersView({
                         ) : null}
                       </td>
                       <td className="px-3 py-2 text-[12px]">
-                        {(() => {
-                          const warehouses = new Map<string, string>();
-                          for (const it of o.items) {
-                            if (it.whCode) {
-                              warehouses.set(it.whCode, it.whName ?? it.whCode);
-                            }
-                          }
-                          const label = warehouses.size === 0
-                            ? (o.warehouseName ?? o.warehouseCode ?? "—")
-                            : warehouses.size === 1
-                              ? Array.from(warehouses.values())[0]
-                              : `ຫຼາຍສາງ (${warehouses.size})`;
-                          const titleText = Array.from(warehouses.values()).join(", ");
-                          return (
-                            <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-150 px-2 py-0.5 text-[11px] font-semibold text-indigo-700" title={titleText}>
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="M3 9 12 4l9 5-9 5-9-5Z" /><path d="M3 9v6l9 5 9-5V9" /></svg>
-                              {label}
-                            </span>
-                          );
-                        })()}
+                        <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-150 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="M3 9 12 4l9 5-9 5-9-5Z" /><path d="M3 9v6l9 5 9-5V9" /></svg>
+                          {orderWarehouseLabel(o)}
+                        </span>
                       </td>
                       <td className="px-3 py-2 text-[12px]">
-                        {(() => {
-                          const salespeople = new Map<string, string>();
-                          for (const it of o.items) {
-                            if (it.saleCode) {
-                              salespeople.set(it.saleCode, it.salespersonName ?? it.saleCode);
-                            }
-                          }
-                          const label = salespeople.size === 0
-                            ? (o.salespersonName ?? o.userOwner ?? "—")
-                            : salespeople.size === 1
-                              ? Array.from(salespeople.values())[0]
-                              : `ຫຼາຍຄົນ (${salespeople.size})`;
-                          const titleText = Array.from(salespeople.values()).join(", ");
-                          return (
-                            <span className="inline-flex items-center gap-1 rounded bg-slate-150 border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700" title={titleText}>
-                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-3 4-5 8-5s8 2 8 5" /></svg>
-                              {label}
-                            </span>
-                          );
-                        })()}
+                        <span className="inline-flex items-center gap-1 rounded bg-slate-150 border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
+                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-3 4-5 8-5s8 2 8 5" /></svg>
+                          {orderSalespersonLabel(o)}
+                        </span>
                       </td>
                       <td className="px-3 py-2 text-right">
                         <span className="inline-flex items-center justify-center rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
