@@ -130,8 +130,11 @@ export default function HistoryClient() {
         </p>
       </header>
 
-      <div className="mb-4 grid gap-2 rounded-md border border-odoo-border bg-odoo-surface p-3 sm:grid-cols-5">
-        <label className="grid gap-1 sm:col-span-2">
+      {/* On a phone the four filters stacked a full screen tall before the
+          first receipt appeared. Two columns: search across the top, the
+          dates side by side, status beside its future neighbour. */}
+      <div className="mb-4 grid grid-cols-2 gap-2 rounded-md border border-odoo-border bg-odoo-surface p-3 sm:grid-cols-5">
+        <label className="col-span-2 grid gap-1">
           <span className="odoo-label">ຄົ້ນ</span>
           <input
             type="search"
@@ -181,7 +184,106 @@ export default function HistoryClient() {
         </div>
       ) : null}
 
-      <div className="overflow-x-auto rounded-md border border-odoo-border bg-odoo-surface">
+      {/* On a phone the table clipped after the customer column, hiding the
+          figures and the actions off the right edge. Below sm each receipt
+          is a bill-shaped card: number and status on top, the total large,
+          cash/transfer split underneath, delete under the thumb. */}
+      <div className="sm:hidden">
+        {loading ? (
+          <p className="px-3 py-6 text-center text-sm text-odoo-text-muted">
+            ກຳລັງໂຫລດ…
+          </p>
+        ) : rows.length === 0 ? (
+          <p className="px-3 py-6 text-center text-sm text-odoo-text-muted">
+            ບໍ່ພົບຂໍ້ມູນ
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-2.5">
+            {rows.map((r) => (
+              <li
+                key={r.docNo}
+                className={`rounded-xl border p-3 ${
+                  r.isVoided
+                    ? "border-rose-200 bg-rose-50/40 opacity-80"
+                    : "border-odoo-border bg-odoo-surface"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <Link
+                    href={`/cashier/receipts/${r.docNo}`}
+                    className="font-mono text-[13px] font-bold text-odoo-link"
+                  >
+                    {r.docNo}
+                  </Link>
+                  <span className="flex items-center gap-1.5">
+                    <SourceBadge source={r.source} />
+                    {r.isVoided ? (
+                      <span className="inline-flex rounded-full bg-rose-100 px-2 py-0.5 text-[11px] font-bold text-odoo-danger">
+                        ຍົກເລີກ
+                      </span>
+                    ) : (
+                      <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-bold text-emerald-700">
+                        ປົກກະຕິ
+                      </span>
+                    )}
+                  </span>
+                </div>
+                <div className="mt-1.5 flex items-baseline justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-semibold text-odoo-text-strong">
+                      {r.customerName ?? "—"}
+                    </div>
+                    {r.customerPhone ? (
+                      <div className="text-[11px] text-odoo-text-muted">
+                        {r.customerPhone}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="shrink-0 font-mono text-base font-bold">
+                    {moneyFmt.format(r.totalKip)}
+                  </div>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-odoo-text-muted">
+                  <span>{new Date(r.createdAt).toLocaleString()}</span>
+                  <span>·</span>
+                  <span>{r.cashierName ?? r.cashierCode ?? "—"}</span>
+                  {r.cashKip > 0 ? (
+                    <>
+                      <span>·</span>
+                      <span>ສົດ {moneyFmt.format(r.cashKip)}</span>
+                    </>
+                  ) : null}
+                  {r.transferKip > 0 ? (
+                    <>
+                      <span>·</span>
+                      <span>ໂອນ {moneyFmt.format(r.transferKip)}</span>
+                    </>
+                  ) : null}
+                </div>
+                {r.isVoided ? (
+                  r.voidDocNo ? (
+                    <div className="mt-1 text-[11px] text-odoo-text-muted">
+                      {r.voidDocNo}
+                      {r.voidReason ? ` · ${r.voidReason}` : ""}
+                    </div>
+                  ) : null
+                ) : r.cartNumber ? (
+                  <button
+                    type="button"
+                    disabled={deleting === r.docNo}
+                    onClick={() => void deleteReceipt(r)}
+                    className="odoo-btn odoo-btn-danger mt-2.5 h-10 w-full"
+                  >
+                    {deleting === r.docNo ? "ກຳລັງລົບ…" : "ລົບໃບຮັບ"}
+                  </button>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-md border border-odoo-border bg-odoo-surface sm:block">
         <table className="w-full text-sm">
           <thead className="bg-odoo-surface-muted text-left text-[11px] font-bold uppercase tracking-wider text-odoo-text-muted">
             <tr>

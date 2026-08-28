@@ -698,11 +698,31 @@ function OrdersView({
 }) {
   return (
     <>
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <SummaryCard label="ລໍຖ້າຮັບເງິນ" value={counts.PENDING} tone="amber" />
-        <SummaryCard label="ຮັບເງິນສຳເລັດ" value={counts.COMPLETED} tone="emerald" />
-        <SummaryCard label="ຈັດຖ້ຽວ" value={counts.SCHEDULED} tone="slate" />
-        <SummaryCard label="ຍົກເລີກ" value={counts.CANCELLED} tone="red" />
+      {/* The cards and the filter chips said the same numbers twice — a row
+          of coloured counters to look at, then a row of grey chips to
+          actually press. The cards ARE the filter now: press one to see
+          that pile, press it again for everything. */}
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
+        {(
+          [
+            ["PENDING", "ລໍຖ້າຮັບເງິນ", "amber"],
+            ["HELD", "ພັກໄວ້", "slate"],
+            ["COMPLETED", "ຮັບເງິນສຳເລັດ", "emerald"],
+            ["SCHEDULED", "ຈັດຖ້ຽວ", "sky"],
+            ["CANCELLED", "ຍົກເລີກ", "red"],
+          ] as Array<[StatusFilter, string, "amber" | "slate" | "emerald" | "sky" | "red"]>
+        ).map(([status, label, tone]) => (
+          <SummaryCard
+            key={status}
+            label={label}
+            value={counts[status]}
+            tone={tone}
+            active={statusFilter === status}
+            onClick={() =>
+              onStatusFilterChange(statusFilter === status ? "ALL" : status)
+            }
+          />
+        ))}
       </div>
 
       <section className="odoo-card overflow-hidden">
@@ -715,25 +735,15 @@ function OrdersView({
               className="odoo-input"
             />
           </div>
-          <div className="flex flex-wrap gap-2">
-            {(["ALL", "PENDING", "HELD", "COMPLETED", "SCHEDULED", "CANCELLED"] as StatusFilter[]).map(
-              (status) => (
-                <button
-                   key={status}
-                   type="button"
-                   onClick={() => onStatusFilterChange(status)}
-                   className={
-                     "rounded-md px-2.5 py-1.5 text-xs font-semibold transition " +
-                     (statusFilter === status
-                       ? "bg-odoo-primary text-white"
-                       : "bg-odoo-surface-muted text-odoo-text hover:bg-odoo-border")
-                   }
-                >
-                  {statusFilterLabel(status)} {counts[status]}
-                </button>
-              ),
-            )}
-          </div>
+          {statusFilter !== "ALL" ? (
+            <button
+              type="button"
+              onClick={() => onStatusFilterChange("ALL")}
+              className="rounded-md bg-odoo-surface-muted px-2.5 py-1.5 text-xs font-semibold text-odoo-text hover:bg-odoo-border"
+            >
+              ✕ {statusFilterLabel(statusFilter)} — ເບິ່ງທັງໝົດ {counts.ALL}
+            </button>
+          ) : null}
         </div>
 
         {/* On a phone the table clipped at the customer column, which left
@@ -931,25 +941,22 @@ function OrdersView({
                           </div>
                         ) : null}
                       </td>
-                      <td className="px-3 py-2 text-[12px]">
-                        <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-150 px-2 py-0.5 text-[11px] font-semibold text-indigo-700">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="M3 9 12 4l9 5-9 5-9-5Z" /><path d="M3 9v6l9 5 9-5V9" /></svg>
-                          {orderWarehouseLabel(o)}
-                        </span>
+                      {/* Warehouse, salesperson and the line count are
+                          reference, not the decision — plain quiet text.
+                          Boxed and coloured they competed with the two
+                          things that ARE the decision: the total and the
+                          button. */}
+                      <td className="px-3 py-2.5 text-[12px] text-odoo-text-muted">
+                        {orderWarehouseLabel(o)}
                       </td>
-                      <td className="px-3 py-2 text-[12px]">
-                        <span className="inline-flex items-center gap-1 rounded bg-slate-150 border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700">
-                          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-3 4-5 8-5s8 2 8 5" /></svg>
-                          {orderSalespersonLabel(o)}
-                        </span>
+                      <td className="px-3 py-2.5 text-[12px] text-odoo-text-muted">
+                        {orderSalespersonLabel(o)}
                       </td>
-                      <td className="px-3 py-2 text-right">
-                        <span className="inline-flex items-center justify-center rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
-                          {moneyFmt.format(o.items.length)}
-                        </span>
+                      <td className="px-3 py-2.5 text-right text-[12px] text-odoo-text-muted">
+                        {moneyFmt.format(o.items.length)}
                       </td>
-                      <td className="px-3 py-2 text-right">
-                        <div className="font-mono font-bold">
+                      <td className="px-3 py-2.5 text-right">
+                        <div className="font-mono text-[14px] font-bold text-odoo-text-strong">
                           {moneyFmt.format(o.totalAmount)}
                         </div>
                         {o.extraDiscount > 0 ? (
@@ -2961,10 +2968,15 @@ function SummaryCard({
   label,
   value,
   tone,
+  active,
+  onClick,
 }: {
   label: string;
   value: number;
-  tone: "slate" | "amber" | "emerald" | "red";
+  tone: "slate" | "amber" | "emerald" | "red" | "sky";
+  /** With onClick the card IS the filter; active marks the one in force. */
+  active?: boolean;
+  onClick?: () => void;
 }) {
   const styles = {
     slate:
@@ -2974,15 +2986,30 @@ function SummaryCard({
     emerald:
       "border-emerald-200 bg-emerald-50/50 text-emerald-700",
     red: "border-rose-200 bg-rose-50/50 text-rose-700",
+    sky: "border-sky-200 bg-sky-50/50 text-sky-700",
   };
-
-  return (
-    <div className={`rounded-xl border p-4 shadow-sm hover:scale-[1.015] hover:shadow-md transition-all duration-300 ${styles[tone]}`}>
+  const body = (
+    <>
       <div className="text-xs font-semibold text-current/65">{label}</div>
       <div className="mt-1 font-mono text-2xl font-bold">
         {moneyFmt.format(value)}
       </div>
-    </div>
+    </>
+  );
+  const frame = `rounded-xl border p-4 shadow-sm transition-all duration-300 ${styles[tone]}`;
+  if (!onClick) return <div className={frame}>{body}</div>;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`${frame} text-left hover:shadow-md ${
+        active
+          ? "ring-2 ring-current/40 shadow-md"
+          : "opacity-90 hover:opacity-100"
+      }`}
+    >
+      {body}
+    </button>
   );
 }
 
