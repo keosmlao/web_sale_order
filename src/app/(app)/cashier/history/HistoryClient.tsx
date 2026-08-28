@@ -45,6 +45,12 @@ type DailySummary = {
   redeemedKip: number;
   changeKip: number;
   remitKip: number;
+  sml: {
+    bills: number;
+    cashKip: number;
+    transferKip: number;
+    totalKip: number;
+  };
 };
 
 const CURRENCY_NAMES: Record<string, string> = {
@@ -445,16 +451,31 @@ export default function HistoryClient() {
                       {r.voidReason ? ` · ${r.voidReason}` : ""}
                     </div>
                   ) : null
-                ) : r.cartNumber ? (
-                  <button
-                    type="button"
-                    disabled={deleting === r.docNo}
-                    onClick={() => void deleteReceipt(r)}
-                    className="odoo-btn odoo-btn-danger mt-2.5 h-10 w-full"
-                  >
-                    {deleting === r.docNo ? "ກຳລັງລົບ…" : "ລົບໃບຮັບ"}
-                  </button>
                 ) : null}
+                <div className="mt-2.5 flex gap-2">
+                  <Link
+                    href={`/cashier/receipts/${encodeURIComponent(r.docNo)}`}
+                    className="odoo-btn odoo-btn-secondary h-10 flex-1 justify-center"
+                  >
+                    ລາຍລະອຽດ
+                  </Link>
+                  <Link
+                    href={`/cashier/receipts/${encodeURIComponent(r.docNo)}?print=1`}
+                    className="odoo-btn odoo-btn-secondary h-10 flex-1 justify-center"
+                  >
+                    ພິມ
+                  </Link>
+                  {!r.isVoided && r.cartNumber ? (
+                    <button
+                      type="button"
+                      disabled={deleting === r.docNo}
+                      onClick={() => void deleteReceipt(r)}
+                      className="odoo-btn odoo-btn-danger h-10"
+                    >
+                      {deleting === r.docNo ? "ລົບ…" : "ລົບ"}
+                    </button>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>
@@ -554,6 +575,23 @@ export default function HistoryClient() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
+                    {/* Seeing how the money arrived and printing the bill
+                        are different errands — one button each. ພິມ opens
+                        the receipt with the print dialog already up. */}
+                    <span className="inline-flex items-center gap-1">
+                      <Link
+                        href={`/cashier/receipts/${encodeURIComponent(r.docNo)}`}
+                        className="odoo-btn odoo-btn-secondary !px-2 !py-1 !text-[11px]"
+                      >
+                        ລາຍລະອຽດ
+                      </Link>
+                      <Link
+                        href={`/cashier/receipts/${encodeURIComponent(r.docNo)}?print=1`}
+                        className="odoo-btn odoo-btn-secondary !px-2 !py-1 !text-[11px]"
+                      >
+                        ພິມ
+                      </Link>
+                    </span>{" "}
                     {/* Delete, not void. Voiding writes a reversal document
                         and leaves both halves on the books; deleting takes
                         the receipt off and puts the order back to waiting
@@ -670,6 +708,16 @@ function DailySummaryView({
                   ))}
                 </ul>
               )}
+              {summary.sml.cashKip > 0 ? (
+                <div className="mt-2 flex items-baseline justify-between border-t border-odoo-border pt-2 text-sm">
+                  <span className="text-odoo-text-muted">
+                    ບິນ SML (ທຽບກີບ)
+                  </span>
+                  <span className="font-mono font-bold">
+                    {moneyFmt.format(summary.sml.cashKip)}
+                  </span>
+                </div>
+              ) : null}
               {summary.changeKip > 0 ? (
                 <div className="mt-2 flex items-baseline justify-between border-t border-odoo-border pt-2 text-sm">
                   <span className="text-odoo-text-muted">ເງິນທອນ (ກີບ)</span>
@@ -710,6 +758,16 @@ function DailySummaryView({
                   ))}
                 </ul>
               )}
+              {summary.sml.transferKip > 0 ? (
+                <div className="mt-2 flex items-baseline justify-between border-t border-odoo-border pt-2 text-sm">
+                  <span className="text-odoo-text-muted">
+                    ບິນ SML (ທຽບກີບ)
+                  </span>
+                  <span className="font-mono font-bold">
+                    {moneyFmt.format(summary.sml.transferKip)}
+                  </span>
+                </div>
+              ) : null}
               {other.length > 0 ? (
                 <div className="mt-2 border-t border-odoo-border pt-2">
                   {other.map((t) => (
@@ -744,7 +802,7 @@ function DailySummaryView({
               <div className="flex items-baseline justify-between sm:block">
                 <span className="text-odoo-text-muted">ໂອນເຂົ້າບັນຊີ</span>
                 <b className="font-mono sm:block">
-                  {moneyFmt.format(summary.transferKip)} ກີບ
+                  {moneyFmt.format(summary.transferKip + summary.sml.transferKip)} ກີບ
                 </b>
               </div>
               <div className="flex items-baseline justify-between sm:block">
@@ -756,12 +814,12 @@ function DailySummaryView({
               <div className="flex items-baseline justify-between sm:block">
                 <span className="text-odoo-text-muted">ລວມຮັບທັງໝົດ</span>
                 <b className="font-mono sm:block">
-                  {moneyFmt.format(summary.totalKip)} ກີບ
+                  {moneyFmt.format(summary.totalKip + summary.sml.totalKip)} ກີບ
                 </b>
               </div>
             </div>
             <p className="mt-2 text-[11px] text-odoo-text-muted">
-              ສະເພາະບິນທີ່ຮັບເງິນຢູ່ໜ້າຮັບເງິນນີ້ (CAKAP) · ບິນ SML ສະຫລຸບໃນ SML
+              ຮວມທຸກບິນຂອງຮ້ານ — POS ແຍກສະກຸນ · ບິນ SML ({moneyFmt.format(summary.sml.bills)} ບິນ) ທຽບເປັນກີບຈາກ cb_trans
             </p>
           </section>
         </>

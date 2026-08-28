@@ -11,12 +11,25 @@ import { getEmployeeFromRequest } from "@/lib/auth";
 // Figures come from the till's own records — app_payment_line for the
 // per-currency tender split (what physically landed in the drawer or the
 // account, in the currency it arrived in) and app_settle_audit for the
-// net KIP totals. Voided receipts are excluded from both. SML-raised
-// bills are not in this summary: SML holds their money in THB base with
-// no per-currency split, and its own day-close reports them.
+// net KIP totals. Voided receipts are excluded from both.
+//
+// SML-raised bills of the shop are counted too, from their cb_trans
+// header: cash_amount and tranfer_amount are THB base, so each is divided
+// by the bill's exchange_rate back into KIP. SML keeps no reliable
+// per-currency split (its cb_trans_detail doc_types do not reconcile), so
+// they contribute one KIP-equivalent line per section, not a split.
 //
 // ເງິນທອນ (change) is the gap between cash tendered (in KIP terms) and
 // the net cash the audit says the bill kept.
+
+import { getConfiguredSalesWarehouses } from "@/lib/inventory-config";
+
+type SmlRow = {
+  bills: number;
+  cash_kip: string | number | null;
+  transfer_kip: string | number | null;
+  total_kip: string | number | null;
+};
 
 type TenderRow = {
   pay_method: string;
@@ -44,7 +57,8 @@ export async function GET(request: NextRequest) {
   const raw = url.searchParams.get("date")?.trim() ?? "";
   const date = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
 
-  const [tenders, audits] = await Promise.all([
+  const salesWhs = await getConfiguredSalesWarehouses();
+  const [tenders, audits, smlRows] = await Promise.all([
     prisma.$queryRaw<TenderRow[]>`
       SELECT
         p.pay_method,
@@ -70,6 +84,24 @@ export async function GET(request: NextRequest) {
       WHERE is_voided = FALSE
         AND created_at::date = COALESCE(${date}::date, CURRENT_DATE)
     `,
+    prisma.$queryRaw<SmlRow[]>`
+      SELECT
+        COUNT(*)::int AS bills,
+        SUM(c.cash_amount    / NULLIF(t.exchange_rate, 0)) AS cash_kip,
+        SUM(c.tranfer_amount / NULLIF(t.exchange_rate, 0)) AS transfer_kip,
+        SUM(t.total_amount_2)                              AS total_kip
+      FROM ic_trans t
+      JOIN cb_trans c ON c.doc_no = t.doc_no AND c.trans_flag = 44
+      WHERE t.trans_flag = 44
+        AND t.doc_format_code <> 'CAKAP'
+        AND t.doc_date = COALESCE(${date}::date, CURRENT_DATE)
+        AND EXISTS (
+          SELECT 1 FROM ic_trans_detail dd
+          WHERE dd.doc_no = t.doc_no
+            AND dd.trans_flag = 44
+            AND dd.wh_code = ANY(${salesWhs})
+        )
+    `,
   ]);
 
   const audit = audits[0];
@@ -79,9 +111,15 @@ export async function GET(request: NextRequest) {
     .filter((t) => t.pay_method === "cash")
     .reduce((s, t) => s + Number(t.amount_kip), 0);
 
+  const sml = smlRows[0];
+  const smlCashKip = sml?.cash_kip ? Math.round(Number(sml.cash_kip)) : 0;
+  const smlTransferKip = sml?.transfer_kip
+    ? Math.round(Number(sml.transfer_kip))
+    : 0;
+
   return NextResponse.json({
     date: date ?? null,
-    bills: audit?.bills ?? 0,
+    bills: (audit?.bills ?? 0) + (sml?.bills ?? 0),
     tenders: tenders.map((t) => ({
       payMethod: t.pay_method,
       currencyCode: t.currency_code,
@@ -94,7 +132,14 @@ export async function GET(request: NextRequest) {
     transferKip,
     redeemedKip: audit?.redeemed_kip ? Number(audit.redeemed_kip) : 0,
     changeKip: Math.max(0, cashTenderedKip - cashKipNet),
-    // What physically leaves the drawer at day close.
-    remitKip: cashKipNet,
+    sml: {
+      bills: sml?.bills ?? 0,
+      cashKip: smlCashKip,
+      transferKip: smlTransferKip,
+      totalKip: sml?.total_kip ? Math.round(Number(sml.total_kip)) : 0,
+    },
+    // What physically leaves the drawer at day close — the till's own net
+    // cash plus the SML bills' cash, all in KIP terms.
+    remitKip: cashKipNet + smlCashKip,
   });
 }
