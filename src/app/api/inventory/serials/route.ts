@@ -4,14 +4,30 @@ import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
 
 type Row = {
-  sn: string | null;
   isn: string | null;
+  sn: string | null;
   location: string | null;
   rack: string | null;
 };
 
-// Serial-tracked units of one item standing in one warehouse, per the WMS
-// serial ledger.
+// Serial-tracked units of one item standing in one warehouse.
+//
+// The two tables use the same word for different numbers, which cost a
+// while to see:
+//
+//   sn_trans_detail.sn  — ODIEN's own tag, "009A0002317". The movement
+//                         ledger tracks this. It is the ISN.
+//   sn_inventory.isn    — the same number, under its real name.
+//   sn_inventory.sn     — the factory serial, "990115100194240000240401".
+//
+// Joining sn to sn matched 120 of the 852 units standing in warehouse
+// 1101. Joining the ledger's sn to sn_inventory.isn matches 807. So the
+// ledger's "sn" is the ISN, and the endpoint says so rather than passing
+// the confusion on.
+//
+// The counter is given the ISN first — it is what the storefront's
+// paperwork goes by and what is written on the unit's own label — with
+// the factory serial behind it for anything the ISN cannot answer.
 export async function GET(request: NextRequest) {
   const employee = await getEmployeeFromRequest(request);
   if (!employee) {
@@ -25,23 +41,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ items: [] });
   }
 
-  // Availability comes from the WMS serial ledger, sn_trans_detail: a unit is
-  // on hand when its movements sum to something other than zero
-  // (qty × calc_flag, +1 in / −1 out). That is the rule the WMS's own
-  // wms_check_sn_status view applies — the view hard-codes warehouse 1404, so
-  // the rule is reused rather than the view.
-  //
-  // This matters. Against sn_inventory.status, which is what this endpoint
-  // used first, the two answers agree on only 99 of about 700 serials in
-  // 1101. The ledger is the one the WMS itself trusts.
-  //
-  // The ledger's own isn/location/rack are often blank, so those come from
-  // sn_inventory wherever the ledger has none.
+  // On hand is still the ledger's own rule — movements summing to
+  // something other than zero — because that is what the WMS itself
+  // applies. sn_inventory.status agrees with it (762 of the 779 rows it
+  // marks status 0 in warehouse 1101 are on hand, against 21 of the 4,082
+  // it marks 1) but the ledger is the one that settles a sale.
   const rows = await prisma.$queryRaw<Row[]>`
     WITH onhand AS (
       SELECT
-        sn,
-        (array_agg(isn ORDER BY roworder DESC))[1] AS isn,
+        sn AS isn,
         (array_agg(location ORDER BY roworder DESC))[1] AS location,
         (array_agg(rack ORDER BY roworder DESC))[1] AS rack
       FROM sn_trans_detail
@@ -52,28 +60,29 @@ export async function GET(request: NextRequest) {
       HAVING SUM(qty * calc_flag::numeric) <> 0
     )
     SELECT
-      o.sn,
-      COALESCE(NULLIF(o.isn, ''), i.isn) AS isn,
+      o.isn,
+      NULLIF(TRIM(i.sn), '') AS sn,
       COALESCE(NULLIF(o.location, ''), i.location) AS location,
       COALESCE(NULLIF(o.rack, ''), i.rack) AS rack
     FROM onhand o
     LEFT JOIN LATERAL (
-      SELECT isn, location, rack
+      SELECT s.sn, s.location, s.rack
       FROM sn_inventory s
-      WHERE s.sn = o.sn
+      WHERE s.isn = o.isn
+        AND (${warehouse} = '' OR s.wh_code = ${warehouse})
       ORDER BY s.updated_at DESC NULLS LAST
       LIMIT 1
     ) i ON true
-    ORDER BY COALESCE(NULLIF(o.isn, ''), i.isn, o.sn)
+    ORDER BY o.isn
     LIMIT 500
   `;
 
   return NextResponse.json({
     items: rows
-      .filter((r) => (r.sn ?? "").trim() !== "")
+      .filter((r) => (r.isn ?? "").trim() !== "")
       .map((r) => ({
-        sn: (r.sn ?? "").trim(),
-        isn: (r.isn ?? "").trim() || null,
+        isn: (r.isn ?? "").trim(),
+        sn: (r.sn ?? "").trim() || null,
         location: (r.location ?? "").trim() || null,
         rack: (r.rack ?? "").trim() || null,
       })),
