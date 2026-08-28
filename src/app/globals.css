@@ -9964,3 +9964,45 @@ a {
   font-weight: 800;
   color: var(--odoo-text-soft);
 }
+
+/* Bill arithmetic on the cashier's own screen. */
+.settle-bill-sum,
+.settle-points-sum {
+  display: grid;
+  gap: 4px;
+  margin-top: 12px;
+  padding: 11px 13px;
+  border: 1px solid var(--odoo-border-strong);
+  border-radius: 12px;
+  background: var(--odoo-surface-muted);
+  font-size: 12.5px;
+}
+.settle-points-sum { background: var(--odoo-warning-bg); border-color: var(--odoo-warning-border); }
+.settle-bill-sum > div,
+.settle-points-sum > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+.settle-bill-sum span,
+.settle-points-sum span { font-weight: 700; color: var(--odoo-text-muted); }
+.settle-bill-sum b,
+.settle-points-sum b {
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--odoo-text-strong);
+}
+.settle-bill-sum .is-off b { color: var(--odoo-danger-text); }
+.settle-points-sum .is-plus b { color: var(--odoo-success-text); }
+.settle-points-sum .is-minus b { color: var(--odoo-danger-text); }
+.settle-bill-sum .is-net,
+.settle-points-sum .is-net {
+  margin-top: 3px;
+  padding-top: 6px;
+  border-top: 1px solid var(--odoo-border-strong);
+}
+.settle-bill-sum .is-net span { color: var(--odoo-text-strong); font-weight: 800; }
+.settle-bill-sum .is-net b { font-size: 16px; color: var(--odoo-primary-dark); }
+.settle-points-sum .is-net b { font-size: 16px; color: var(--odoo-warning-text); }
+.settle-points-sum .is-net span { color: var(--odoo-warning-text); font-weight: 800; }

@@ -2010,9 +2010,39 @@ function SettleForm({
                       </div>
                       <div className="flex shrink-0 items-center gap-3">
                         <div className="settle-item-qty">x{moneyFmt.format(it.quantity)}</div>
-                        <div className="settle-item-amount">{moneyFmt.format(it.amount)}</div>
+                        <div className="text-right">
+                          {/* The line at list, and what came off it. The
+                              member rate is applied per line when the order
+                              is written, so the amount on its own gives the
+                              cashier nothing to check the discount against
+                              — or to answer a customer who asks. */}
+                          {(() => {
+                            const listTotal = it.unitPrice * it.quantity;
+                            const off = Math.max(0, listTotal - it.amount);
+                            return off > 0 ? (
+                              <div className="text-[11px] font-semibold tabular-nums text-odoo-text-soft line-through">
+                                {moneyFmt.format(listTotal)}
+                              </div>
+                            ) : null;
+                          })()}
+                          <div className="settle-item-amount">{moneyFmt.format(it.amount)}</div>
+                        </div>
                       </div>
                     </div>
+                    {(() => {
+                      const listTotal = it.unitPrice * it.quantity;
+                      const off = Math.max(0, listTotal - it.amount);
+                      return (
+                        <div className="mt-0.5 text-[10px] font-semibold tabular-nums text-odoo-text-muted">
+                          {moneyFmt.format(it.unitPrice)} × {moneyFmt.format(it.quantity)}
+                          {off > 0 ? (
+                            <span className="ml-2 rounded bg-rose-50 px-1.5 py-0.5 font-bold text-odoo-danger">
+                              ຫຼຸດ {moneyFmt.format(off)}
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    })()}
                     <div className="mt-0.5 flex flex-wrap gap-1 text-[10px] text-odoo-text-muted">
                       {it.whCode ? (
                         <span title={it.whName ?? ""}>
@@ -2053,6 +2083,72 @@ function SettleForm({
                 </div>
               ))}
             </div>
+
+            {/* What the bill came to, and how. The cashier is the one who
+                has to answer "why is it this much" while the customer is
+                standing there, so the arithmetic is on their screen too,
+                not only on the customer's. */}
+            <div className="settle-bill-sum">
+              <div>
+                <span>ລາຄາເຕັມ</span>
+                <b>{moneyFmt.format(grossListTotal)}</b>
+              </div>
+              {lineDiscountTotal > 0 ? (
+                <div className="is-off">
+                  <span>ສ່ວນຫຼຸດ</span>
+                  <b>−{moneyFmt.format(lineDiscountTotal)}</b>
+                </div>
+              ) : null}
+              {billDiscountAmount > 0 ? (
+                <div className="is-off">
+                  <span>ຫຼຸດທ້າຍບິນ</span>
+                  <b>−{moneyFmt.format(billDiscountAmount)}</b>
+                </div>
+              ) : null}
+              {redeemKipValue > 0 ? (
+                <div className="is-off">
+                  <span>ໃຊ້ {moneyFmt.format(redeemPointsRequested)} ແຕ້ມ</span>
+                  <b>−{moneyFmt.format(redeemKipValue)}</b>
+                </div>
+              ) : null}
+              <div className="is-net">
+                <span>ລາຄາຫຼັງສ່ວນຫຼຸດ</span>
+                <b>{moneyFmt.format(effectiveTotal)}</b>
+              </div>
+            </div>
+
+            {/* Points. The one the customer asks about is the last line. */}
+            {order.earnedPoints > 0 || (redeemInfo?.pointBalance ?? 0) > 0 ? (
+              <div className="settle-points-sum">
+                <div>
+                  <span>ແຕ້ມສະສົມເດີມ</span>
+                  <b>{moneyFmt.format(redeemInfo?.pointBalance ?? 0)}</b>
+                </div>
+                <div className="is-plus">
+                  <span>ແຕ້ມທີ່ໄດ້ຮັບ</span>
+                  <b>+{moneyFmt.format(order.earnedPoints)}</b>
+                </div>
+                {redeemPointsRequested > 0 ? (
+                  <div className="is-minus">
+                    <span>ແຕ້ມທີ່ໃຊ້ໄປ</span>
+                    <b>−{moneyFmt.format(redeemPointsRequested)}</b>
+                  </div>
+                ) : null}
+                <div className="is-net">
+                  <span>★ ລວມແຕ້ມທັງໝົດ</span>
+                  <b>
+                    {moneyFmt.format(
+                      Math.max(
+                        0,
+                        (redeemInfo?.pointBalance ?? 0) +
+                          order.earnedPoints -
+                          redeemPointsRequested,
+                      ),
+                    )}
+                  </b>
+                </div>
+              </div>
+            ) : null}
           </div>
         </section>
 
