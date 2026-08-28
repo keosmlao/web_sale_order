@@ -134,7 +134,7 @@ export default function CustomerDisplayPage() {
       </section>
 
       {/* BCEL transfer QR */}
-      {state.transferAmount > 0 ? (
+      {state.qrSelected || state.transferAmount > 0 ? (
         <TransferQrPanel amount={state.transferAmount} />
       ) : null}
     </main>
@@ -143,18 +143,32 @@ export default function CustomerDisplayPage() {
 
 function TransferQrPanel({ amount }: { amount: number }) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
-  const [status, setStatus] = useState<"loading" | "ok" | "unconfigured" | "error">(
-    "loading",
-  );
+  const [status, setStatus] = useState<
+    "idle" | "loading" | "ok" | "unconfigured" | "error"
+  >("loading");
   const amountLabel = useMemo(() => kip.format(amount), [amount]);
 
   useEffect(() => {
     let cancelled = false;
+    // Nothing to transfer yet — the cashier is still moving money between
+    // tenders. Hold the panel and say so; do not fetch a code for zero.
+    if (!(amount > 0)) {
+      setStatus("idle");
+      return () => {
+        cancelled = true;
+      };
+    }
     (async () => {
       await Promise.resolve();
       if (cancelled) return;
-      setStatus("loading");
-      setDataUrl(null);
+      // Deliberately NOT clearing dataUrl here.
+      //
+      // Every change to the amount refetches, and blanking first meant the
+      // customer watched the code vanish and rebuild each time the cashier
+      // touched another tender — which reads as "it broke", right at the
+      // moment they are being asked to scan it. The old code stays up
+      // until the new one is ready to replace it.
+      setStatus((prev) => (prev === "ok" ? "ok" : "loading"));
       try {
         const res = await fetch(
           `/api/cashier/customer-qr?amount=${encodeURIComponent(amount)}`,
@@ -202,9 +216,13 @@ function TransferQrPanel({ amount }: { amount: number }) {
         <span className="absolute -right-2 -top-2 h-12 w-12 rounded-tr-[24px] border-r-8 border-t-8 border-cyan-400" />
         <span className="absolute -bottom-2 -left-2 h-12 w-12 rounded-bl-[24px] border-b-8 border-l-8 border-cyan-400" />
         <span className="absolute -bottom-2 -right-2 h-12 w-12 rounded-br-[24px] border-b-8 border-r-8 border-cyan-400" />
-        {status === "ok" && dataUrl ? (
+        {dataUrl && (status === "ok" || status === "loading") ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={dataUrl} alt="BCEL transfer QR" className="h-full w-full" />
+        ) : status === "idle" ? (
+          <span className="px-4 text-center text-lg text-slate-500">
+            ລໍຖ້າພະນັກງານກຳນົດຍອດໂອນ
+          </span>
         ) : status === "loading" ? (
           <span className="text-lg text-slate-500">ກຳລັງສ້າງ QR...</span>
         ) : status === "unconfigured" ? (

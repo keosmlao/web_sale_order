@@ -1585,6 +1585,7 @@ function SettleForm({
       changeDue,
       remainingDue,
       transferAmount: transferQrAmount,
+      qrSelected: qrPaymentSelected,
       updatedAt: Date.now(),
     }),
     [
@@ -1594,6 +1595,7 @@ function SettleForm({
       changeDue,
       remainingDue,
       transferQrAmount,
+      qrPaymentSelected,
     ],
   );
 

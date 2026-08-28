@@ -21,6 +21,11 @@ export type CustomerDisplayState = {
   changeDue: number; // KIP
   remainingDue: number; // KIP
   transferAmount: number; // KIP to show as a BCEL QR (0 = hide QR)
+  // Whether the cashier has chosen to take a transfer. The QR panel follows
+  // this, not the amount: the amount legitimately passes through zero while
+  // the cashier moves money between tenders, and a panel keyed on it blinks
+  // out in front of the customer mid-payment.
+  qrSelected: boolean;
   updatedAt: number;
 };
 
@@ -33,6 +38,7 @@ export const IDLE_DISPLAY_STATE: CustomerDisplayState = {
   changeDue: 0,
   remainingDue: 0,
   transferAmount: 0,
+  qrSelected: false,
   updatedAt: 0,
 };
 
