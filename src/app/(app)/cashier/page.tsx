@@ -557,7 +557,7 @@ function CashierClientInner({
             className="absolute inset-0 cursor-default"
             onClick={() => setSelectedCart(null)}
           />
-          <aside className="cashier-modal relative flex h-dvh max-h-dvh w-full max-w-[1180px] flex-col overflow-hidden bg-odoo-surface sm:h-auto sm:max-h-[92dvh] sm:rounded-2xl sm:border sm:border-odoo-border-strong">
+          <aside className="cashier-modal relative flex h-dvh max-h-dvh w-full max-w-[1180px] flex-col overflow-hidden bg-odoo-surface sm:h-[92dvh] sm:max-h-[92dvh] sm:rounded-2xl sm:border sm:border-odoo-border-strong">
             <SettleForm
               order={selected}
               currencyRates={currencyRates}
@@ -633,34 +633,6 @@ function CashierClientInner({
   );
 }
 
-// How long an order has been sitting in the queue, in the words someone
-// at the till would use. Recomputed from a ticking `now` rather than at
-// render time so the server and the first client render agree.
-function waitedLabel(createdAt: string, now: number): { text: string; late: boolean } {
-  const mins = Math.max(0, Math.floor((now - new Date(createdAt).getTime()) / 60000));
-  if (mins < 1) return { text: "ຫາກໍ່ສົ່ງມາ", late: false };
-  if (mins < 60) return { text: `ລໍຖ້າ ${mins} ນາທີ`, late: mins >= 15 };
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return { text: `ລໍຖ້າ ${hrs} ຊົ່ວໂມງ`, late: true };
-  return { text: `ລໍຖ້າ ${Math.floor(hrs / 24)} ມື້`, late: true };
-}
-
-// Per-order warehouse and salesperson: a split line can carry several of
-// each, so the card names the one when there is one and counts them
-// otherwise, keeping the full list in the tooltip.
-function collapse(
-  values: Map<string, string>,
-  fallback: string | null | undefined,
-  many: (n: number) => string,
-): { label: string; title: string } {
-  if (values.size === 0) return { label: fallback ?? "—", title: "" };
-  const list = Array.from(values.values());
-  return {
-    label: values.size === 1 ? list[0] : many(values.size),
-    title: list.join(", "),
-  };
-}
-
 function OrdersView({
   counts,
   query,
@@ -689,230 +661,221 @@ function OrdersView({
   onSelectCart: (cartNumber: string) => void;
   onDeleteOrder: (order: CashierOrder) => void;
 }) {
-  // Ticks so the waiting times stay true without a reload. Starts at 0 so
-  // the first client render matches the server's, then the effect fills
-  // it in — a relative time computed during hydration mismatches.
-  const [now, setNow] = useState(0);
-  useEffect(() => {
-    setNow(Date.now());
-    const t = setInterval(() => setNow(Date.now()), 30_000);
-    return () => clearInterval(t);
-  }, []);
-
-  // The two things a cashier actually wants off the top of the screen:
-  // how many people are waiting, and how much money that is.
-  const waiting = filtered.filter(
-    (o) => o.statusLabel === "PENDING" || o.statusLabel === "HELD",
-  );
-  const waitingTotal = waiting.reduce((sum, o) => sum + o.totalAmount, 0);
-  const clear = counts.PENDING + counts.HELD === 0;
-
   return (
     <>
-      <div className={"cq-bar" + (clear ? " is-clear" : "")}>
-        <div>
-          <span className="cq-bar-label">ຄິວຮັບເງິນ</span>
-          <div className="cq-bar-lead">
-            <span className="cq-bar-count">{moneyFmt.format(counts.PENDING + counts.HELD)}</span>
-            <span>{clear ? "ບໍ່ມີໃຜລໍຖ້າ" : "ໃບລໍຖ້າຮັບເງິນ"}</span>
+      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <SummaryCard label="ລໍຖ້າຮັບເງິນ" value={counts.PENDING} tone="amber" />
+        <SummaryCard label="ຮັບເງິນສຳເລັດ" value={counts.COMPLETED} tone="emerald" />
+        <SummaryCard label="ຈັດຖ້ຽວ" value={counts.SCHEDULED} tone="slate" />
+        <SummaryCard label="ຍົກເລີກ" value={counts.CANCELLED} tone="red" />
+      </div>
+
+      <section className="odoo-card overflow-hidden">
+        <div className="flex flex-wrap items-center gap-3 border-b border-odoo-border p-4">
+          <div className="w-full sm:min-w-64 sm:flex-1">
+            <input
+              value={query}
+              onChange={(e) => onQueryChange(e.target.value)}
+              placeholder="ຄົ້ນຫາເລກກະຕ່າ / ລູກຄ້າ / ເບີໂທ..."
+              className="odoo-input"
+            />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {(["ALL", "PENDING", "HELD", "COMPLETED", "SCHEDULED", "CANCELLED"] as StatusFilter[]).map(
+              (status) => (
+                <button
+                   key={status}
+                   type="button"
+                   onClick={() => onStatusFilterChange(status)}
+                   className={
+                     "rounded-md px-2.5 py-1.5 text-xs font-semibold transition " +
+                     (statusFilter === status
+                       ? "bg-odoo-primary text-white"
+                       : "bg-odoo-surface-muted text-odoo-text hover:bg-odoo-border")
+                   }
+                >
+                  {statusFilterLabel(status)} {counts[status]}
+                </button>
+              ),
+            )}
           </div>
         </div>
 
-        {waitingTotal > 0 ? (
-          <div>
-            <span className="cq-bar-label">ຍອດເງິນທີ່ລໍຖ້າ</span>
-            <div className="cq-bar-money">
-              <b>{moneyFmt.format(waitingTotal)}</b>
-              <i>ກີບ</i>
-            </div>
-          </div>
-        ) : null}
-
-        <div className="cq-bar-rest">
-          {counts.HELD > 0 ? (
-            <span className="cq-stat">ພັກໄວ້ <b>{moneyFmt.format(counts.HELD)}</b></span>
-          ) : null}
-          {counts.SCHEDULED > 0 ? (
-            <span className="cq-stat">ຈັດຖ້ຽວ <b>{moneyFmt.format(counts.SCHEDULED)}</b></span>
-          ) : null}
-          <span className="cq-stat is-done">ຮັບເງິນສຳເລັດ <b>{moneyFmt.format(counts.COMPLETED)}</b></span>
-          {counts.CANCELLED > 0 ? (
-            <span className="cq-stat is-void">ຍົກເລີກ <b>{moneyFmt.format(counts.CANCELLED)}</b></span>
-          ) : null}
-        </div>
-      </div>
-
-      <div className="cq-tools">
-        <div className="cq-search">
-          <input
-            value={query}
-            onChange={(e) => onQueryChange(e.target.value)}
-            placeholder="ຄົ້ນຫາເລກກະຕ່າ / ລູກຄ້າ / ເບີໂທ..."
-            className="odoo-input"
-          />
-        </div>
-        <div className="cq-chips">
-          {(["ALL", "PENDING", "HELD", "COMPLETED", "SCHEDULED", "CANCELLED"] as StatusFilter[]).map(
-            (status) => (
-              <button
-                key={status}
-                type="button"
-                aria-pressed={statusFilter === status}
-                onClick={() => onStatusFilterChange(status)}
-                className="cq-chip"
-              >
-                {statusFilterLabel(status)}
-                <span>{moneyFmt.format(counts[status])}</span>
-              </button>
-            ),
-          )}
-        </div>
-      </div>
-
-      {filtered.length === 0 ? (
-        <div className="cq-empty">
-          <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="6" width="20" height="12" rx="2" />
-            <circle cx="12" cy="12" r="2.5" />
-            <path d="M6 12h.01M18 12h.01" />
-          </svg>
-          <b>{query.trim() ? "ຫາບໍ່ພົບ" : "ຄິວຫວ່າງ"}</b>
-          <span>
-            {query.trim()
-              ? "ລອງຄົ້ນດ້ວຍເລກບິນ ຫຼື ເບີໂທລູກຄ້າ"
-              : "ບິນໃໝ່ຈາກໜ້າຂາຍຈະຂຶ້ນມາຢູ່ນີ້ເອງ"}
-          </span>
-        </div>
-      ) : (
-        <div className="cq-grid">
-          {filtered.map((o) => {
-            const live = o.statusLabel === "PENDING";
-            const held = o.statusLabel === "HELD";
-            const clickable = live || held;
-            const tone = live
-              ? "is-live"
-              : held
-                ? "is-held"
-                : o.statusLabel === "CANCELLED"
-                  ? "is-void"
-                  : "is-done";
-
-            const warehouses = new Map<string, string>();
-            const salespeople = new Map<string, string>();
-            for (const it of o.items) {
-              if (it.whCode) warehouses.set(it.whCode, it.whName ?? it.whCode);
-              if (it.saleCode) {
-                salespeople.set(it.saleCode, it.salespersonName ?? it.saleCode);
-              }
-            }
-            const wh = collapse(
-              warehouses,
-              o.warehouseName ?? o.warehouseCode,
-              (n) => `ຫຼາຍສາງ (${n})`,
-            );
-            const seller = collapse(
-              salespeople,
-              o.salespersonName ?? o.userOwner,
-              (n) => `ຫຼາຍຄົນ (${n})`,
-            );
-            // Only a queued order has a wait worth reading; a settled one
-            // shows when it was taken instead.
-            const age = clickable && now > 0 ? waitedLabel(o.createdAt, now) : null;
-
-            return (
-              <div
-                key={o.cartNumber}
-                onClick={() => {
-                  if (clickable) onSelectCart(o.cartNumber);
-                }}
-                className={"cq-card " + tone}
-              >
-                <div className="cq-head">
-                  <span className="cq-doc">{o.docNo}</span>
-                  <StatusBadge status={o.statusLabel} />
-                  {o.receiptDocNo ? (
-                    <a
-                      href={`/cashier/receipts/${encodeURIComponent(o.receiptDocNo)}`}
-                      className="cq-receipt"
-                      onClick={(e) => e.stopPropagation()}
+        <div className="overflow-x-auto rounded-md border border-odoo-border bg-odoo-surface">
+          <table className="w-full text-sm">
+            <thead className="bg-odoo-surface-muted text-left text-[11px] font-bold uppercase tracking-wider text-odoo-text-muted">
+              <tr>
+                <th className="px-3 py-2">ເລກບິນ</th>
+                <th className="px-3 py-2">ວັນທີ</th>
+                <th className="px-3 py-2">ສະຖານະ</th>
+                <th className="px-3 py-2">ລູກຄ້າ</th>
+                <th className="px-3 py-2">ສາງ</th>
+                <th className="px-3 py-2">ຜູ້ຂາຍ</th>
+                <th className="px-3 py-2 text-right">ລາຍການ</th>
+                <th className="px-3 py-2 text-right">ລວມ (ກີບ)</th>
+                <th className="px-3 py-2 text-right" />
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-3 py-6 text-center text-odoo-text-muted">
+                    ບໍ່ມີອໍເດີຂາຍ
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((o) => {
+                  const clickable = o.statusLabel === "PENDING" || o.statusLabel === "HELD";
+                  const rowTint =
+                    o.statusLabel === "COMPLETED" || o.statusLabel === "SCHEDULED"
+                      ? "bg-emerald-50/30"
+                      : o.statusLabel === "CANCELLED"
+                        ? "bg-rose-50/30 opacity-70"
+                        : o.statusLabel === "HELD"
+                          ? "bg-amber-50/30"
+                          : "";
+                  return (
+                    <tr
+                      key={o.cartNumber}
+                      onClick={() => {
+                        if (clickable) onSelectCart(o.cartNumber);
+                      }}
+                      className={
+                        "border-t border-odoo-border " +
+                        rowTint +
+                        (clickable
+                          ? " cursor-pointer hover:bg-odoo-surface-muted/50"
+                          : "")
+                      }
                     >
-                      {o.receiptDocNo} →
-                    </a>
-                  ) : null}
-                  <span className={"cq-age" + (age?.late ? " is-late" : "")}>
-                    {age ? age.text : dateTimeFmt.format(new Date(o.createdAt))}
-                  </span>
-                </div>
-
-                <div className="cq-who">
-                  <div className="cq-name">
-                    {o.customerName ?? o.customerId ?? "—"}
-                  </div>
-                  <div className="cq-sub">
-                    {[o.customerPhone, o.deliveryName ? `ສົ່ງ: ${o.deliveryName}` : null]
-                      .filter(Boolean)
-                      .join(" · ") || "—"}
-                  </div>
-                </div>
-
-                <div className="cq-money">
-                  <b>{moneyFmt.format(o.totalAmount)}</b>
-                  <i>ກີບ</i>
-                  {o.extraDiscount > 0 ? (
-                    <em>ຫຼຸດ {moneyFmt.format(o.extraDiscount)}</em>
-                  ) : null}
-                </div>
-
-                <div className="cq-meta">
-                  <span className="cq-tag is-count">
-                    <b>{moneyFmt.format(o.items.length)}</b> ລາຍການ
-                  </span>
-                  <span className="cq-tag is-wh" title={wh.title}>
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M3 9 12 4l9 5-9 5-9-5Z" />
-                      <path d="M3 9v6l9 5 9-5V9" />
-                    </svg>
-                    <b>{wh.label}</b>
-                  </span>
-                  <span className="cq-tag" title={seller.title}>
-                    <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="12" cy="8" r="4" />
-                      <path d="M4 20c0-3 4-5 8-5s8 2 8 5" />
-                    </svg>
-                    <b>{seller.label}</b>
-                  </span>
-                </div>
-
-                <div className="cq-actions" onClick={(e) => e.stopPropagation()}>
-                  {clickable ? (
-                    <button
-                      type="button"
-                      onClick={() => onSelectCart(o.cartNumber)}
-                      className="odoo-btn odoo-btn-primary cq-take"
-                    >
-                      ຮັບຊຳລະ
-                    </button>
-                  ) : null}
-                  {live || held || o.statusLabel === "CANCELLED" || o.statusLabel === "COMPLETED" ? (
-                    <button
-                      type="button"
-                      disabled={deletingCart === o.cartNumber}
-                      onClick={() => onDeleteOrder(o)}
-                      className="odoo-btn odoo-btn-danger"
-                    >
-                      {deletingCart === o.cartNumber
-                        ? "ລົບ..."
-                        : o.statusLabel === "COMPLETED"
-                          ? "ລົບໃບຮັບ"
-                          : "ລົບ"}
-                    </button>
-                  ) : null}
-                </div>
-              </div>
-            );
-          })}
+                      <td className="px-3 py-2 font-mono text-[12px] font-bold">
+                        {o.docNo}
+                        {o.receiptDocNo ? (
+                          <a
+                            href={`/cashier/receipts/${encodeURIComponent(o.receiptDocNo)}`}
+                            className="ml-2 text-[10px] font-semibold text-odoo-primary hover:underline"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            {o.receiptDocNo} →
+                          </a>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2 text-[11px] text-odoo-text-muted whitespace-nowrap">
+                        {dateTimeFmt.format(new Date(o.createdAt))}
+                      </td>
+                      <td className="px-3 py-2">
+                        <StatusBadge status={o.statusLabel} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="font-semibold text-odoo-text-strong">
+                          {o.customerName ?? o.customerId ?? "—"}
+                        </div>
+                        {o.customerPhone ? (
+                          <div className="text-[11px] text-odoo-text-muted">
+                            {o.customerPhone}
+                          </div>
+                        ) : null}
+                        {o.deliveryName ? (
+                          <div className="mt-0.5 text-[10px] text-odoo-text-muted">
+                            ສົ່ງ: {o.deliveryName}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2 text-[12px]">
+                        {(() => {
+                          const warehouses = new Map<string, string>();
+                          for (const it of o.items) {
+                            if (it.whCode) {
+                              warehouses.set(it.whCode, it.whName ?? it.whCode);
+                            }
+                          }
+                          const label = warehouses.size === 0
+                            ? (o.warehouseName ?? o.warehouseCode ?? "—")
+                            : warehouses.size === 1
+                              ? Array.from(warehouses.values())[0]
+                              : `ຫຼາຍສາງ (${warehouses.size})`;
+                          const titleText = Array.from(warehouses.values()).join(", ");
+                          return (
+                            <span className="inline-flex items-center gap-1 rounded bg-indigo-50 border border-indigo-150 px-2 py-0.5 text-[11px] font-semibold text-indigo-700" title={titleText}>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><path d="M3 9 12 4l9 5-9 5-9-5Z" /><path d="M3 9v6l9 5 9-5V9" /></svg>
+                              {label}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-3 py-2 text-[12px]">
+                        {(() => {
+                          const salespeople = new Map<string, string>();
+                          for (const it of o.items) {
+                            if (it.saleCode) {
+                              salespeople.set(it.saleCode, it.salespersonName ?? it.saleCode);
+                            }
+                          }
+                          const label = salespeople.size === 0
+                            ? (o.salespersonName ?? o.userOwner ?? "—")
+                            : salespeople.size === 1
+                              ? Array.from(salespeople.values())[0]
+                              : `ຫຼາຍຄົນ (${salespeople.size})`;
+                          const titleText = Array.from(salespeople.values()).join(", ");
+                          return (
+                            <span className="inline-flex items-center gap-1 rounded bg-slate-150 border border-slate-200 px-2 py-0.5 text-[11px] font-semibold text-slate-700" title={titleText}>
+                              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" className="h-3 w-3"><circle cx="12" cy="8" r="4" /><path d="M4 20c0-3 4-5 8-5s8 2 8 5" /></svg>
+                              {label}
+                            </span>
+                          );
+                        })()}
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <span className="inline-flex items-center justify-center rounded-full bg-violet-600 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm">
+                          {moneyFmt.format(o.items.length)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2 text-right">
+                        <div className="font-mono font-bold">
+                          {moneyFmt.format(o.totalAmount)}
+                        </div>
+                        {o.extraDiscount > 0 ? (
+                          <div className="text-[10px] font-semibold text-odoo-danger">
+                            −{moneyFmt.format(o.extraDiscount)}
+                          </div>
+                        ) : null}
+                      </td>
+                      <td className="px-3 py-2 text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                        {o.statusLabel === "PENDING" || o.statusLabel === "HELD" ? (
+                          <button
+                            type="button"
+                            onClick={() => onSelectCart(o.cartNumber)}
+                            className="odoo-btn odoo-btn-primary"
+                          >
+                            ຮັບຊຳລະ
+                          </button>
+                        ) : null}
+                        {o.statusLabel === "PENDING" ||
+                          o.statusLabel === "CANCELLED" ||
+                          o.statusLabel === "COMPLETED" ||
+                          o.statusLabel === "HELD" ? (
+                          <button
+                            type="button"
+                            disabled={deletingCart === o.cartNumber}
+                            onClick={() => onDeleteOrder(o)}
+                            className="odoo-btn odoo-btn-danger ml-1"
+                          >
+                            {deletingCart === o.cartNumber
+                              ? "ລົບ..."
+                              : o.statusLabel === "COMPLETED"
+                                ? "ລົບໃບຮັບ"
+                                : "ລົບ"}
+                          </button>
+                        ) : null}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
-      )}
+      </section>
     </>
   );
 }
