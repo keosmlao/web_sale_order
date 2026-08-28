@@ -1390,6 +1390,16 @@ function SettleForm({
   const setInput = (key: PaymentField, value: number) =>
     setPaymentInputs((prev) => ({ ...prev, [key]: String(Math.max(0, value)) }));
 
+  // Digits append, the way a till does — 5, then 0, then 000 is 50,000.
+  // Capped so a stuck key cannot produce a number nobody meant.
+  const pressDigit = (d: string) => {
+    const next = Number(`${cashNow || ""}${d}`);
+    if (!Number.isFinite(next) || next > 99_999_999_999) return;
+    setInput(cashKey, next);
+  };
+  const backspace = () =>
+    setInput(cashKey, Math.floor((cashNow || 0) / 10));
+
   type TenderRow = {
     key: string;
     label: string;
@@ -2086,12 +2096,11 @@ function SettleForm({
             </div>
 
             <div className="settle-paid-grid">
-              <div className={paidInMain < effectiveTotal ? "settle-paid-danger" : "settle-paid-ok"}>
-                <span>ຮັບຈິງ</span>
-                <strong>{moneyFmt.format(paidInMain)}</strong>
-              </div>
+              {/* One figure, not two. "ຮັບຈິງ" next to "ຍັງຂາດ" is the same
+                  fact stated twice, and it led with the half nobody acts
+                  on — the cashier is working the shortfall down to zero. */}
               <div className={remainingDue > 0 ? "settle-paid-danger" : changeDue > 0 ? "settle-paid-ok" : "settle-paid-neutral"}>
-                <span>{remainingDue > 0 ? "ຍັງຂາດ" : "ຕ້ອງທອນ"}</span>
+                <span>{remainingDue > 0 ? "ຍັງຂາດ" : changeDue > 0 ? "ຕ້ອງທອນ" : "ຮັບຄົບພໍດີ"}</span>
                 <strong>{moneyFmt.format(remainingDue > 0 ? remainingDue : changeDue)}</strong>
               </div>
             </div>
@@ -2155,6 +2164,52 @@ function SettleForm({
                 </button>
               </div>
             ))}
+
+            {/* The keypad. Counting cash into a small number field is the
+                slowest and most error-prone thing on this screen, and the
+                one done most often — on a touchscreen till especially. It
+                types into cash, because that is the tender you count; the
+                others arrive as whole amounts. */}
+            <div className="settle-pad-head">
+              <span>ເງິນສົດທີ່ຮັບ</span>
+              <b>{moneyFmt.format(cashNow)}</b>
+              <i>ກີບ</i>
+            </div>
+            <div className="settle-pad">
+              {["7", "8", "9", "4", "5", "6", "1", "2", "3"].map((d) => (
+                <button
+                  key={d}
+                  type="button"
+                  disabled={!canSettle}
+                  onClick={() => pressDigit(d)}
+                >
+                  {d}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="is-util"
+                disabled={!canSettle}
+                onClick={() => pressDigit("000")}
+              >
+                000
+              </button>
+              <button
+                type="button"
+                disabled={!canSettle}
+                onClick={() => pressDigit("0")}
+              >
+                0
+              </button>
+              <button
+                type="button"
+                className="is-util is-clear"
+                disabled={!canSettle}
+                onClick={backspace}
+              >
+                ⌫
+              </button>
+            </div>
 
             {/* Counting cash out of a customer's hand is where the typing
                 actually happens. "ພໍດີ" is the common case; the round-ups

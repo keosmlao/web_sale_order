@@ -2297,9 +2297,13 @@ a {
     font-size: 12px;
     font-weight: 700;
   }
+  /* The bill is reference; the payment is the work. It was the other way
+     round — the detail took the wider half and sat mostly empty on a
+     one-line bill, while the thing the cashier was actually operating
+     was squeezed into a narrow scrolling strip. */
   .settle-layout {
     display: grid;
-    grid-template-columns: minmax(0, 1.15fr) minmax(460px, 0.85fr);
+    grid-template-columns: minmax(0, 0.8fr) minmax(520px, 1.2fr);
     gap: 18px;
     padding: 18px;
     flex: 1 1 0;
@@ -2968,7 +2972,7 @@ a {
   }
   @media (max-width: 1050px) {
     .settle-layout {
-      grid-template-columns: minmax(0, 1fr) minmax(390px, 440px);
+      grid-template-columns: minmax(0, 0.85fr) minmax(430px, 1.15fr);
       padding: 14px;
     }
     .settle-detail-grid {
@@ -9894,4 +9898,69 @@ a {
   font-size: 12.5px;
   font-weight: 700;
   color: var(--odoo-text-muted);
+}
+
+/* ─── Till keypad ────────────────────────────────────────────────────────
+   Counting cash into a small number field is the slowest and most
+   error-prone thing on this screen, and the one done most. Big keys, the
+   figure being typed above them, and the amount owed above that. */
+.settle-pad {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+.settle-pad button {
+  height: 54px;
+  border: 1px solid var(--odoo-border-strong);
+  border-radius: 12px;
+  background: var(--odoo-surface);
+  font-size: 21px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  color: var(--odoo-text-strong);
+  cursor: pointer;
+  transition: background 100ms ease, border-color 100ms ease, transform 60ms ease;
+}
+.settle-pad button:hover:not(:disabled) {
+  border-color: var(--odoo-primary);
+  background: var(--odoo-primary-50);
+}
+.settle-pad button:active:not(:disabled) { transform: translateY(1px); }
+.settle-pad button:disabled { opacity: 0.45; cursor: default; }
+.settle-pad button.is-util {
+  font-size: 16px;
+  background: var(--odoo-surface-muted);
+  color: var(--odoo-text-muted);
+}
+.settle-pad button.is-clear { color: var(--odoo-danger-text); }
+
+/* What the keypad is typing into, and what it is worth. */
+.settle-pad-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--odoo-border-strong);
+  border-radius: 12px;
+  background: var(--odoo-surface-muted);
+}
+.settle-pad-head span {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--odoo-text-muted);
+}
+.settle-pad-head b {
+  margin-inline-start: auto;
+  font-size: 26px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  color: var(--odoo-text-strong);
+}
+.settle-pad-head i {
+  font-style: normal;
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--odoo-text-soft);
 }
