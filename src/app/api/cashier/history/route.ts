@@ -86,7 +86,14 @@ export async function GET(request: NextRequest) {
   const rows = await prisma.$queryRaw<Row[]>`
     SELECT
       t.doc_no,
-      SUBSTRING(t.doc_no FROM 6) AS cart_number,
+      -- The cart this receipt settled, from the settle audit — NOT
+      -- SUBSTRING(t.doc_no FROM 6), which is this receipt's own suffix.
+      -- On CAKAP26080001 that reads "26080001", which is not the cart
+      -- number and matches no SOK order: it looked like one, so it was
+      -- named like one, and anything using it to find the cart failed.
+      -- Null when there is no audit row (receipts from before it existed),
+      -- because a wrong cart number is worse than none.
+      sa.cart_number,
       t.create_date_time_now,
       t.cust_code,
       ar.name_1     AS customer_name,
