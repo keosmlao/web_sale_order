@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import VoidButton from "../receipts/[docNo]/VoidButton";
 
 type Row = {
   docNo: string;
@@ -162,13 +163,14 @@ export default function HistoryClient() {
               <th className="px-3 py-2 text-right">ເງິນສົດ</th>
               <th className="px-3 py-2 text-right">ໂອນ</th>
               <th className="px-3 py-2">ສະຖານະ</th>
+              <th className="px-3 py-2 text-right">ຈັດການ</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={10}
                   className="px-3 py-6 text-center text-odoo-text-muted"
                 >
                   ກຳລັງໂຫລດ…
@@ -234,6 +236,23 @@ export default function HistoryClient() {
                       <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-700">
                         ປົກກະຕິ
                       </span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    {/* Same control as the receipt page, not a second way
+                        of doing it: a manager's code and PIN, a reason,
+                        and the reversal that puts the stock back and takes
+                        the points off. A bill already cancelled has
+                        nothing left to cancel. */}
+                    {r.isVoided ? (
+                      <span
+                        className="text-[11px] text-odoo-text-muted"
+                        title={r.voidReason ?? undefined}
+                      >
+                        {r.voidDocNo ?? "—"}
+                      </span>
+                    ) : (
+                      <VoidButton docNo={r.docNo} onDone={fetchHistory} compact />
                     )}
                   </td>
                 </tr>

@@ -3,7 +3,18 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-export default function VoidButton({ docNo }: { docNo: string }) {
+export default function VoidButton({
+  docNo,
+  onDone,
+  compact,
+}: {
+  docNo: string;
+  /** Called after a successful void. The receipt page refreshes the route;
+   *  the history list re-fetches its own rows instead. */
+  onDone?: () => void;
+  /** Sized to sit in a table row rather than on a page. */
+  compact?: boolean;
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
@@ -41,7 +52,8 @@ export default function VoidButton({ docNo }: { docNo: string }) {
       }
       window.alert(`ຍົກເລີກສຳເລັດ. ເລກອ້າງອີງ: ${data.voidDocNo}`);
       setOpen(false);
-      router.refresh();
+      if (onDone) onDone();
+      else router.refresh();
     } finally {
       setBusy(false);
     }
@@ -52,7 +64,9 @@ export default function VoidButton({ docNo }: { docNo: string }) {
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="odoo-btn odoo-btn-danger"
+        className={
+          "odoo-btn odoo-btn-danger" + (compact ? " !px-2 !py-1 !text-[11px]" : "")
+        }
       >
         ຍົກເລີກບິນ
       </button>
