@@ -1277,15 +1277,18 @@ function SettleForm({
         setCouponError(data.problem ?? "ໃຊ້ໃບນີ້ບໍ່ໄດ້");
         return;
       }
+      // Pre-filled with whatever it can actually cover. Most coupons are
+      // worth less than the bill, so the usual answer is "all of it" and
+      // the cashier types nothing. When cash is holding the whole total
+      // the coupon comes off cash, the same as any other tender.
+      const take = Math.min(Number(data.balance) || 0, fill);
+      takeFromCash(take);
       setCoupons((prev) => [
         ...prev,
         {
           number: data.number as string,
           balance: Number(data.balance) || 0,
-          // Pre-filled with whatever it can actually cover. Most coupons
-          // are worth less than the bill, so the usual answer is "all of
-          // it" and the cashier types nothing.
-          amount: Math.min(Number(data.balance) || 0, remainingDue),
+          amount: take,
         },
       ]);
       setCouponInput("");
@@ -1454,8 +1457,21 @@ function SettleForm({
     });
   }
 
-  // Whatever is still owed goes into the next tender the cashier picks.
-  const fill = Math.max(0, remainingDue);
+  // What the next tender should be worth.
+  //
+  // A new bill opens with cash already holding the whole total, because
+  // most bills are cash and that way they take no taps at all. But it
+  // means nothing is unallocated, so a chip tapped afterwards would come
+  // up zero — "actually they are paying by QR" would do nothing.
+  //
+  // So a chip takes what is still owed, and when nothing is owed because
+  // cash is holding it, it takes it off cash. That is the move the cashier
+  // is making: not adding money, but saying it arrives another way.
+  const fill = remainingDue > 0 ? remainingDue : Math.min(cashNow, effectiveTotal);
+  const takeFromCash = (amount: number) => {
+    if (remainingDue > 0) return;
+    setInput(cashKey, Math.max(0, cashNow - amount));
+  };
   const tenderChips: Array<{
     key: string;
     label: string;
@@ -1477,7 +1493,10 @@ function SettleForm({
       colour: TENDER_COLOUR.transfer,
       // Not just an amount: this also opens the customer-facing display so
       // they have something to scan.
-      add: () => selectQrPayment(),
+      add: () => {
+        takeFromCash(fill);
+        selectQrPayment();
+      },
     });
   }
   if (!(otherNow > 0 && otherAccount)) {
@@ -1487,6 +1506,7 @@ function SettleForm({
       colour: TENDER_COLOUR.transfer_other,
       add: () => setAddingOther(true),
     });
+    // The amount is filled once an account is picked, below.
   }
   tenderChips.push({
     key: "coupon",
@@ -1973,7 +1993,29 @@ function SettleForm({
           </div>
         </section>
 
-        <aside className="settle-payment">
+        <aside
+          className="settle-payment"
+          // Enter settles, the way a till does — the cashier types the cash
+          // they were handed and presses it. Only once the bill is actually
+          // covered, and never while a coupon number is being entered,
+          // where Enter already means "look this up".
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" || e.shiftKey) return;
+            if (addingCoupon) return;
+            const el = e.target as HTMLElement | null;
+            if (el && (el.tagName === "BUTTON" || el.tagName === "SELECT")) return;
+            if (
+              !canSettle ||
+              submitBusy ||
+              awaitingApproval ||
+              paidInMain < effectiveTotal
+            ) {
+              return;
+            }
+            e.preventDefault();
+            void submit();
+          }}
+        >
           <div className="settle-payment-summary">
             <div className="settle-total-card">
               <div className="settle-total-main">
@@ -2177,7 +2219,8 @@ function SettleForm({
                   onChange={(e) => {
                     setOtherAccount(e.target.value);
                     if (e.target.value && !Number(otherAmount)) {
-                      setOtherAmount(String(remainingDue));
+                      setOtherAmount(String(fill));
+                      takeFromCash(fill);
                     }
                   }}
                 >
@@ -2445,7 +2488,13 @@ function SettleForm({
                 ? "ກຳລັງບັນທຶກ..."
                 : awaitingApproval
                   ? "ລໍຖ້າອະນຸມັດສ່ວນຫຼຸດ..."
-                  : "ບັນທຶກ ແລະ ຮັບເງິນ"}
+                  : remainingDue > 0
+                    ? // A greyed-out button with no reason on it is a
+                      // dead end. Say what is missing.
+                      `ຍັງຂາດ ${moneyFmt.format(remainingDue)}`
+                    : changeDue > 0
+                      ? `ຮັບເງິນ · ທອນ ${moneyFmt.format(changeDue)}`
+                      : "ບັນທຶກ ແລະ ຮັບເງິນ"}
             </button>
           </div>
         </aside>
