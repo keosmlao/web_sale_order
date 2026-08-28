@@ -36,6 +36,13 @@ const SLIP_MAX_DIMENSION = 1600;
 const SLIP_JPEG_QUALITY = 0.85;
 const SLIP_MAX_COUNT = 5;
 
+// Redeeming points against a bill is off at the till for now, by the
+// owner's call. Everything behind it is left wired — the balance still
+// loads, the settle payload still carries redeemPoints, and with nothing
+// typed it carries zero — so this comes back by flipping one flag rather
+// than by rebuilding the card.
+const POINTS_REDEEM_ENABLED = false;
+
 type AttachedSlip = {
   id: string;
   fileName: string;
@@ -2561,7 +2568,11 @@ function SettleForm({
             onRequest={() => void requestBillDiscount()}
           />
 
-          {canSettle && redeemInfo && redeemInfo.isActive && redeemInfo.customerCode ? (
+          {POINTS_REDEEM_ENABLED &&
+          canSettle &&
+          redeemInfo &&
+          redeemInfo.isActive &&
+          redeemInfo.customerCode ? (
             <div className="settle-card">
               <div className="settle-card-title">
                 <span>ໃຊ້{redeemInfo.pointName ?? "ແຕ້ມສະສົມ"}</span>
