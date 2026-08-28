@@ -142,89 +142,86 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <Suspense fallback={null}>
           <EmbedMode />
         </Suspense>
-        {/* The register gets its own slim sidebar. It had no desktop nav at
-            all before — just two position:fixed buttons that floated over
-            whatever the page rendered at the top. */}
+        {/* The register's nav is three links; a 212px column carried them
+            in a field of white. A slim icon rail carries the same three —
+            icon, a small label under it, the badge on the icon's shoulder —
+            and hands the width back to the till, which is the screen doing
+            the work. */}
         {isRegisterUser ? (
-          <aside className="app-chrome hidden w-[212px] shrink-0 flex-col border-r border-odoo-border bg-white md:flex md:h-screen">
-            <div className="flex items-center gap-2 px-4 py-4">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-[11px] bg-odoo-primary text-[9px] font-black text-white">
-                ODG
-              </span>
-              <span className="text-sm font-black text-odoo-text-strong">
-                ໜ້າຮັບເງິນ
-              </span>
-            </div>
+          <aside className="app-chrome hidden w-[76px] shrink-0 flex-col items-center border-r border-odoo-border bg-white md:flex md:h-screen">
+            <span
+              className="mt-4 inline-flex h-10 w-10 items-center justify-center rounded-xl bg-odoo-primary text-[10px] font-black text-white"
+              title="ໜ້າຮັບເງິນ"
+            >
+              ODG
+            </span>
 
-            <nav className="flex flex-col gap-1 px-2">
+            <nav className="mt-4 flex w-full flex-col items-stretch gap-1 px-2">
               {registerNav.map((item) => (
                 <a
                   key={item.href}
                   href={item.href}
+                  title={item.hint ? `${item.label} · ${item.hint}` : item.label}
                   className={
-                    "flex items-center gap-2.5 rounded-[10px] px-3 py-2.5 text-[13px] font-bold transition " +
+                    "relative flex flex-col items-center gap-1 rounded-xl px-1 py-2.5 transition " +
                     (item.active
                       ? "bg-odoo-primary text-white"
-                      : "text-odoo-text hover:bg-odoo-surface-muted")
+                      : "text-odoo-text-muted hover:bg-odoo-surface-muted hover:text-odoo-text")
                   }
                 >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1.8"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    className="h-[18px] w-[18px] shrink-0"
-                  >
-                    {item.icon}
-                  </svg>
-                  <span className="flex min-w-0 flex-col">
-                    <span className="truncate">{item.label}</span>
-                    {item.hint ? (
+                  <span className="relative">
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.8"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className="h-[22px] w-[22px]"
+                    >
+                      {item.icon}
+                    </svg>
+                    {item.badge ? (
                       <span
                         className={
-                          "truncate text-[10px] font-bold " +
-                          (item.active ? "text-white/75" : "text-odoo-text-soft")
+                          "absolute -right-2.5 -top-1.5 inline-flex h-[18px] min-w-[18px] items-center justify-center rounded-full px-1 text-[10px] font-black " +
+                          (item.active
+                            ? "bg-white text-odoo-primary"
+                            : "bg-odoo-warning text-white")
                         }
                       >
-                        {item.hint}
+                        {item.badge}
                       </span>
                     ) : null}
                   </span>
-                  {item.badge ? (
-                    <span
-                      className={
-                        "ml-auto inline-flex h-5 min-w-[20px] shrink-0 items-center justify-center rounded-full px-1.5 text-[11px] font-black " +
-                        (item.active
-                          ? "bg-white/25 text-white"
-                          : "bg-odoo-warning text-white")
-                      }
-                    >
-                      {item.badge}
-                    </span>
-                  ) : null}
+                  <span className="w-full truncate text-center text-[10px] font-bold leading-tight">
+                    {item.label}
+                  </span>
                 </a>
               ))}
             </nav>
 
             <div className="flex-1" />
 
-            <div className="border-t border-odoo-border px-3 py-3">
-              <div className="mb-2 truncate px-1 text-[11px] font-bold text-odoo-text-muted">
-                {displayName}
-              </div>
-              <form action={logoutAction}>
+            <div className="mb-3 flex w-full flex-col items-center gap-1.5 px-2">
+              <span
+                className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-odoo-surface-muted text-[12px] font-black text-odoo-text-strong"
+                title={displayName}
+              >
+                {displayName.trim().charAt(0) || "·"}
+              </span>
+              <form action={logoutAction} className="w-full">
                 <button
                   type="submit"
-                  className="flex w-full items-center gap-2 rounded-[10px] border border-odoo-border px-3 py-2 text-[12px] font-bold text-odoo-text-strong transition hover:bg-odoo-surface-muted"
+                  title={`${displayName} · ອອກຈາກລະບົບ`}
+                  className="flex w-full flex-col items-center gap-0.5 rounded-xl px-1 py-2 text-odoo-text-muted transition hover:bg-odoo-surface-muted hover:text-odoo-danger"
                 >
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
                     <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
                     <path d="m16 17 5-5-5-5" />
                     <path d="M21 12H9" />
                   </svg>
-                  ອອກຈາກລະບົບ
+                  <span className="text-[9px] font-bold">ອອກ</span>
                 </button>
               </form>
             </div>
