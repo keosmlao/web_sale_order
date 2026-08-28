@@ -2421,6 +2421,10 @@ function PosScreen({
       {/* Catalogue column — visible from 1180px up (CSS). Below that the
           screen falls back to the search-first flow + picker modal. */}
       <div className="pos-catalog-col">
+        {/* Title, count and search on one line. They were stacked, which
+            cost a hundred pixels above the grid and left the count
+            stranded at the far edge of a wide monitor, nowhere near the
+            word it counts. */}
         <div className="pos-catalog-head">
           <div className="pos-catalog-title">
             <span>ສິນຄ້າ</span>
@@ -2429,7 +2433,7 @@ function PosScreen({
                   the whole shop. */}
               {catalogBusy
                 ? "…"
-                : `${catalogProducts.length}${catalogExhausted ? "" : "+"} ລາຍການ`}
+                : `${catalogProducts.length}${catalogExhausted ? "" : "+"}`}
             </span>
           </div>
 
@@ -2470,9 +2474,12 @@ function PosScreen({
                 </svg>
               </button>
             ) : null}
+            {/* A state, not a button: the scanner types into whatever has
+                focus, so this says the till is listening. It sits at the
+                right edge of the field, where the typing is. */}
             <span className="pos-catalog-scan" title="ຍິງ barcode ໄດ້ເລີຍ — ບໍ່ຕ້ອງກົດຫຍັງ">
               <i aria-hidden />
-              ພ້ອມຍິງ
+              <em>ພ້ອມຍິງ</em>
             </span>
           </form>
         </div>

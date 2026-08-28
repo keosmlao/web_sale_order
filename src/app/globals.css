@@ -7749,31 +7749,42 @@ a {
   .pos-shell2.pos-has-catalog .pos-quick-results { display: none; }
 }
 
+/* One line: what this column is, how much of it there is, and the field
+   that filters it. Stacked, it cost ~100px above the grid and pushed the
+   count to the far edge of a wide monitor — a number with nothing beside
+   it to say what it counted. */
 .pos-catalog-head {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
   flex-shrink: 0;
-  padding: 12px 14px 11px;
+  padding: 10px 14px;
   background: #ffffff;
   border-bottom: 1px solid #e6ebf2;
 }
 
 .pos-catalog-title {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
+  align-items: center;
+  gap: 7px;
+  flex-shrink: 0;
 }
 .pos-catalog-title > span:first-child {
   font-size: 15px;
   font-weight: 900;
   color: var(--odoo-text-strong);
 }
+/* Glued to the word it counts, as a pill rather than loose grey text at
+   the other end of the room. */
 .pos-catalog-count {
+  padding: 2px 8px 3px;
+  border-radius: 999px;
+  background: var(--odoo-surface-muted);
   font-size: 11px;
   font-weight: 800;
-  color: var(--odoo-text-soft);
+  font-variant-numeric: tabular-nums;
+  color: var(--odoo-text-muted);
 }
 
 .pos-catalog-chips {
@@ -8322,16 +8333,29 @@ a {
   display: flex;
   align-items: center;
   gap: 9px;
-  height: 52px;
-  padding: 0 12px 0 13px;
+  /* Capped: a search box has no use for 2000px of a 27" monitor, and a
+     field that wide reads as a banner rather than as somewhere to type.
+     It still grows to fill a narrow column. */
+  flex: 1 1 18rem;
+  min-width: 0;
+  max-width: 34rem;
+  margin-inline-start: auto;
+  height: 44px;
+  padding: 0 6px 0 13px;
   border: 1.5px solid var(--odoo-border-strong);
-  border-radius: 14px;
-  background: var(--odoo-surface);
-  transition: border-color 140ms ease, box-shadow 140ms ease;
+  border-radius: 12px;
+  background: var(--odoo-surface-muted);
+  transition: border-color 140ms ease, box-shadow 140ms ease, background 140ms ease;
 }
+/* Sunk until it is being used, then it lifts. */
+.pos-catalog-search:hover { border-color: var(--odoo-text-soft); }
 .pos-catalog-search:focus-within {
   border-color: var(--odoo-primary);
+  background: var(--odoo-surface);
   box-shadow: 0 0 0 3px rgba(43, 112, 181, 0.12);
+}
+.pos-catalog-search:focus-within .pos-catalog-search-icon {
+  color: var(--odoo-primary);
 }
 .pos-catalog-search-icon {
   display: inline-flex;
@@ -8345,7 +8369,7 @@ a {
   border: 0;
   background: transparent;
   color: var(--odoo-text-strong);
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 700;
 }
 .pos-catalog-search-input:focus { outline: none; }
@@ -8370,26 +8394,44 @@ a {
   background: var(--odoo-muted-bg);
   color: var(--odoo-text-strong);
 }
+/* The scanner types into whatever has focus, so this is a status light,
+   not a control — it reads as one: a live dot, and the word only where
+   there is room for it. */
 .pos-catalog-scan {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  padding: 0 10px;
-  height: 34px;
-  border-radius: 10px;
+  padding: 0 9px;
+  height: 30px;
+  border-radius: 8px;
   background: var(--odoo-success-bg);
-  border: 1px solid var(--odoo-success-border);
   color: var(--odoo-success-text);
-  font-size: 11px;
+  font-size: 10.5px;
   font-weight: 800;
   white-space: nowrap;
 }
+.pos-catalog-scan em { font-style: normal; }
 .pos-catalog-scan i {
   width: 7px;
   height: 7px;
   border-radius: 999px;
   background: var(--odoo-success);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--odoo-success) 60%, transparent);
+  animation: pos-scan-pulse 2.4s ease-out infinite;
+}
+@keyframes pos-scan-pulse {
+  0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--odoo-success) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 5px color-mix(in srgb, var(--odoo-success) 0%, transparent); }
+  100% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--odoo-success) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .pos-catalog-scan i { animation: none; }
+}
+/* Narrow column: the dot alone still says the till is listening. */
+@media (max-width: 1400px) {
+  .pos-catalog-scan em { display: none; }
+  .pos-catalog-scan { padding: 0 7px; }
 }
 
 @media (min-width: 1180px) {
@@ -8798,8 +8840,8 @@ a {
     padding: 9px 12px 8px;
   }
   .pos-shell2.pos-has-catalog .pos-catalog-search {
-    height: 46px;
-    border-radius: 12px;
+    height: 42px;
+    border-radius: 11px;
   }
   .pos-shell2.pos-has-catalog .pos-catalog-body {
     padding: 10px 12px;
@@ -9215,7 +9257,7 @@ a {
   /* Catalogue — search, table, cards */
   .pos-shell2.pos-has-catalog .pos-catalog-title > span:first-child { font-size: 13.5px; }
   .pos-shell2.pos-has-catalog .pos-catalog-count { font-size: 10px; }
-  .pos-shell2.pos-has-catalog .pos-catalog-search { height: 44px; }
+  .pos-shell2.pos-has-catalog .pos-catalog-search { height: 40px; }
   .pos-shell2.pos-has-catalog .pos-catalog-search-input { font-size: 12.5px; }
   .pos-shell2.pos-has-catalog .pos-catalog-scan { font-size: 10px; height: 30px; }
 
