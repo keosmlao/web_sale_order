@@ -10034,3 +10034,115 @@ a {
   min-width: 0;
   width: 100%;
 }
+
+/* ─── Settle panel: fewer edges ──────────────────────────────────────────
+   The payment side had grown into a stack of bordered boxes inside a
+   bordered box — hero, a red panel, a grey field, a key grid, dashed
+   pills, a grey bar — every one with its own outline, background and
+   radius. Separation now comes from spacing and weight; a border is kept
+   only where something is genuinely a container. */
+
+/* The running state lives on the total block. */
+.settle-total-state {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+}
+.settle-total-state span {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: rgba(255, 255, 255, 0.72);
+}
+.settle-total-state b {
+  margin-inline-start: auto;
+  font-size: 22px;
+  font-weight: 900;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.settle-total-state b.is-short { color: #ffd7d7; }
+.settle-total-state b.is-ok { color: #b9f6d2; }
+
+/* Inner blocks stop drawing their own outlines. */
+.settle-payment .settle-pad-head {
+  border: 0;
+  background: transparent;
+  padding: 2px 2px 0;
+}
+.settle-payment .settle-pad button {
+  border-color: transparent;
+  background: var(--odoo-surface-muted);
+}
+.settle-payment .settle-pad button:hover:not(:disabled) {
+  background: var(--odoo-primary-50);
+  border-color: transparent;
+}
+.settle-payment .settle-cash-quick-btn {
+  border-color: transparent;
+  background: var(--odoo-surface-muted);
+}
+.settle-payment .settle-tender-row {
+  border-color: transparent;
+  background: var(--odoo-surface-muted);
+}
+.settle-payment .settle-tender-chip {
+  border-style: solid;
+  border-color: var(--odoo-border-strong);
+  background: var(--odoo-surface);
+}
+/* The coloured dots were decoration: four hues that mean nothing on a
+   screen where colour already means owed / received / warning. */
+.settle-payment .settle-tender-chip i,
+.settle-payment .settle-tender-dot {
+  display: none;
+}
+.settle-payment .settle-thb-toggle {
+  border: 0;
+  background: transparent;
+  padding: 6px 2px;
+}
+
+/* One radius, so the blocks read as one family. */
+.settle-payment .settle-pad button,
+.settle-payment .settle-cash-quick-btn,
+.settle-payment .settle-tender-row,
+.settle-payment .settle-tender-add input,
+.settle-payment .settle-tender-add select,
+.settle-payment .settle-tender-row input {
+  border-radius: 10px;
+}
+
+/* The card itself keeps one edge; the shadow goes. */
+.settle-payment .settle-card {
+  box-shadow: none;
+  border-color: var(--odoo-border);
+}
+.settle-payment .settle-card:hover { box-shadow: none; }
+
+/* The numbered step bubbles counted steps that are no longer a sequence —
+   the cashier picks a tender, or does not. */
+.settle-payment .settle-step {
+  display: none;
+}
+.settle-payment .settle-card-title {
+  margin-bottom: 10px;
+}
+.settle-payment .settle-card-title span {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--odoo-text-muted);
+  letter-spacing: 0.02em;
+}
+.settle-payment .settle-card-title strong {
+  border: 0;
+  background: transparent;
+  color: var(--odoo-text-soft);
+  padding: 0;
+}
+/* Tighter, so more of the work fits without scrolling. */
+.settle-payment .settle-card { padding: 13px; }
+.settle-payment .settle-payment-body { gap: 10px; }

@@ -2189,17 +2189,25 @@ function SettleForm({
               ) : billDifference !== 0 ? (
                 <p>ປັບຍອດ {moneyFmt.format(billDifference)} ກີບ</p>
               ) : null}
-            </div>
-
-            <div className="settle-paid-grid">
-              {/* One figure, not two. "ຮັບຈິງ" next to "ຍັງຂາດ" is the same
-                  fact stated twice, and it led with the half nobody acts
-                  on — the cashier is working the shortfall down to zero. */}
-              <div className={remainingDue > 0 ? "settle-paid-danger" : changeDue > 0 ? "settle-paid-ok" : "settle-paid-neutral"}>
-                <span>{remainingDue > 0 ? "ຍັງຂາດ" : changeDue > 0 ? "ຕ້ອງທອນ" : "ຮັບຄົບພໍດີ"}</span>
-                <strong>{moneyFmt.format(remainingDue > 0 ? remainingDue : changeDue)}</strong>
+              {/* The running state, on the same block as the amount it is
+                  running against. As its own red panel underneath, it was
+                  a second coloured slab saying a number that only means
+                  anything next to this one. */}
+              <div className="settle-total-state">
+                <span>
+                  {remainingDue > 0
+                    ? "ຍັງຂາດ"
+                    : changeDue > 0
+                      ? "ຕ້ອງທອນ"
+                      : "ຮັບຄົບພໍດີ"}
+                </span>
+                <b className={remainingDue > 0 ? "is-short" : "is-ok"}>
+                  {moneyFmt.format(remainingDue > 0 ? remainingDue : changeDue)}
+                </b>
               </div>
             </div>
+
+
           </div>
 
           <div className="settle-payment-body">
