@@ -1390,6 +1390,15 @@ export async function POST(request: NextRequest) {
           isn: string | null;
         }>
       >`
+        -- sn_trans_detail.sn holds the ISN, whatever the column is
+        -- called: joining the ledger on sn_inventory.isn matches 807 of
+        -- the 852 units in warehouse 1101, against 120 joining sn to sn.
+        -- So the issue-out has to carry the ISN, or it will not net off
+        -- against the movement that brought the unit in and the unit
+        -- stays on the shelf forever.
+        --
+        -- serial_number is the fallback for orders written before the
+        -- endpoint told the two numbers apart: back then it WAS the ISN.
         SELECT item_code, serial_number, warehouse_code, location_code, isn
         FROM app_order_serial
         WHERE doc_no = ${cart.doc_no}
@@ -1424,7 +1433,8 @@ export async function POST(request: NextRequest) {
               create_date_time_now
             ) VALUES (
               44, ${dpcNo}, CURRENT_DATE, ${userCode}, ${unit.item_code},
-              ${unit.serial_number}, 1, -1, ${unit.warehouse_code},
+              ${unit.isn?.trim() || unit.serial_number}, 1, -1,
+              ${unit.warehouse_code},
               ${unit.location_code}, ${unit.isn}, ${docNo}, NOW()
             )
           `;
