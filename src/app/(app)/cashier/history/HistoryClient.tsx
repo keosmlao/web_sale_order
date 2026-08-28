@@ -13,6 +13,8 @@ type Row = {
   customerPhone: string | null;
   cashierCode: string | null;
   cashierName: string | null;
+  saleCode: string | null;
+  salespersonName: string | null;
   totalKip: number;
   cashKip: number;
   transferKip: number;
@@ -63,6 +65,14 @@ function SourceBadge({ source }: { source: string | null }) {
     return (
       <span className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2 py-0.5 text-[10px] font-bold text-violet-700">
         📱 App
+      </span>
+    );
+  }
+  // A receipt raised inside SML rather than at this till.
+  if (source === "sml") {
+    return (
+      <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+        SML
       </span>
     );
   }
@@ -320,6 +330,12 @@ export default function HistoryClient() {
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-odoo-text-muted">
                   <span>{new Date(r.createdAt).toLocaleString()}</span>
+                  {r.salespersonName || r.saleCode ? (
+                    <>
+                      <span>·</span>
+                      <span>ຂາຍ {r.salespersonName ?? r.saleCode}</span>
+                    </>
+                  ) : null}
                   <span>·</span>
                   <span>{r.cashierName ?? r.cashierCode ?? "—"}</span>
                   {r.cashKip > 0 ? (
@@ -365,6 +381,7 @@ export default function HistoryClient() {
               <th className="px-3 py-2">ເລກບິນ</th>
               <th className="px-3 py-2">ວັນທີ</th>
               <th className="px-3 py-2">ລູກຄ້າ</th>
+              <th className="px-3 py-2">ພະນັກງານຂາຍ</th>
               <th className="px-3 py-2">Cashier</th>
               <th className="px-3 py-2">ຊ່ອງທາງ</th>
               <th className="px-3 py-2 text-right">ຍອດ (ກີບ)</th>
@@ -378,7 +395,7 @@ export default function HistoryClient() {
             {loading ? (
               <tr>
                 <td
-                  colSpan={10}
+                  colSpan={11}
                   className="px-3 py-6 text-center text-odoo-text-muted"
                 >
                   ກຳລັງໂຫລດ…
@@ -387,7 +404,7 @@ export default function HistoryClient() {
             ) : rows.length === 0 ? (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={11}
                   className="px-3 py-6 text-center text-odoo-text-muted"
                 >
                   ບໍ່ພົບຂໍ້ມູນ
@@ -419,6 +436,9 @@ export default function HistoryClient() {
                         {r.customerPhone}
                       </div>
                     ) : null}
+                  </td>
+                  <td className="px-3 py-2 text-[12px]">
+                    {r.salespersonName ?? r.saleCode ?? "—"}
                   </td>
                   <td className="px-3 py-2 text-[12px]">
                     {r.cashierName ?? r.cashierCode ?? "—"}
