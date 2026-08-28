@@ -154,13 +154,20 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
 
         // The warehouse must not go on picking goods for a sale that no
         // longer exists, and a unit taken off the shelf for it has to go
-        // back on.
+        // back on. Matched the way the WMS's own delete-issue restores:
+        // printed serial first, company serial as the fallback, per item —
+        // an isn-only match missed the unit whose row was found by sn.
+        // user_mapping records who put it back, as theirs does.
         await tx.$executeRaw`
-          UPDATE sn_inventory SET status = 0, updated_at = NOW()
-          WHERE isn IN (
-            SELECT isn FROM sn_trans_detail
-            WHERE doc_ref = ${receiptDocNo} AND COALESCE(isn, '') <> ''
-          )
+          UPDATE sn_inventory s
+          SET status = 0, user_mapping = ${employee.employeeCode ?? ""},
+              updated_at = NOW()
+          FROM sn_trans_detail d
+          WHERE d.doc_ref = ${receiptDocNo}
+            AND COALESCE(NULLIF(s.sn, ''), s.isn)
+                = COALESCE(NULLIF(d.sn, ''), d.isn)
+            AND s.item_code = d.item_code
+            AND COALESCE(s.status, 0) = 1
         `;
         // The serial issue goes too — detail first, then its header, which
         // is now written and would otherwise be left pointing at nothing.
