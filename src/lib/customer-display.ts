@@ -17,7 +17,13 @@ export type CustomerDisplayState = {
   customerName: string | null;
   items: CustomerDisplayItem[];
   total: number; // effective total after discount/redeem, KIP
-  paid: number; // running paid amount, KIP
+  // Everything the cashier has entered, KIP — including a transfer that has
+  // been asked for but not yet made. Do not show this to the customer as
+  // money received; subtract `pendingTransfer` first.
+  paid: number;
+  // Of `paid`, the part that is a QR transfer still waiting on the customer.
+  // Until they scan it, that money has not arrived.
+  pendingTransfer: number;
   changeDue: number; // KIP
   remainingDue: number; // KIP
   transferAmount: number; // KIP to show as a BCEL QR (0 = hide QR)
@@ -35,6 +41,7 @@ export const IDLE_DISPLAY_STATE: CustomerDisplayState = {
   items: [],
   total: 0,
   paid: 0,
+  pendingTransfer: 0,
   changeDue: 0,
   remainingDue: 0,
   transferAmount: 0,

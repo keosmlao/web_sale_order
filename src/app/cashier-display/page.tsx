@@ -23,6 +23,12 @@ export default function CustomerDisplayPage() {
   }, []);
 
   const hasBill = state.cartNumber !== null && state.items.length > 0;
+  // What has actually arrived, and what is actually still owed. The
+  // cashier's own screen counts a requested transfer as paid so the till
+  // can be balanced against it; the customer must not be told their money
+  // is in while the QR is still in front of them.
+  const received = Math.max(0, state.paid - state.pendingTransfer);
+  const stillOwed = Math.max(0, state.total - received);
 
   if (!hasBill) {
     return (
@@ -77,44 +83,34 @@ export default function CustomerDisplayPage() {
           </div>
         </header>
 
-        <div className="flex items-center justify-between border-b border-blue-200 bg-gradient-to-r from-blue-50 to-cyan-50 px-6 py-3 shadow-sm">
-          <div>
-            <div className="text-sm font-bold text-blue-600">
-              {state.items.length} ລາຍການ
-            </div>
-            <div className="mt-0.5 text-2xl font-black">ລວມຍອດທັງໝົດ</div>
-          </div>
-          <div className="text-right">
-            <span className="text-4xl font-black leading-none tabular-nums text-blue-700">
-              {kip.format(state.total)}
-            </span>
-            <span className="ml-2 text-2xl font-black text-blue-700">₭</span>
-          </div>
-        </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-5">
-          <div className="mb-2 grid grid-cols-[1fr_90px_170px] gap-3 px-4 text-sm font-black text-slate-500">
+        {/* The list. It carries the detail, so it stays quiet — the two
+            things a customer checks here are "is that my basket" and
+            "what do I owe", and the second one belongs at the end, where
+            reading stops. */}
+        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+          <div className="mb-3 grid grid-cols-[1fr_100px_200px] gap-4 px-5 text-base font-black uppercase tracking-wide text-slate-400">
             <span>ລາຍການສິນຄ້າ</span>
             <span className="text-center">ຈຳນວນ</span>
             <span className="text-right">ມູນຄ່າ</span>
           </div>
-          <table className="w-full border-separate border-spacing-y-2 text-lg">
+          <table className="w-full border-separate border-spacing-y-2.5">
             <tbody>
               {state.items.map((it, i) => (
                 <tr key={i} className="bg-white shadow-sm">
-                  <td className="rounded-l-xl border-y border-l border-slate-200 px-4 py-3 font-bold">
-                    <span className="mr-3 inline-flex h-7 w-7 items-center justify-center rounded-full bg-blue-50 text-sm font-black text-blue-600">
+                  <td className="rounded-l-2xl border-y border-l border-slate-200 px-5 py-4 text-xl font-bold">
+                    <span className="mr-4 inline-flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-base font-black text-blue-600">
                       {i + 1}
                     </span>
                     {it.name}
                   </td>
-                  <td className="w-[90px] border-y border-slate-200 py-3 text-center">
-                    <span className="inline-flex min-w-12 justify-center rounded-lg bg-slate-100 px-2 py-1.5 font-black text-slate-700">
+                  <td className="w-[100px] border-y border-slate-200 py-4 text-center">
+                    <span className="inline-flex min-w-14 justify-center rounded-xl bg-slate-100 px-3 py-2 text-xl font-black tabular-nums text-slate-700">
                       {kip.format(it.qty)}
                     </span>
                   </td>
-                  <td className="w-[170px] rounded-r-xl border-y border-r border-slate-200 px-4 py-3 text-right text-xl font-black tabular-nums">
-                    {kip.format(it.amount)} <span className="text-base text-slate-500">₭</span>
+                  <td className="w-[200px] rounded-r-2xl border-y border-r border-slate-200 px-5 py-4 text-right text-2xl font-black tabular-nums">
+                    {kip.format(it.amount)}
+                    <span className="ml-1 text-lg text-slate-400">₭</span>
                   </td>
                 </tr>
               ))}
@@ -122,11 +118,32 @@ export default function CustomerDisplayPage() {
           </table>
         </div>
 
-        <footer className="border-t border-slate-200 bg-white px-6 py-4 shadow-[0_-12px_35px_rgba(15,23,42,0.08)]">
-          {(state.paid > 0 || state.changeDue > 0 || state.remainingDue > 0) ? (
-            <div className="grid grid-cols-3 gap-3 text-lg">
-              <DisplayTotal label="ຮັບເງິນ" value={state.paid} tone="slate" />
-              <DisplayTotal label="ຍັງຄ້າງ" value={state.remainingDue} tone="red" />
+        {/* The total, and only what is true about the payment so far.
+            "ຮັບເງິນ" counts money that has actually arrived — a QR the
+            customer is still being asked to scan is a request, not a
+            receipt, so it is subtracted before this is shown. */}
+        <footer className="border-t border-slate-200 bg-white px-8 py-6 shadow-[0_-16px_45px_rgba(15,23,42,0.10)]">
+          <div className="flex flex-wrap items-end justify-between gap-6">
+            <div>
+              <div className="text-lg font-bold text-slate-400">
+                {state.items.length} ລາຍການ
+              </div>
+              <div className="text-3xl font-black text-slate-500">
+                ລວມຍອດທັງໝົດ
+              </div>
+            </div>
+            <div className="text-right leading-none">
+              <span className="text-[64px] font-black tabular-nums text-[#0b2f5c]">
+                {kip.format(state.total)}
+              </span>
+              <span className="ml-3 text-3xl font-black text-[#0b2f5c]">₭</span>
+            </div>
+          </div>
+
+          {received > 0 || state.changeDue > 0 ? (
+            <div className="mt-5 grid grid-cols-3 gap-4 border-t border-slate-100 pt-5">
+              <DisplayTotal label="ຮັບເງິນແລ້ວ" value={received} tone="slate" />
+              <DisplayTotal label="ຍັງຄ້າງ" value={stillOwed} tone="red" />
               <DisplayTotal label="ເງິນທອນ" value={state.changeDue} tone="green" />
             </div>
           ) : null}
@@ -135,13 +152,19 @@ export default function CustomerDisplayPage() {
 
       {/* BCEL transfer QR */}
       {state.qrSelected || state.transferAmount > 0 ? (
-        <TransferQrPanel amount={state.transferAmount} />
+        <TransferQrPanel amount={state.transferAmount} paid={received > 0} />
       ) : null}
     </main>
   );
 }
 
-function TransferQrPanel({ amount }: { amount: number }) {
+function TransferQrPanel({
+  amount,
+  paid,
+}: {
+  amount: number;
+  paid: boolean;
+}) {
   const [dataUrl, setDataUrl] = useState<string | null>(null);
   const [status, setStatus] = useState<
     "idle" | "loading" | "ok" | "unconfigured" | "error"
@@ -201,15 +224,30 @@ function TransferQrPanel({ amount }: { amount: number }) {
   }, [amount]);
 
   return (
-    <aside className="relative flex w-[430px] shrink-0 flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-[#0b1e37] to-[#071426] px-8 text-white">
+    <aside className="relative flex w-[460px] shrink-0 flex-col items-center justify-center overflow-hidden bg-gradient-to-b from-[#0b1e37] to-[#071426] px-8 text-white">
       <div className="absolute -right-40 -top-36 h-96 w-96 rounded-full bg-cyan-400/10 blur-3xl" />
       <div className="relative text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/10 px-4 py-1.5 text-base font-black text-cyan-200">
-          <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-400" />
+          <span
+            className={
+              "h-2.5 w-2.5 rounded-full " +
+              (paid ? "bg-emerald-400" : "animate-pulse bg-amber-400")
+            }
+          />
           BCEL OnePay
         </div>
-        <div className="mt-4 text-lg font-bold text-slate-300">ຈຳນວນທີ່ຕ້ອງໂອນ</div>
-        <div className="mt-1.5 text-4xl font-black tabular-nums text-white">{amountLabel} ₭</div>
+        {/* The instruction leads, because until they have scanned it this
+            panel is a thing to do, not a thing to read. */}
+        <div className="mt-5 text-2xl font-black text-white">
+          {paid ? "ຮັບເງິນແລ້ວ ຂອບໃຈ" : "ສະແກນເພື່ອຈ່າຍ"}
+        </div>
+        <div className="mt-4 text-base font-bold text-slate-400">
+          ຈຳນວນທີ່ຕ້ອງໂອນ
+        </div>
+        <div className="mt-1 text-5xl font-black leading-none tabular-nums text-cyan-200">
+          {amountLabel}
+          <span className="ml-2 text-2xl">₭</span>
+        </div>
       </div>
       <div className="relative mt-6 flex h-[350px] w-[350px] items-center justify-center rounded-[28px] bg-white p-4 shadow-[0_28px_65px_rgba(0,0,0,0.4)]">
         <span className="absolute -left-2 -top-2 h-12 w-12 rounded-tl-[24px] border-l-8 border-t-8 border-cyan-400" />
@@ -258,10 +296,11 @@ function DisplayTotal({
         ? "text-rose-600"
         : "text-slate-700";
   return (
-    <div className="rounded-xl bg-slate-50 px-4 py-2.5">
-      <span className="block text-xs font-bold text-slate-500">{label}</span>
-      <strong className={`mt-0.5 block font-mono text-xl tabular-nums ${color}`}>
-        {kip.format(value)} ₭
+    <div className="rounded-2xl bg-slate-50 px-5 py-4">
+      <span className="block text-base font-bold text-slate-500">{label}</span>
+      <strong className={`mt-1 block text-3xl font-black tabular-nums ${color}`}>
+        {kip.format(value)}
+        <span className="ml-1.5 text-xl text-slate-400">₭</span>
       </strong>
     </div>
   );

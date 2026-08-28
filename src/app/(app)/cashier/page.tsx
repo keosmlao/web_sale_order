@@ -1582,6 +1582,10 @@ function SettleForm({
       })),
       total: effectiveTotal,
       paid: paidInMain,
+      // A QR that has been put on screen is a request, not a receipt. The
+      // customer display subtracts this so it never tells someone their
+      // money has arrived while they are still being asked for it.
+      pendingTransfer: qrPaymentSelected ? transferInMain : 0,
       changeDue,
       remainingDue,
       transferAmount: transferQrAmount,
@@ -1595,6 +1599,7 @@ function SettleForm({
       changeDue,
       remainingDue,
       transferQrAmount,
+      transferInMain,
       qrPaymentSelected,
     ],
   );
