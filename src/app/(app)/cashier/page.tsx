@@ -1622,7 +1622,16 @@ function SettleForm({
     openCustomerDisplayWindow();
     // The fresh window mounts its listener async; re-publish shortly after so
     // it shows the current bill without waiting for the next edit.
-    window.setTimeout(() => publishCustomerDisplay(displaySnapshot), 900);
+    //
+    // From the ref, not from `displaySnapshot`. The snapshot here is the one
+    // from the render this was clicked in — and this is called by
+    // selectQrPayment, so at that instant the QR has not been chosen and the
+    // transfer is still zero. Publishing that captured value 900ms later
+    // overwrote the correct state that had been sent in between: the
+    // customer saw the QR appear, then vanish about a second afterwards,
+    // and a refresh brought it back because the window then asks for the
+    // current state and gets the real one.
+    window.setTimeout(() => publishCustomerDisplay(snapshotRef.current), 900);
   }
 
   // Set just the KIP transfer field (leaves cash intact). Wrapped in a plain
