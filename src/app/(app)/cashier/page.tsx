@@ -1634,9 +1634,15 @@ function SettleForm({
 
   // Accept the remaining balance as a QR transfer. Keeps any cash already
   // entered; the effect above keeps the transfer synced to the remaining.
+  //
+  // Deliberately does NOT set the amount here. It used to, from
+  // `transferRemaining` — a value derived from the render it was clicked
+  // in, which is stale the moment the same click also moves money off the
+  // cash row. It set zero, and the QR blinked out until the effect
+  // corrected it a render later. Flipping the flag is enough: the effect
+  // computes the amount from state that has actually settled.
   function selectQrPayment() {
     setQrPaymentSelected(true);
-    setTransferKipAmount(transferRemaining);
     openCustomerDisplay();
   }
 
@@ -2278,7 +2284,7 @@ function SettleForm({
               : null}
           </div>
 
-          {transferInMain > 0 ? (
+          {qrPaymentSelected || transferInMain > 0 ? (
             <div className="settle-card settle-qr-card">
               <div className="settle-card-title">
                 <span className="flex items-center gap-2">
@@ -2290,7 +2296,17 @@ function SettleForm({
                 </strong>
               </div>
               <div className="flex justify-center py-1">
-                <TransferQr amount={transferQrAmount} size={210} />
+                {transferQrAmount > 0 ? (
+                  <TransferQr amount={transferQrAmount} size={210} />
+                ) : (
+                  // Cash is covering the whole bill, so there is nothing
+                  // left to transfer. Say so instead of showing a code for
+                  // zero kip — or, worse, vanishing and taking the payment
+                  // listener with it.
+                  <p className="settle-qr-none">
+                    ບໍ່ມີຍອດຕ້ອງໂອນ — ເງິນສົດຄຸ້ມທັງບິນແລ້ວ
+                  </p>
+                )}
               </div>
               {/* Listen for the OnePay payment push while this QR is on screen. */}
               <OnePayWatcher
