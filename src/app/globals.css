@@ -10016,26 +10016,29 @@ a {
 .settle-points-sum .is-net b { font-size: 16px; color: var(--odoo-warning-text); }
 .settle-points-sum .is-net span { color: var(--odoo-warning-text); font-weight: 800; }
 
-/* Keypad and its quick amounts share a row: the pad is capped, so the
-   space beside it was going to waste.
+/* Keypad and its quick amounts share a row, as two halves — and each
+   stays in its own half.
 
-   Capped as a pair, too. Letting the quick column take whatever the
-   payment pane had left made each round-up a 900px slab with its figure
-   stranded in the middle of it — worst on a wide screen, where the panes
-   stack and the pane is the whole modal. A till block is till-sized: two
-   columns of the same width, and the rest of the pane stays empty. */
+   The amounts used to be a flex item taking whatever was left beside the
+   capped pad, so on a wide pane a round-up began under the keypad's own
+   column and ran to the far edge: one 900px button with its figure
+   stranded in the middle of it, straddling the divide. Split down the
+   middle instead. The pad keeps its cap and sits at the left of its
+   half — the space beside it belongs to the keypad's side, not to the
+   buttons. On a phone the halves stack. */
 .settle-pad-wrap {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  align-items: flex-start;
-  max-width: 34.5rem;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
 }
-.settle-pad-wrap > .settle-pad-col { flex: 0 0 auto; }
+@media (max-width: 640px) {
+  .settle-pad-wrap {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 .settle-pad-wrap > .settle-cash-quick {
-  flex: 1 1 9rem;
   min-width: 0;
-  max-width: 17rem;
   display: grid;
   grid-template-columns: 1fr;
   gap: 6px;
