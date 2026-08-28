@@ -49,9 +49,15 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       }
       // A settled receipt is money that has already changed hands: what
       // follows below unwinds the cash ledger, the stock movement and any
-      // loyalty points spent on it. Voiding one needs a manager and their
-      // PIN, so deleting one cannot need less — it was the same outcome
-      // through a weaker door.
+      // loyalty points spent on it.
+      //
+      // A manager may always do it. So may the cashier who raised the
+      // receipt, on the same day — a receipt issued by mistake at eight in
+      // the evening should not wait for a manager who has gone home, and
+      // the person who made the mistake is the one who can still remember
+      // what actually happened. Anyone else's receipt, or an older one,
+      // still needs a manager: by then it has been through a shift
+      // reconciliation and undoing it is no longer a correction.
       //
       // An unsettled order is still just a promise, and the salesperson
       // who wrote it can drop it.
@@ -61,10 +67,32 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
           positionCode: employee.positionCode,
         });
         if (!canApprovePriceRequests(role)) {
-          throw new HandledError(
-            403,
-            "ບິນນີ້ຮັບເງິນແລ້ວ — ລົບໄດ້ສະເພາະຜູ້ຈັດການ",
-          );
+          const receiptDocNo = cart.tax_doc_no?.trim() ?? "";
+          const ownRows = await tx.$queryRaw<
+            Array<{ mine: boolean; today: boolean; cashier_code: string | null }>
+          >`
+            SELECT
+              cashier_code = ${employee.employeeCode ?? ""} AS mine,
+              create_date_time_now::date = CURRENT_DATE AS today,
+              cashier_code
+            FROM ic_trans
+            WHERE doc_no = ${receiptDocNo}
+              AND doc_format_code = 'CAKAP'
+            LIMIT 1
+          `;
+          const own = ownRows[0];
+          if (!own?.mine) {
+            throw new HandledError(
+              403,
+              "ບິນນີ້ບໍ່ແມ່ນທ່ານເປັນຄົນຮັບເງິນ — ລົບໄດ້ສະເພາະຜູ້ຈັດການ",
+            );
+          }
+          if (!own.today) {
+            throw new HandledError(
+              403,
+              "ບິນຂ້າມມື້ແລ້ວ — ລົບໄດ້ສະເພາະຜູ້ຈັດການ",
+            );
+          }
         }
       }
       if ((cart.status ?? 0) === 1) {
@@ -87,6 +115,42 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
             `ໃບຮັບເງິນ ${receiptDocNo} ຖືກຈັດຖ້ຽວແລ້ວ, ລົບບໍ່ໄດ້`,
           );
         }
+
+        // Record who did this, before anything is deleted — the row below
+        // reads ic_trans, which the deletes that follow remove.
+        //
+        // A delete otherwise leaves nothing behind saying the sale ever
+        // happened or that anyone undid it: fine for the ledger, wrong for
+        // accountability, now that a cashier can delete their own same-day
+        // receipt without a manager. The table is created on demand so an
+        // un-migrated database heals itself rather than failing the
+        // delete; see sql/add-receipt-delete-log.sql.
+        await tx.$executeRaw`
+          CREATE TABLE IF NOT EXISTS app_receipt_delete_log (
+            id            BIGSERIAL PRIMARY KEY,
+            doc_no        VARCHAR(50)  NOT NULL,
+            cart_number   VARCHAR(50),
+            total_kip     NUMERIC(18, 2),
+            settled_by    VARCHAR(50),
+            deleted_by    VARCHAR(50)  NOT NULL,
+            deleted_role  VARCHAR(30),
+            deleted_at    TIMESTAMP    NOT NULL DEFAULT NOW()
+          )
+        `;
+        await tx.$executeRaw`
+          INSERT INTO app_receipt_delete_log
+            (doc_no, cart_number, total_kip, settled_by, deleted_by, deleted_role)
+          SELECT ${receiptDocNo}, ${id}, t.total_amount_2, t.cashier_code,
+                 ${employee.employeeCode ?? ""},
+                 ${roleFromEmployee({
+                   appRole: employee.appRole,
+                   positionCode: employee.positionCode,
+                 })}
+          FROM ic_trans t
+          WHERE t.doc_no = ${receiptDocNo}
+            AND t.doc_format_code = 'CAKAP'
+          LIMIT 1
+        `;
 
         await tx.$executeRaw`
           DELETE FROM app_transfer_slip
