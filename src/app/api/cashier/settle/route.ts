@@ -1591,12 +1591,28 @@ export async function POST(request: NextRequest) {
         await tx.$executeRaw`
           SELECT pg_advisory_xact_lock(hashtext(${`DPC:${dpcPrefix}`}))
         `;
+        // Read the high-water mark from BOTH serial tables.
+        //
+        // It scanned sn_trans_detail alone, and SML mints its own DPC
+        // numbers into sn_trans independently of us: on 28 Aug we issued
+        // DPC2026082906 at 16:08 and SML created its own DPC2026082906 for
+        // FT26080420 a minute later. Two unrelated documents, one number.
+        //
+        // The advisory lock above only serialises our own tills, so this
+        // cannot make a collision impossible while another system allocates
+        // from the same series — but reading both tables closes the window
+        // that actually bit.
         const dpcSeqRows = await tx.$queryRaw<Array<{ next_seq: number }>>`
-          SELECT COALESCE(MAX(CAST(SUBSTRING(doc_no FROM 10) AS INTEGER)), 0) + 1
-                 AS next_seq
-          FROM sn_trans_detail
-          WHERE doc_no LIKE ${`${dpcPrefix}%`}
-            AND LENGTH(doc_no) = 13
+          SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq
+          FROM (
+            SELECT CAST(SUBSTRING(doc_no FROM 10) AS INTEGER) AS seq
+            FROM sn_trans_detail
+            WHERE doc_no LIKE ${`${dpcPrefix}%`} AND LENGTH(doc_no) = 13
+            UNION ALL
+            SELECT CAST(SUBSTRING(doc_no FROM 10) AS INTEGER) AS seq
+            FROM sn_trans
+            WHERE doc_no LIKE ${`${dpcPrefix}%`} AND LENGTH(doc_no) = 13
+          ) t
         `;
         const dpcNo = `${dpcPrefix}${String(
           dpcSeqRows[0]?.next_seq ?? 1,
