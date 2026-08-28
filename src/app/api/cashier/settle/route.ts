@@ -1231,46 +1231,64 @@ export async function POST(request: NextRequest) {
 
       // 5b. The goods-issue document — ໃບຈ່າຍເຄື່ອງອອກສາງ.
       //
-      // odg_wms_trans, not SML's ic_wms_trans. That one is empty; this is
-      // what the warehouse's own screens read, and it has 86,000 documents
-      // to follow rather than a convention to invent.
+      // odg_wms_trans, not SML's ic_wms_trans: this is what the warehouse's
+      // own screens read. Written as a DP document, which is what an issue
+      // looks like there now — DP260828-89391 against a CAKAP receipt is the
+      // shape the warehouse handed back as the example.
       //
-      // Issued, not pending. doc_success '1' is what the 4,578 completed
-      // documents carry, and at the counter the customer leaves with the
-      // goods — a document sitting in "ຖ້າຈ່າຍ" would describe something
-      // that already happened.
+      // The bare-numeric series this used to mint into (202608nnnnn) is the
+      // ERP mirror, and it has not moved since 26 June; every series the
+      // warehouse writes itself carries a prefix and its own counter — DP
+      // for issues, RC for receipts, ADJ for adjustments. The number comes
+      // from odg_wms_trans_roworder_seq, which is where the DP documents in
+      // the table take theirs: a sequence cannot hand out the same number
+      // twice, so there is no lock and no high-water mark to read.
       //
-      // calc_flag -1 on the lines reads as an issue and cannot double-count
-      // the sale: nothing that computes stock touches these tables (no
-      // function, no view, and not sml_ic_function_stock_balance_warehouse).
-      // The CAKAP lines remain the one movement.
-      const wmsNow = new Date();
-      const wmsPrefix = `${wmsNow.getFullYear()}${String(
-        wmsNow.getMonth() + 1,
-      ).padStart(2, "0")}`;
-      await tx.$executeRaw`
-        SELECT pg_advisory_xact_lock(hashtext(${`ODGWMS:${wmsPrefix}`}))
+      // trans_flag 72, header status 0, calc_flag -1 on the lines — the
+      // fourteen DP documents, to the column. It cannot double-count the
+      // sale: nothing that computes stock reads these tables (no function,
+      // no view, and not sml_ic_function_stock_balance_warehouse). The CAKAP
+      // lines remain the one movement.
+      const wmsDocRows = await tx.$queryRaw<Array<{ doc_no: string }>>`
+        SELECT 'DP' || to_char(CURRENT_DATE, 'YYMMDD') || '-' ||
+               lpad(nextval('public.odg_wms_trans_roworder_seq')::text, 5, '0')
+               AS doc_no
       `;
-      const wmsSeqRows = await tx.$queryRaw<Array<{ next_seq: number }>>`
-        SELECT COALESCE(MAX(CAST(SUBSTRING(doc_no FROM 7) AS INTEGER)), 0) + 1
-               AS next_seq
-        FROM odg_wms_trans
-        WHERE doc_no LIKE ${`${wmsPrefix}%`}
-          AND LENGTH(doc_no) = 11
-      `;
-      const wmsDocNo = `${wmsPrefix}${String(
-        wmsSeqRows[0]?.next_seq ?? 1,
-      ).padStart(5, "0")}`;
+      const wmsDocNo = wmsDocRows[0]?.doc_no ?? "";
       const issueWh = (items[0]?.wh_code ?? "").trim();
+
+      // Where the goods are picked from. The lines carry the shelf in
+      // shelf_code and the bin in shelf_code1 — 110101 and 110101-A01 — and
+      // the bin is the only thing on the document that tells a picker where
+      // to walk; ours were going out blank. app_order_serial is where the
+      // till recorded it as the unit went onto the order. A line can only
+      // name one bin, so an item split across bins takes the first: that is
+      // the document, not the stock, and the serial ledger still issues each
+      // unit from where it actually sat.
+      const binRows = await tx.$queryRaw<
+        Array<{ item_code: string; location_code: string | null }>
+      >`
+        SELECT DISTINCT item_code, location_code
+        FROM app_order_serial
+        WHERE doc_no = ${cart.doc_no}
+          AND COALESCE(location_code, '') <> ''
+      `;
+      const binByItem = new Map<string, string>();
+      for (const row of binRows) {
+        const bin = (row.location_code ?? "").trim();
+        if (bin && !binByItem.has(row.item_code)) {
+          binByItem.set(row.item_code, bin);
+        }
+      }
 
       await tx.$executeRaw`
         INSERT INTO odg_wms_trans (
           doc_date, doc_time, doc_no, doc_ref, wh_code, user_created,
-          status, create_date_time_now, trans_flag, wh_to, doc_success
+          status, create_date_time_now, trans_flag, wh_to
         ) VALUES (
           CURRENT_DATE, to_char(NOW(), 'HH24:MI'), ${wmsDocNo}, ${docNo},
           ${issueWh}, ${userCode},
-          1, NOW(), 2, '', '1'
+          0, NOW(), 72, ''
         )
       `;
       for (const it of items) {
@@ -1282,10 +1300,11 @@ export async function POST(request: NextRequest) {
             qty, unit_code, shelf_code, shelf_code1, wh_code, user_created,
             status, calc_flag, create_date_time_now, doc_time
           ) VALUES (
-            2, CURRENT_DATE, ${wmsDocNo}, ${docNo},
+            72, CURRENT_DATE, ${wmsDocNo}, ${docNo},
             ${it.item_code}, ${it.item_name ?? it.item_code},
             ${issueQty}, ${it.unit_code ?? ""},
-            ${(it.shelf_code ?? "").trim()}, '',
+            ${(it.shelf_code ?? "").trim()},
+            ${binByItem.get(it.item_code) ?? ""},
             ${(it.wh_code ?? "").trim()}, ${userCode},
             0, -1, NOW(), to_char(NOW(), 'HH24:MI')
           )
