@@ -2936,22 +2936,24 @@ a {
     font-family: var(--font-sans);
     text-align: left;
   }
+  /* The panel's footer, not the last row of the form. It used to be
+     sticky inside the scroll pane over a 90%-opaque background, so
+     everything that scrolled under it showed through — the bill-discount
+     row read as sitting on top of the buttons. It is now a fixed region
+     of the panel with a solid ground: the list ends above it and nothing
+     can pass behind it. */
   .settle-actions {
-    position: sticky;
-    bottom: -4px;
-    z-index: 10;
+    flex: 0 0 auto;
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 12px;
-    border: 1px solid rgba(226, 232, 240, 0.8);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, 0.9);
-    margin-top: 14px;
-    padding: 16px;
-    box-shadow: 0 -10px 25px rgba(15, 23, 42, 0.05);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    border-top: 1px solid #e2e8f0;
+    background: #ffffff;
+    /* Span the panel's padding so the rule reaches both edges. */
+    margin: 12px -14px -14px;
+    padding: 12px 14px;
+    border-radius: 0 0 20px 20px;
   }
   .settle-actions .odoo-btn-primary {
     height: 50px;
@@ -3019,16 +3021,12 @@ a {
     .settle-payment-line em {
       text-align: left;
     }
-    /* Keep the pay / save action row reachable without scrolling to the
-       very bottom of a long payment form. */
+    /* Same footer, tighter, and clear of the phone's home indicator. */
     .settle-actions {
-      position: sticky;
-      bottom: 0;
-      z-index: 5;
       flex-wrap: wrap;
       border-radius: 0;
-      background: rgba(255, 255, 255, 0.98);
-      margin: 0 -16px -18px;
+      background: #ffffff;
+      margin: 10px -16px -18px;
       padding: 11px 16px calc(11px + env(safe-area-inset-bottom));
     }
   }

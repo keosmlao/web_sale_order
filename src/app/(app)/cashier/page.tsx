@@ -2071,6 +2071,14 @@ function SettleForm({
 
           {error ? <div className="odoo-alert-danger px-3 py-2 text-sm">{error}</div> : null}
 
+          </div>
+
+          {/* Outside the scroll pane on purpose. As the last item
+              inside it — pinned with position:sticky over a
+              translucent background — every row above scrolled
+              underneath and read through it, so the discount line
+              appeared to sit on top of the buttons. A footer is a
+              region of the panel, not an item in the list above it. */}
           <div className="settle-actions">
             <button
               type="button"
@@ -2121,7 +2129,6 @@ function SettleForm({
                   ? "ລໍຖ້າອະນຸມັດສ່ວນຫຼຸດ..."
                   : "ບັນທຶກ ແລະ ຮັບເງິນ"}
             </button>
-          </div>
           </div>
         </aside>
       </div>
