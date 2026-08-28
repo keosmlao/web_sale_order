@@ -23,8 +23,8 @@
 // pubspec.yaml's `version: x.y.z+build` must match whichever channel the
 // APK was built for.
 
-const VERSION = "3.0.0";
-const BUILD = 36;
+const VERSION = "3.3.0";
+const BUILD = 39;
 
 export const APP_RELEASE = {
   version: VERSION,
@@ -32,7 +32,7 @@ export const APP_RELEASE = {
   // Not a separate decision — the published build IS the floor.
   minBuildNumber: BUILD,
   downloadUrl: "/downloads/odg-sale.apk",
-  notes: "ໜ້າຕາໃໝ່ທັງແອັບ — ສີໃໝ່ ແລະ ແຖບກະຕ່າບອກຍອດເງິນ",
+  notes: "ຂາຍຫຼາຍສາງ · ແກ້ໄຂ/ລົບບິນ · stock ຫັກ order ແລ້ວ · ໜ້າຕາໃໝ່",
 } as const;
 
 const BETA_VERSION = "3.3.0";
