@@ -1122,6 +1122,44 @@ function SettleForm({
   });
   const [remark, setRemark] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Coupons put on this bill. Several are allowed — a customer can hand over
+  // more than one — and each is capped by its own remaining balance.
+  const [coupons, setCoupons] = useState<
+    Array<{ number: string; balance: number; amount: number }>
+  >([]);
+  const [couponInput, setCouponInput] = useState("");
+  const [couponBusy, setCouponBusy] = useState(false);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  // A transfer into another of the shop's accounts. The account is the whole
+  // difference from the QR, so the line is not usable without one.
+  const [otherAccount, setOtherAccount] = useState("");
+  const [otherAmount, setOtherAmount] = useState("");
+  const [otherAccounts, setOtherAccounts] = useState<
+    Array<{ code: string; name: string }>
+  >([]);
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/settings/payment-accounts")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!alive || !d) return;
+        const list = Array.isArray(d.accounts) ? d.accounts : [];
+        setOtherAccounts(
+          list
+            .map((a: { code?: string; name?: string }) => ({
+              code: (a.code ?? "").trim(),
+              name: (a.name ?? "").trim(),
+            }))
+            .filter((a: { code: string }) => a.code),
+        );
+      })
+      .catch(() => {
+        // A missing list only costs the picker; the rest of the till works.
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
   // THB is the secondary currency — keep its inputs collapsed until needed so
   // the common LAK-only flow stays uncluttered.
   const [showThb, setShowThb] = useState(false);
@@ -1211,12 +1249,58 @@ function SettleForm({
   }, [redeemInfo, redeemPointsRequested, order.totalAmount]);
 
   // Sum each input × its rate-to-LAK to get the running total in LAK.
+  // Look the coupon up, then put it on the bill for the smaller of what it
+  // holds and what the bill still owes — the common case being that it
+  // covers part and something else covers the rest.
+  async function addCoupon() {
+    const number = couponInput.trim();
+    if (!number) return;
+    if (coupons.some((c) => c.number.toUpperCase() === number.toUpperCase())) {
+      setCouponError("ໃບນີ້ຢູ່ໃນບິນແລ້ວ");
+      return;
+    }
+    setCouponBusy(true);
+    setCouponError(null);
+    try {
+      const res = await fetch(
+        `/api/cashier/coupon?number=${encodeURIComponent(number)}`,
+      );
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data) {
+        setCouponError(data?.error ?? "ກວດ coupon ບໍ່ສຳເລັດ");
+        return;
+      }
+      if (!data.usable) {
+        setCouponError(data.problem ?? "ໃຊ້ໃບນີ້ບໍ່ໄດ້");
+        return;
+      }
+      setCoupons((prev) => [
+        ...prev,
+        {
+          number: data.number as string,
+          balance: Number(data.balance) || 0,
+          // Pre-filled with whatever it can actually cover. Most coupons
+          // are worth less than the bill, so the usual answer is "all of
+          // it" and the cashier types nothing.
+          amount: Math.min(Number(data.balance) || 0, remainingDue),
+        },
+      ]);
+      setCouponInput("");
+    } catch {
+      setCouponError("ກວດ coupon ບໍ່ສຳເລັດ");
+    } finally {
+      setCouponBusy(false);
+    }
+  }
+
   const numericPayments = useMemo(() => {
     const list: Array<{
       currency: CurrencyCode;
       method: PayMethod;
       amount: number;
       inMain: number;
+      couponNumber?: string;
+      accountCode?: string;
     }> = [];
     for (const c of ACCEPTED_CURRENCIES) {
       for (const m of ["cash", "transfer"] as const) {
@@ -1227,8 +1311,30 @@ function SettleForm({
         list.push({ currency: c, method: m, amount, inMain: amount * rate });
       }
     }
+    // Both of these are quoted in kip, like the bill.
+    for (const c of coupons) {
+      if (c.amount > 0) {
+        list.push({
+          currency: MAIN_CURRENCY,
+          method: "coupon",
+          amount: c.amount,
+          inMain: c.amount,
+          couponNumber: c.number,
+        });
+      }
+    }
+    const other = Number(otherAmount) || 0;
+    if (other > 0 && otherAccount) {
+      list.push({
+        currency: MAIN_CURRENCY,
+        method: "transfer_other",
+        amount: other,
+        inMain: other,
+        accountCode: otherAccount,
+      });
+    }
     return list;
-  }, [paymentInputs, currencyRates]);
+  }, [paymentInputs, currencyRates, coupons, otherAmount, otherAccount]);
 
   const paidInMain = numericPayments.reduce((s, p) => s + p.inMain, 0);
   const isApprovedBillDiscount = billDiscountReq?.status === "approved";
@@ -1527,6 +1633,11 @@ function SettleForm({
             currency: p.currency,
             method: p.method,
             amount: p.amount,
+            // Only set on the tenders that have one; the server ignores the
+            // rest. Without these a coupon line is unbookable and a
+            // transfer to another account is indistinguishable from the QR.
+            couponNumber: p.couponNumber,
+            accountCode: p.accountCode,
           })),
           remark: remark.trim() || undefined,
           transferSlips: slips.map((s) => ({
@@ -2057,6 +2168,130 @@ function SettleForm({
               )}
             </div>
           ) : null}
+
+          {/* ── Coupon ──────────────────────────────────────────────
+              A coupon is not a number the cashier types, it is a balance
+              held elsewhere: the number is looked up, and the line is
+              capped by what the coupon has left and by what the bill
+              still owes. Several are allowed — a customer can hand over
+              more than one. */}
+          <div className="settle-card">
+            <div className="settle-card-title">
+              <span className="flex items-center gap-2">
+                <i className="settle-step">C</i>
+                ຫັກ Coupon
+              </span>
+              {coupons.length > 0 ? (
+                <strong className="settle-pay-curtag">
+                  {coupons.length} ໃບ
+                </strong>
+              ) : null}
+            </div>
+
+            {coupons.map((c, i) => (
+              <div key={c.number} className="settle-tender-row">
+                <div className="settle-tender-who">
+                  <b>{c.number}</b>
+                  <small>ເຫຼືອ {moneyFmt.format(c.balance)}</small>
+                </div>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={c.balance}
+                  value={c.amount || ""}
+                  disabled={!canSettle}
+                  onChange={(e) => {
+                    // Never more than the coupon holds. Over-redeeming would
+                    // be refused by the server anyway, with the customer
+                    // already told a total.
+                    const v = Math.max(
+                      0,
+                      Math.min(c.balance, Number(e.target.value) || 0),
+                    );
+                    setCoupons((prev) =>
+                      prev.map((x, j) => (j === i ? { ...x, amount: v } : x)),
+                    );
+                  }}
+                />
+                <button
+                  type="button"
+                  className="settle-tender-x"
+                  disabled={!canSettle}
+                  onClick={() =>
+                    setCoupons((prev) => prev.filter((_, j) => j !== i))
+                  }
+                  aria-label="ເອົາອອກ"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+
+            <div className="settle-tender-add">
+              <input
+                type="text"
+                value={couponInput}
+                disabled={!canSettle || couponBusy}
+                placeholder="ເລກ coupon — ພິມ ຫຼື ສະແກນ"
+                onChange={(e) => setCouponInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault();
+                    void addCoupon();
+                  }
+                }}
+              />
+              <button
+                type="button"
+                className="odoo-btn odoo-btn-secondary"
+                disabled={!canSettle || couponBusy || !couponInput.trim()}
+                onClick={() => void addCoupon()}
+              >
+                {couponBusy ? "ກຳລັງກວດ..." : "ເພີ່ມ"}
+              </button>
+            </div>
+            {couponError ? (
+              <div className="settle-tender-err">{couponError}</div>
+            ) : null}
+          </div>
+
+          {/* ── Transfer into another account ───────────────────────
+              Which account it landed in is the whole difference from the
+              QR, so the amount is inert until one is chosen — a line
+              without it would be unreconcilable on the bank statement. */}
+          <div className="settle-card">
+            <div className="settle-card-title">
+              <span className="flex items-center gap-2">
+                <i className="settle-step">B</i>
+                ໂອນເຂົ້າບັນຊີອື່ນ
+              </span>
+            </div>
+            <div className="settle-tender-add">
+              <select
+                value={otherAccount}
+                disabled={!canSettle}
+                onChange={(e) => setOtherAccount(e.target.value)}
+              >
+                <option value="">— ເລືອກບັນຊີ —</option>
+                {otherAccounts.map((a) => (
+                  <option key={a.code} value={a.code}>
+                    {a.code} · {a.name}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                step={1000}
+                value={otherAmount}
+                disabled={!canSettle || !otherAccount}
+                placeholder="ຈຳນວນ (ກີບ)"
+                onChange={(e) => setOtherAmount(e.target.value)}
+              />
+            </div>
+          </div>
 
           <label className="settle-note">
             <span>ໝາຍເຫດ</span>

@@ -9683,3 +9683,94 @@ a {
     grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
+
+
+/* ─── Cashier: tenders backed by a balance ───────────────────────────────
+   Coupons and transfers into a named account are not a number the cashier
+   invents — they draw on something that exists and is capped by it. They
+   read as rows with a source, not as bare money fields. */
+.settle-tender-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  margin-bottom: 6px;
+  border: 1px solid var(--odoo-border-strong);
+  border-radius: 10px;
+  background: var(--odoo-surface-muted);
+}
+.settle-tender-who { display: flex; flex-direction: column; min-width: 0; }
+.settle-tender-who b {
+  font-size: 12.5px;
+  font-weight: 800;
+  color: var(--odoo-text-strong);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.settle-tender-who small {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: var(--odoo-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.settle-tender-row input {
+  margin-inline-start: auto;
+  width: 9.5rem;
+  min-width: 0;
+  height: 36px;
+  padding: 0 9px;
+  border: 1px solid var(--odoo-border-strong);
+  border-radius: 8px;
+  background: var(--odoo-surface);
+  font-size: 13.5px;
+  font-weight: 800;
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+  color: var(--odoo-text-strong);
+}
+.settle-tender-x {
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--odoo-text-soft);
+  font-weight: 800;
+  cursor: pointer;
+}
+.settle-tender-x:hover {
+  background: var(--odoo-danger-bg);
+  color: var(--odoo-danger-text);
+}
+
+.settle-tender-add { display: flex; gap: 7px; align-items: center; }
+.settle-tender-add input,
+.settle-tender-add select {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 38px;
+  padding: 0 10px;
+  border: 1px solid var(--odoo-border-strong);
+  border-radius: 9px;
+  background: var(--odoo-surface);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--odoo-text-strong);
+}
+.settle-tender-add input:disabled,
+.settle-tender-add select:disabled {
+  background: var(--odoo-surface-muted);
+  color: var(--odoo-text-soft);
+}
+.settle-tender-add .odoo-btn { flex: 0 0 auto; height: 38px; }
+.settle-tender-err {
+  margin-top: 6px;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: var(--odoo-danger-bg);
+  color: var(--odoo-danger-text);
+  font-size: 11.5px;
+  font-weight: 700;
+}
