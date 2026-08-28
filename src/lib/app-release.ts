@@ -21,8 +21,8 @@
 // stopped being used, not because it was wrong — bring it back if
 // releasing straight to the shop starts to sting.
 
-const VERSION = "3.5.3";
-const BUILD = 46;
+const VERSION = "3.5.4";
+const BUILD = 47;
 
 export const APP_RELEASE = {
   version: VERSION,
@@ -30,5 +30,5 @@ export const APP_RELEASE = {
   // Not a separate decision — the published build IS the floor.
   minBuildNumber: BUILD,
   downloadUrl: "/downloads/odg-sale.apk",
-  notes: "card ສະແດງລາຄາສະມາຊິກແລ້ວ · ເລືອກ ISN/SN ຫຼາຍເຄື່ອງຕໍ່ແຖວ · ໜ້າຕາໃໝ່",
+  notes: "ແກ້ເລືອກ ISN ບໍ່ໄດ້ເມື່ອສາງມີເລກບໍ່ຄົບ · card ສະແດງລາຄາສະມາຊິກ",
 } as const;
