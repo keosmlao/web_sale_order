@@ -9907,15 +9907,19 @@ a {
 .settle-pad {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
-  margin-top: 10px;
+  gap: 6px;
+  margin-top: 8px;
+  /* Capped. Stretched across the payment column the keys became slabs
+     that pushed everything else below the fold — a keypad is a keypad at
+     thumb size, and past that the extra width only costs the screen. */
+  max-width: 17rem;
 }
 .settle-pad button {
-  height: 54px;
+  height: 40px;
   border: 1px solid var(--odoo-border-strong);
-  border-radius: 12px;
+  border-radius: 9px;
   background: var(--odoo-surface);
-  font-size: 21px;
+  font-size: 16px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: var(--odoo-text-strong);
@@ -9929,7 +9933,7 @@ a {
 .settle-pad button:active:not(:disabled) { transform: translateY(1px); }
 .settle-pad button:disabled { opacity: 0.45; cursor: default; }
 .settle-pad button.is-util {
-  font-size: 16px;
+  font-size: 13px;
   background: var(--odoo-surface-muted);
   color: var(--odoo-text-muted);
 }
@@ -9939,20 +9943,21 @@ a {
 .settle-pad-head {
   display: flex;
   align-items: baseline;
-  gap: 10px;
-  padding: 10px 12px;
+  gap: 8px;
+  max-width: 17rem;
+  padding: 6px 10px;
   border: 1px solid var(--odoo-border-strong);
-  border-radius: 12px;
+  border-radius: 9px;
   background: var(--odoo-surface-muted);
 }
 .settle-pad-head span {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 800;
   color: var(--odoo-text-muted);
 }
 .settle-pad-head b {
   margin-inline-start: auto;
-  font-size: 26px;
+  font-size: 18px;
   font-weight: 900;
   letter-spacing: -0.02em;
   font-variant-numeric: tabular-nums;
@@ -10006,3 +10011,26 @@ a {
 .settle-bill-sum .is-net b { font-size: 16px; color: var(--odoo-primary-dark); }
 .settle-points-sum .is-net b { font-size: 16px; color: var(--odoo-warning-text); }
 .settle-points-sum .is-net span { color: var(--odoo-warning-text); font-weight: 800; }
+
+/* Keypad and its quick amounts share a row: the pad is capped, so the
+   space beside it was going to waste. */
+.settle-pad-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-start;
+}
+.settle-pad-wrap > .settle-pad-col { flex: 0 0 auto; }
+.settle-pad-wrap > .settle-cash-quick {
+  flex: 1 1 9rem;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 6px;
+  margin: 8px 0 0;
+  align-content: start;
+}
+.settle-pad-wrap > .settle-cash-quick .settle-cash-quick-btn {
+  min-width: 0;
+  width: 100%;
+}

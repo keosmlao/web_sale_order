@@ -2266,6 +2266,8 @@ function SettleForm({
                 one done most often — on a touchscreen till especially. It
                 types into cash, because that is the tender you count; the
                 others arrive as whole amounts. */}
+            <div className="settle-pad-wrap">
+            <div className="settle-pad-col">
             <div className="settle-pad-head">
               <span>ເງິນສົດທີ່ຮັບ</span>
               <b>{moneyFmt.format(cashNow)}</b>
@@ -2305,6 +2307,7 @@ function SettleForm({
               >
                 ⌫
               </button>
+            </div>
             </div>
 
             {/* Counting cash out of a customer's hand is where the typing
@@ -2347,6 +2350,7 @@ function SettleForm({
                 })()}
               </div>
             ) : null}
+            </div>
 
             {/* Only the methods not already on the bill. Cash is always
                 offered — it is the one that can absorb an overpayment. */}
