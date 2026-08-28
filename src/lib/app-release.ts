@@ -1,30 +1,28 @@
-// The two Android channels.
+// The Android release the shop runs.
 //
-// STABLE is what the shop runs. Every stable release is mandatory: the
-// tablets are updated by someone walking over to them, so an old build
-// otherwise sits there selling for months against a server that has moved
-// on — which is how a cart gets priced by rules the bill no longer agrees
-// with. minBuildNumber is pinned to the published build rather than
-// decided case by case: install the new APK, or the app stops at the
-// update screen.
+// Every release is mandatory: the tablets are updated by someone walking
+// over to them, so an old build otherwise sits there selling for months
+// against a server that has moved on — which is how a cart gets priced by
+// rules the bill no longer agrees with. minBuildNumber is pinned to the
+// published build rather than decided case by case: install the new APK,
+// or the app stops at the update screen.
 //
-// That is exactly why BETA exists. A forced channel must not also be the
-// channel work lands on — publish twice in an afternoon and whoever is
-// selling spends the afternoon installing. Changes go to beta, get tried
-// on one device, and only then move to stable.
+// Because it is mandatory, publish deliberately: two releases in an
+// afternoon is an afternoon of installing for whoever is selling. Batch
+// changes, and check the APK before it goes out —
 //
-// Promotion copies bytes, it does not rebuild: the APK the tester
-// approved is the APK the shop gets, same build number, same file.
+//   scripts/check-apk.sh public/downloads/odg-sale.apk
 //
-//   beta      → bump BETA_BUILD, build, copy to odg-sale-beta.apk
-//   promote   → set BUILD/VERSION to the beta's, copy that same file
-//               to odg-sale.apk
+// pubspec.yaml's `version: x.y.z+build` must match what is set here, or
+// the app installs as one build and is told to update to another, forever.
 //
-// pubspec.yaml's `version: x.y.z+build` must match whichever channel the
-// APK was built for.
+// There was a second, non-forcing "beta" channel here for trying a build
+// on one device first (git history, up to 3.5.2+45). It is gone because it
+// stopped being used, not because it was wrong — bring it back if
+// releasing straight to the shop starts to sting.
 
-const VERSION = "3.3.0";
-const BUILD = 39;
+const VERSION = "3.5.2";
+const BUILD = 45;
 
 export const APP_RELEASE = {
   version: VERSION,
@@ -32,21 +30,5 @@ export const APP_RELEASE = {
   // Not a separate decision — the published build IS the floor.
   minBuildNumber: BUILD,
   downloadUrl: "/downloads/odg-sale.apk",
-  notes: "ຂາຍຫຼາຍສາງ · ແກ້ໄຂ/ລົບບິນ · stock ຫັກ order ແລ້ວ · ໜ້າຕາໃໝ່",
-} as const;
-
-const BETA_VERSION = "3.5.2";
-const BETA_BUILD = 45;
-
-export const APP_BETA = {
-  version: BETA_VERSION,
-  buildNumber: BETA_BUILD,
-  // A beta never forces anything. Its floor is the stable floor, so a
-  // tester who wants out just installs stable — and a beta that falls
-  // behind stable is pulled forward like any other old build.
-  minBuildNumber: BUILD,
-  downloadUrl: "/downloads/odg-sale-beta.apk",
-  notes: "ເລືອກ ISN/SN ໄດ້ຫຼາຍເຄື່ອງຕໍ່ແຖວ ຄືກັບເວັບ · ເພີ່ມຈຳນວນແລ້ວຖາມໃໝ່",
-  // Set when beta is ahead of stable and there is something to try.
-  isAhead: BETA_BUILD > BUILD,
+  notes: "ເລືອກ ISN/SN ຫຼາຍເຄື່ອງຕໍ່ແຖວ · ເລືອກລູກຄ້າໜ້າຮ້ານ ພ້ອມສ່ວນຫຼຸດ+ແຕ້ມ · ໜ້າຕາໃໝ່",
 } as const;
