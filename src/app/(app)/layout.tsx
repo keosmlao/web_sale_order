@@ -138,7 +138,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ];
 
     return (
-      <div className="min-h-screen bg-background text-odoo-text md:flex">
+      // On md+ the row is exactly the viewport and only <main> scrolls —
+      // the sidebar measured itself in dvh while the page measured itself
+      // in vh, and the two disagree whenever the browser bar collapses,
+      // which read as a sidebar that did not fit the height.
+      <div className="min-h-screen bg-background text-odoo-text md:flex md:h-screen md:min-h-0 md:overflow-hidden">
         <Suspense fallback={null}>
           <EmbedMode />
         </Suspense>
@@ -148,7 +152,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             menu inside differs: the register's three links, with the
             pending count riding the ໃບສັ່ງຂາຍ row. */}
         {isRegisterUser ? (
-          <aside className="app-chrome sbd-shell hidden md:flex">
+          <aside className="app-chrome sbd-shell hidden md:flex md:!h-full">
             <div className="sbd-bg" aria-hidden />
             <div className="sbd-inner">
               <a href="/cashier" className="sbd-brand" aria-label="ໜ້າຮັບເງິນ">
