@@ -909,13 +909,7 @@ function PosScreen({
     productId: string,
     whCode: string,
   ) {
-    setItems((prev) => {
-      const next = [...prev];
-      const target = next[idx];
-      if (!target || target.productId !== productId) return prev;
-      next[idx] = { ...target, loadingSerials: true };
-      return next;
-    });
+    patchLine(idx, productId, { loadingSerials: true });
     let units: SerialUnit[] = [];
     try {
       const params = new URLSearchParams({ code: productId, warehouse: whCode });
@@ -927,22 +921,19 @@ function PosScreen({
     } catch {
       units = [];
     }
-    setItems((prev) => {
-      const next = [...prev];
-      const target = next[idx];
-      if (!target || target.productId !== productId) return prev;
-      // A serial already on the line (scanned, or picked before the
-      // warehouse changed) only stands if this warehouse still holds it.
-      const stillHere =
-        target.serialNo && units.some((u) => u.sn === target.serialNo);
-      next[idx] = {
-        ...target,
-        serialOptions: units,
-        loadingSerials: false,
-        serialNo: stillHere ? target.serialNo : null,
-        serialIsn: stillHere ? target.serialIsn : null,
-      };
-      return next;
+    const target = itemsRef.current[idx];
+    if (!target || target.productId !== productId) return;
+    // A unit already on the line (scanned, or picked before the warehouse
+    // changed) only stands if this warehouse still holds it. Matched on
+    // the ISN, which is the number the ledger and the shop floor both go
+    // by; the factory serial is not always recorded.
+    const stillHere =
+      target.serialIsn && units.some((u) => u.isn === target.serialIsn);
+    patchLine(idx, productId, {
+      serialOptions: units,
+      loadingSerials: false,
+      serialNo: stillHere ? target.serialNo : null,
+      serialIsn: stillHere ? target.serialIsn : null,
     });
   }
 
@@ -952,12 +943,9 @@ function PosScreen({
     whCode: string,
   ) {
     void fetchSerialsForLine(idx, productId, whCode);
-    setItems((prev) => {
-      const next = [...prev];
-      const target = next[idx];
-      if (!target || target.productId !== productId) return prev;
-      next[idx] = { ...target, loadingLocations: true, locationLoadError: null };
-      return next;
+    patchLine(idx, productId, {
+      loadingLocations: true,
+      locationLoadError: null,
     });
     try {
       const res = await fetch("/api/inventory/stock-balance", {
@@ -972,44 +960,31 @@ function PosScreen({
       const data = await res.json();
       const balanceItem = (data?.items ?? [])[0];
       const locs: LocationBalance[] = balanceItem?.locations ?? [];
-      setItems((prev) => {
-        const next = [...prev];
-        const target = next[idx];
-        if (!target || target.productId !== productId) return prev;
-        // Only auto-pick from conditions that actually have stock. The
-        // shelf list is sorted "ສະພາບດີ" (110201) first, so falling back
-        // to the highest-balance one naturally prefers good condition.
-        const sellable = locs.filter((l) => l.balanceQty > 0);
-        const enoughForQty = sellable.find(
-          (l) => l.balanceQty >= target.quantity,
-        );
-        const mostStocked = [...sellable].sort(
-          (a, b) => b.balanceQty - a.balanceQty,
-        )[0];
-        const preferred =
-          enoughForQty?.location ?? mostStocked?.location ?? "";
-        next[idx] = {
-          ...target,
-          locations: locs,
-          locationCode: preferred ?? "",
-          loadingLocations: false,
-          locationLoadError: null,
-        };
-        return next;
+      const target = itemsRef.current[idx];
+      if (!target || target.productId !== productId) return;
+      // Only auto-pick from conditions that actually have stock. The
+      // shelf list is sorted "ສະພາບດີ" (110201) first, so falling back
+      // to the highest-balance one naturally prefers good condition.
+      const sellable = locs.filter((l) => l.balanceQty > 0);
+      const enoughForQty = sellable.find(
+        (l) => l.balanceQty >= target.quantity,
+      );
+      const mostStocked = [...sellable].sort(
+        (a, b) => b.balanceQty - a.balanceQty,
+      )[0];
+      const preferred = enoughForQty?.location ?? mostStocked?.location ?? "";
+      patchLine(idx, productId, {
+        locations: locs,
+        locationCode: preferred ?? "",
+        loadingLocations: false,
+        locationLoadError: null,
       });
     } catch (err) {
       const msg = err instanceof Error ? err.message : "ໂຫລດ stock ບໍ່ສຳເລັດ";
-      setItems((prev) => {
-        const next = [...prev];
-        const target = next[idx];
-        if (!target || target.productId !== productId) return prev;
-        next[idx] = {
-          ...target,
-          locations: [],
-          loadingLocations: false,
-          locationLoadError: msg,
-        };
-        return next;
+      patchLine(idx, productId, {
+        locations: [],
+        loadingLocations: false,
+        locationLoadError: msg,
       });
     }
   }
@@ -1846,6 +1821,27 @@ function PosScreen({
   function commitItems(next: Line[]) {
     itemsRef.current = next;
     setItems(next);
+  }
+
+  // Patch one line from an async fetch, keeping the ref in step.
+  //
+  // The cart lives in two places: React state, which renders, and
+  // itemsRef, which every edit reads from because it must see the latest
+  // value inside the same tick. A background fetch that wrote with
+  // setItems alone would show up on screen and then vanish — the next
+  // edit read the stale ref and committed it back over the top. That is
+  // what kept the serial picker from ever appearing: it arrived, and the
+  // first quantity change or promo recompute wiped it.
+  //
+  // The productId guard is the same one the callers had: by the time a
+  // fetch returns, the line at that index may be a different product.
+  function patchLine(idx: number, productId: string, patch: Partial<Line>) {
+    const cur = itemsRef.current;
+    const target = cur[idx];
+    if (!target || target.productId !== productId) return;
+    const next = [...cur];
+    next[idx] = { ...target, ...patch };
+    commitItems(next);
   }
 
   function updateLine(idx: number, patch: Partial<Line>) {
