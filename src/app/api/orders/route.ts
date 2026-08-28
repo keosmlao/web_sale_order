@@ -108,6 +108,11 @@ type IncomingItem = {
   // in app_order_serial once the document number exists.
   serialNo?: string | null;
   serialIsn?: string | null;
+  // One entry per unit when the line sells several serial-tracked units.
+  // A quantity of two off the storefront shelf is two units with two
+  // ISNs, and the issue-out at settle is per unit — recording only the
+  // first sold two and released one.
+  serialUnits?: Array<{ sn?: string | null; isn?: string | null }>;
   // Optional per-line transport type (transport_type.code). Set by the POS
   // when a cart is dispatched from several warehouses and each warehouse
   // ships differently. Recorded in ic_trans_detail.remark per line only when
@@ -262,6 +267,23 @@ function normalizeItems(rawItems: unknown[], fallbackWarehouseCode: string | nul
         (i as { serialIsn: string }).serialIsn.trim() !== ""
           ? (i as { serialIsn: string }).serialIsn.trim().slice(0, 80)
           : null,
+      // Every unit the line is taking, when it takes more than one.
+      serialUnits: Array.isArray((i as { serialUnits?: unknown }).serialUnits)
+        ? ((i as { serialUnits: unknown[] }).serialUnits
+            .map((u) => {
+              const row = (u ?? {}) as { sn?: unknown; isn?: unknown };
+              const sn =
+                typeof row.sn === "string" && row.sn.trim() !== ""
+                  ? row.sn.trim().slice(0, 80)
+                  : null;
+              const isn =
+                typeof row.isn === "string" && row.isn.trim() !== ""
+                  ? row.isn.trim().slice(0, 80)
+                  : null;
+              return { sn, isn };
+            })
+            .filter((u) => u.sn !== null || u.isn !== null))
+        : [],
     }))
     .filter((i) => i.productId.length > 0 && i.quantity > 0);
 }
@@ -1494,16 +1516,28 @@ export async function POST(request: NextRequest) {
     // transaction as the document itself, so a bill can never exist with
     // its serials missing — for a warranty claim or a return, the number on
     // the box is the only thing tying the customer to this line.
-    const serialLines = items.filter((i) => i.serialNo || i.serialIsn);
-    if (serialLines.length > 0) {
-      for (const [idx, line] of serialLines.entries()) {
+    // One row per physical unit, not per line. A line selling two
+    // serial-tracked units is two rows here, and settle issues one unit
+    // per row — writing only the first sold two and released one.
+    const serialRows = items.flatMap((line) => {
+      const picked = line.serialUnits ?? [];
+      const units =
+        picked.length > 0
+          ? picked
+          : line.serialNo || line.serialIsn
+            ? [{ sn: line.serialNo, isn: line.serialIsn }]
+            : [];
+      return units.map((unit) => ({ line, unit }));
+    });
+    if (serialRows.length > 0) {
+      for (const [idx, { line, unit }] of serialRows.entries()) {
         await tx.$executeRaw`
           INSERT INTO app_order_serial (
             doc_no, line_number, item_code, serial_number, isn,
             warehouse_code, location_code, created_by
           ) VALUES (
             ${sokDocNo}, ${idx + 1}, ${line.productId},
-            ${line.serialNo ?? null}, ${line.serialIsn ?? null},
+            ${unit.sn ?? null}, ${unit.isn ?? null},
             ${line.warehouseCode}, ${line.locationCode},
             ${employee.employeeCode ?? ""}
           )

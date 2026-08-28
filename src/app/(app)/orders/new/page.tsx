@@ -116,6 +116,11 @@ type Line = {
   // and the WMS issue-out on settle can all name it.
   serialNo?: string | null;
   serialIsn?: string | null;
+  // The units this line is taking, one per quantity. A line of two off
+  // the storefront shelf is two physical fridges with two ISNs, and the
+  // WMS issue-out at settle is per unit — one recorded unit against a
+  // quantity of two sells two and releases one.
+  serialUnits?: SerialUnit[];
   // On-hand serial-tracked units of this item in this line's warehouse.
   // Empty means the item is not serial-tracked there — most are not — so
   // the ISN control only appears when there is something to choose.
@@ -927,14 +932,24 @@ function PosScreen({
     // changed) only stands if this warehouse still holds it. Matched on
     // the ISN, which is the number the ledger and the shop floor both go
     // by; the factory serial is not always recorded.
-    const stillHere =
-      target.serialIsn && units.some((u) => u.isn === target.serialIsn);
+    const kept = (target.serialUnits ?? []).filter((picked) =>
+      units.some((u) => u.isn === picked.isn),
+    );
+    // One unit on the shelf is not a choice. Take it and say so on the
+    // line, rather than making the counter open a list of one.
+    const autoPicked =
+      kept.length === 0 && units.length === 1 ? [units[0]] : kept;
     patchLine(idx, productId, {
       serialOptions: units,
       loadingSerials: false,
-      serialNo: stillHere ? target.serialNo : null,
-      serialIsn: stillHere ? target.serialIsn : null,
+      serialUnits: autoPicked,
+      serialNo: autoPicked[0]?.sn ?? null,
+      serialIsn: autoPicked[0]?.isn ?? null,
     });
+    // More on the shelf than the line has claimed: ask which ones.
+    if (units.length > 1 && autoPicked.length < 1) {
+      setSerialPickerIdx(idx);
+    }
   }
 
   async function fetchLocationsForProduct(
@@ -1853,6 +1868,29 @@ function PosScreen({
     // recomputes via reconcileBonusForTrigger.
     if (line.promoBonusOfCode && "quantity" in patch) return;
     const updated = { ...line, ...patch };
+    // A serial line owes one unit per item on it. Growing the quantity
+    // leaves it short, so the picker opens for the extra; shrinking drops
+    // the units most recently added, which are the ones being undone.
+    if ((updated.serialOptions?.length ?? 0) > 0 && "quantity" in patch) {
+      const held = updated.serialUnits ?? [];
+      if (held.length > updated.quantity) {
+        updated.serialUnits = held.slice(0, updated.quantity);
+        updated.serialNo = updated.serialUnits[0]?.sn ?? null;
+        updated.serialIsn = updated.serialUnits[0]?.isn ?? null;
+      } else if (held.length < updated.quantity) {
+        const free = (updated.serialOptions ?? []).filter(
+          (u) => !held.some((h) => h.isn === u.isn),
+        );
+        // Nothing to choose between: take the only one left.
+        if (free.length === 1 && updated.quantity - held.length === 1) {
+          updated.serialUnits = [...held, free[0]];
+          updated.serialNo = updated.serialUnits[0]?.sn ?? null;
+          updated.serialIsn = updated.serialUnits[0]?.isn ?? null;
+        } else if (free.length > 0) {
+          queueMicrotask(() => setSerialPickerIdx(idx));
+        }
+      }
+    }
     if (updated.buildFromComponents) {
       const cap = Math.max(1, Math.floor(updated.buildableSets ?? 1));
       updated.quantity = Math.min(Math.max(1, updated.quantity), cap);
@@ -2137,6 +2175,13 @@ function PosScreen({
             // return can be tied back to it.
             serialNo: it.serialNo || undefined,
             serialIsn: it.serialIsn || undefined,
+            // Every unit the line is taking. The server writes one
+            // app_order_serial row per entry, and settle issues one unit
+            // out of the WMS per row.
+            serialUnits: (it.serialUnits ?? []).map((u) => ({
+              sn: u.sn,
+              isn: u.isn,
+            })),
           })),
         }),
       });
@@ -3018,6 +3063,10 @@ function PosScreen({
                                           ? "ເລືອກ ISN"
                                           : "ເລືອກ serial"
                                       } (${line.serialOptions?.length})`}
+                                  {line.quantity > 1 &&
+                                  (line.serialUnits?.length ?? 0) > 0
+                                    ? ` ${line.serialUnits?.length}/${line.quantity}`
+                                    : ""}
                                 </button>
                               ) : line.serialNo || line.serialIsn ? (
                                 <span className="pos-cline-serial">
@@ -3813,9 +3862,12 @@ function PosScreen({
             // after what it actually holds rather than promising an ISN
             // that was never recorded.
             title={
-              storefront && units.some((u) => u.isn)
+              (storefront && units.some((u) => u.isn)
                 ? "ເລືອກ ISN"
-                : "ເລືອກ serial"
+                : "ເລືອກ serial") +
+              (target.quantity > 1
+                ? ` (${(target.serialUnits ?? []).length}/${target.quantity})`
+                : "")
             }
             query={serialQuery}
             setQuery={setSerialQuery}
@@ -3829,7 +3881,7 @@ function PosScreen({
                 );
               })
               .map((u) => ({
-                id: u.sn,
+                id: u.isn ?? u.sn,
                 // The storefront's paperwork goes by ISN, so that leads
                 // there; the serial is what identifies the unit anywhere
                 // else, and it stays on the line either way.
@@ -3842,15 +3894,27 @@ function PosScreen({
                   .filter(Boolean)
                   .join(" · "),
               }))}
-            selectedId={target.serialNo ?? ""}
+            selectedId={target.serialIsn ?? ""}
             onPick={(id) => {
-              const unit = units.find((u) => u.sn === id);
+              const unit = units.find((u) => u.isn === id);
+              if (!unit) return;
+              const already = target.serialUnits ?? [];
+              // Tapping a unit the line already holds takes it back off,
+              // so a wrong pick is undone the same way it was made.
+              const has = already.some((u) => u.isn === unit.isn);
+              const next = has
+                ? already.filter((u) => u.isn !== unit.isn)
+                : [...already, unit].slice(0, target.quantity);
               updateLine(idx, {
-                serialNo: unit?.sn ?? null,
-                serialIsn: unit?.isn ?? null,
+                serialUnits: next,
+                serialNo: next[0]?.sn ?? null,
+                serialIsn: next[0]?.isn ?? null,
               });
-              setSerialPickerIdx(null);
-              setSerialQuery("");
+              // Stay open until the line has a unit for every item on it.
+              if (next.length >= target.quantity) {
+                setSerialPickerIdx(null);
+                setSerialQuery("");
+              }
             }}
             onClose={() => {
               setSerialPickerIdx(null);
