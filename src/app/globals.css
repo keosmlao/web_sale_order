@@ -9881,3 +9881,9 @@ a {
   color: #fff;
 }
 .settle-cash-quick-btn:disabled { opacity: 0.5; cursor: default; }
+
+/* The cash row before anything is counted: present, but plainly empty. */
+.settle-tender-row input::placeholder {
+  color: var(--odoo-text-soft);
+  font-weight: 700;
+}

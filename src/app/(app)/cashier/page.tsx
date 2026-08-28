@@ -1117,7 +1117,15 @@ function SettleForm({
       string
     >;
     for (const k of PAYMENT_FIELDS) init[k] = "0";
-    init[paymentKey(MAIN_CURRENCY, "cash")] = String(order.totalAmount);
+    // Deliberately NOT pre-filled with the total.
+    //
+    // It used to open holding the whole bill, to save a tap on the common
+    // cash sale. But the customer-facing screen reads the same numbers,
+    // so it announced "ຮັບເງິນ 11,039,000 · ຍັງຄ້າງ 0" to someone who had
+    // not handed over anything yet — and the cashier's own "ຍັງຂາດ" read
+    // zero from the start, which is the figure the whole screen is built
+    // around. The tap comes back as "ພໍດີ", which sits under the cash row
+    // from the moment the bill opens.
     return init;
   });
   const [remark, setRemark] = useState("");
@@ -1395,16 +1403,16 @@ function SettleForm({
   };
 
   const tenderRows: TenderRow[] = [];
-  if (cashNow > 0) {
-    tenderRows.push({
-      key: "cash",
-      label: "ເງິນສົດ",
-      colour: TENDER_COLOUR.cash,
-      amount: cashNow,
-      setAmount: (v) => setInput(cashKey, v),
-      remove: () => setInput(cashKey, 0),
-    });
-  }
+  // Always present, at zero until it is counted: cash is the default way
+  // to pay, and its quick-amounts are the fastest path off this screen.
+  tenderRows.push({
+    key: "cash",
+    label: "ເງິນສົດ",
+    colour: TENDER_COLOUR.cash,
+    amount: cashNow,
+    setAmount: (v) => setInput(cashKey, v),
+    remove: () => setInput(cashKey, 0),
+  });
   if (qrNow > 0) {
     tenderRows.push({
       key: "qr",
@@ -1478,14 +1486,7 @@ function SettleForm({
     colour: string;
     add: () => void;
   }> = [];
-  if (cashNow <= 0) {
-    tenderChips.push({
-      key: "cash",
-      label: "ເງິນສົດ",
-      colour: TENDER_COLOUR.cash,
-      add: () => setInput(cashKey, fill),
-    });
-  }
+
   if (qrNow <= 0) {
     tenderChips.push({
       key: "qr",
@@ -2062,18 +2063,12 @@ function SettleForm({
                 <i className="settle-step">1</i>
                 ຮັບເງິນ
               </span>
-              {tenderRows.length > 0 ? (
+              {tenderRows.length > 1 ? (
                 <strong className="settle-pay-curtag">
                   {tenderRows.length} ວິທີ
                 </strong>
               ) : null}
             </div>
-
-            {tenderRows.length === 0 ? (
-              <div className="settle-tender-none">
-                ຍັງບໍ່ໄດ້ຮັບເງິນ — ເລືອກວິທີຂ້າງລຸ່ມ
-              </div>
-            ) : null}
 
             {tenderRows.map((t) => (
               <div key={t.key} className="settle-tender-row">
@@ -2093,6 +2088,7 @@ function SettleForm({
                   max={t.max}
                   step={1000}
                   value={t.amount || ""}
+                  placeholder="0"
                   disabled={!canSettle || t.readOnly}
                   onChange={(e) => t.setAmount(Number(e.target.value) || 0)}
                 />
@@ -2113,7 +2109,7 @@ function SettleForm({
                 are what someone hands over when they do not have it exact,
                 and each one is the smallest note-sized figure that covers
                 what is left — so the change works itself out. */}
-            {cashNow > 0 && remainingDue + cashNow > 0 ? (
+            {remainingDue + cashNow > 0 ? (
               <div className="settle-cash-quick">
                 {(() => {
                   // What cash still has to cover, ignoring what is already
