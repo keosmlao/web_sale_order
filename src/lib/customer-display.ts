@@ -36,6 +36,10 @@ export type CustomerDisplayState = {
   // Points this bill will credit once it settles. Worth showing: a scheme
   // nobody is told about earns nothing.
   pointsEarned: number;
+  // What the customer had before this bill. Together with pointsEarned and
+  // pointsUsed it gives the balance they walk out with, which is the number
+  // they actually care about.
+  pointsBalance: number;
   changeDue: number; // KIP
   remainingDue: number; // KIP
   transferAmount: number; // KIP to show as a BCEL QR (0 = hide QR)
@@ -59,6 +63,7 @@ export const IDLE_DISPLAY_STATE: CustomerDisplayState = {
   pointsUsed: 0,
   pointsUsedValue: 0,
   pointsEarned: 0,
+  pointsBalance: 0,
   changeDue: 0,
   remainingDue: 0,
   transferAmount: 0,

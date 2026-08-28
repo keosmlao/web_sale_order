@@ -1529,6 +1529,15 @@ function SettleForm({
     [order.items],
   );
   const billDifference = order.totalAmount - itemSubtotal;
+  // What the lines would have come to at list price, and what came off them.
+  // item.unitPrice is ic_trans_detail.price_2 (the list price) while
+  // item.amount is sum_amount_2 (after the line's own discount), so the
+  // difference is the member rate and any approved special price.
+  const grossListTotal = useMemo(
+    () => order.items.reduce((sum, it) => sum + it.unitPrice * it.quantity, 0),
+    [order.items],
+  );
+  const lineDiscountTotal = Math.max(0, grossListTotal - itemSubtotal);
   const cashKipKey = paymentKey(MAIN_CURRENCY, "cash");
   const transferKipKey = paymentKey(MAIN_CURRENCY, "transfer");
 
@@ -1590,11 +1599,16 @@ function SettleForm({
       // itemSubtotal is the sum of the line amounts, which already carry
       // any member rate or approved special price, so the gross has to be
       // reconstructed from the bill total plus what came off it.
-      grossTotal: order.totalAmount,
-      discount: billDiscountAmount,
+      // The list price of everything on the bill. The member discount is
+      // taken off each line when the order is written, so order.totalAmount
+      // is already net of it and the gross has to be rebuilt from the unit
+      // prices — which is why the discount never reached this screen.
+      grossTotal: grossListTotal,
+      discount: lineDiscountTotal + billDiscountAmount,
       pointsUsed: redeemPointsRequested,
       pointsUsedValue: redeemKipValue,
       pointsEarned: order.earnedPoints,
+      pointsBalance: redeemInfo?.pointBalance ?? 0,
       changeDue,
       remainingDue,
       transferAmount: transferQrAmount,
@@ -1613,6 +1627,9 @@ function SettleForm({
       billDiscountAmount,
       redeemPointsRequested,
       redeemKipValue,
+      grossListTotal,
+      lineDiscountTotal,
+      redeemInfo,
     ],
   );
 
