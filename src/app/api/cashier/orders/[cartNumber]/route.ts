@@ -174,10 +174,10 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
           DELETE FROM sn_trans_detail WHERE doc_ref = ${receiptDocNo}
         `;
         await tx.$executeRaw`
-          DELETE FROM ic_wms_trans_detail WHERE doc_ref = ${receiptDocNo}
+          DELETE FROM odg_wms_trans_detail WHERE doc_ref = ${receiptDocNo}
         `;
         await tx.$executeRaw`
-          DELETE FROM ic_wms_trans WHERE doc_ref = ${receiptDocNo}
+          DELETE FROM odg_wms_trans WHERE doc_ref = ${receiptDocNo}
         `;
         await tx.$executeRaw`
           DELETE FROM app_transfer_slip

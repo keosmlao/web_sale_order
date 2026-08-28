@@ -1229,77 +1229,65 @@ export async function POST(request: NextRequest) {
         `;
       }
 
-      // 5b. The goods-issue document the warehouse works from.
+      // 5b. The goods-issue document — ໃບຈ່າຍເຄື່ອງອອກສາງ.
       //
-      // The sale itself already moved the stock — the CAKAP lines above
-      // are the movement — so this is NOT a second one. calc_flag is 0 and
-      // nothing here touches a balance: it is the instruction to release
-      // what has been paid for.
+      // odg_wms_trans, not SML's ic_wms_trans. That one is empty; this is
+      // what the warehouse's own screens read, and it has 86,000 documents
+      // to follow rather than a convention to invent.
       //
-      // Both ic_wms_trans tables are empty, so there was no existing
-      // document to copy a convention from. It mirrors the sale it comes
-      // from — same trans_type/trans_flag, same warehouse and shelf per
-      // line — and carries the receipt in doc_ref and ref_doc_no so the
-      // two can always be tied together. The number is its own WMS series.
+      // Issued, not pending. doc_success '1' is what the 4,578 completed
+      // documents carry, and at the counter the customer leaves with the
+      // goods — a document sitting in "ຖ້າຈ່າຍ" would describe something
+      // that already happened.
+      //
+      // calc_flag -1 on the lines reads as an issue and cannot double-count
+      // the sale: nothing that computes stock touches these tables (no
+      // function, no view, and not sml_ic_function_stock_balance_warehouse).
+      // The CAKAP lines remain the one movement.
       const wmsNow = new Date();
-      const wmsPrefix = `WMS${String(wmsNow.getFullYear()).slice(2)}${String(
+      const wmsPrefix = `${wmsNow.getFullYear()}${String(
         wmsNow.getMonth() + 1,
       ).padStart(2, "0")}`;
       await tx.$executeRaw`
-        SELECT pg_advisory_xact_lock(hashtext(${`WMS:${wmsPrefix}`}))
+        SELECT pg_advisory_xact_lock(hashtext(${`ODGWMS:${wmsPrefix}`}))
       `;
       const wmsSeqRows = await tx.$queryRaw<Array<{ next_seq: number }>>`
-        SELECT COALESCE(MAX(CAST(SUBSTRING(doc_no FROM 10) AS INTEGER)), 0) + 1
+        SELECT COALESCE(MAX(CAST(SUBSTRING(doc_no FROM 7) AS INTEGER)), 0) + 1
                AS next_seq
-        FROM ic_wms_trans
+        FROM odg_wms_trans
         WHERE doc_no LIKE ${`${wmsPrefix}%`}
-          AND LENGTH(doc_no) = 13
+          AND LENGTH(doc_no) = 11
       `;
       const wmsDocNo = `${wmsPrefix}${String(
         wmsSeqRows[0]?.next_seq ?? 1,
-      ).padStart(4, "0")}`;
+      ).padStart(5, "0")}`;
+      const issueWh = (items[0]?.wh_code ?? "").trim();
 
       await tx.$executeRaw`
-        INSERT INTO ic_wms_trans (
-          trans_type, trans_flag, doc_date, doc_no, doc_ref, doc_ref_date,
-          cust_code, branch_code, department_code, sale_code,
-          currency_code, exchange_rate,
-          total_amount, balance_amount,
-          remark, status, create_date_time_now
+        INSERT INTO odg_wms_trans (
+          doc_date, doc_time, doc_no, doc_ref, wh_code, user_created,
+          status, create_date_time_now, trans_flag, wh_to, doc_success
         ) VALUES (
-          ${TRANS_TYPE}, ${TRANS_FLAG}, CURRENT_DATE, ${wmsDocNo}, ${docNo},
-          CURRENT_DATE,
-          ${custCode}, ${branchCode}, ${effectiveDepartmentCode},
-          ${salespersonCode ?? ""},
-          ${KIP_CURRENCY_CODE}, ${exchangeRate},
-          ${totalKip}, ${totalKip},
-          ${`ຈ່າຍສິນຄ້າອອກສາງ · ບິນ ${docNo}`},
-          0, NOW()
+          CURRENT_DATE, to_char(NOW(), 'HH24:MI'), ${wmsDocNo}, ${docNo},
+          ${issueWh}, ${userCode},
+          1, NOW(), 2, '', '1'
         )
       `;
-      for (let i = 0; i < items.length; i++) {
-        const it = items[i];
+      for (const it of items) {
         const issueQty = Number(it.qty ?? 0);
         if (!(issueQty > 0)) continue;
         await tx.$executeRaw`
-          INSERT INTO ic_wms_trans_detail (
-            trans_type, trans_flag, doc_date, doc_no, doc_ref,
-            cust_code, item_code, item_name, unit_code,
-            qty, total_qty, price, sum_amount,
-            wh_code, shelf_code, branch_code,
-            line_number, ref_doc_no, ref_doc_date, ref_line_number,
-            calc_flag, status, remark, create_date_time_now
+          INSERT INTO odg_wms_trans_detail (
+            trans_flag, doc_date, doc_no, doc_ref, item_code, item_name,
+            qty, unit_code, shelf_code, shelf_code1, wh_code, user_created,
+            status, calc_flag, create_date_time_now, doc_time
           ) VALUES (
-            ${TRANS_TYPE}, ${TRANS_FLAG}, CURRENT_DATE, ${wmsDocNo}, ${docNo},
-            ${custCode},
+            2, CURRENT_DATE, ${wmsDocNo}, ${docNo},
             ${it.item_code}, ${it.item_name ?? it.item_code},
-            ${it.unit_code ?? ""},
-            ${issueQty}, ${issueQty},
-            ${Number(it.price ?? 0)}, ${Number(it.amount ?? 0)},
-            ${(it.wh_code ?? "").trim()}, ${(it.shelf_code ?? "").trim()},
-            ${branchCode},
-            ${i}, ${docNo}, CURRENT_DATE, ${i},
-            0, 0, ${(it.remark ?? "").slice(0, 255)}, NOW()
+            ${issueQty}, ${it.unit_code ?? ""},
+            ${(it.shelf_code ?? "").trim()}, '',
+            ${(it.wh_code ?? "").trim()}, ${userCode},
+            0, -1, NOW(), to_char(NOW(), 'HH24:MI')
           )
         `;
       }
