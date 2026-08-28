@@ -2972,14 +2972,18 @@ a {
   }
   @media (max-width: 1050px) {
     .settle-layout {
-      grid-template-columns: minmax(0, 0.85fr) minmax(430px, 1.15fr);
       padding: 14px;
     }
     .settle-detail-grid {
       grid-template-columns: 1fr;
     }
   }
-  @media (max-width: 820px) {
+  /* Two columns need room to be two columns. Between about 820 and 1100
+     the payment side was held at a 430px minimum and the bill squeezed
+     into whatever was left, which is where it stopped looking like a
+     layout and started looking like two things wedged side by side. It
+     stacks instead, and each half gets the full width. */
+  @media (max-width: 1100px) {
     .settle-header {
       align-items: flex-start;
       padding: 16px;
