@@ -283,6 +283,44 @@ const sections: NavSection[] = [
         ),
       },
       {
+        id: "products",
+        label: "ຈັດການສິນຄ້າ",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+            <path d="m3.3 7 8.7 5 8.7-5" />
+            <path d="M12 22V12" />
+          </svg>
+        ),
+        children: [
+          {
+            href: "/promotions",
+            label: "ໂປຣໂມຊັນ",
+            icon: (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
+                <path d="M20.59 13.41 13 21l-9-9V4h8l8.59 8.59a2 2 0 0 1 0 2.82Z" />
+                <circle cx="8" cy="8" r="1.5" />
+              </svg>
+            ),
+          },
+          {
+            // Promotions arrive as a price sheet with a three-day window;
+            // the form takes one at a time, which is why they were never
+            // entered. This is the way they get in.
+            href: "/promotions/import",
+            label: "ນຳເຂົ້າໃບໂປຣ",
+            roles: ["head", "manager"],
+            icon: (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
+                <path d="M12 3v11" />
+                <path d="m8 10 4 4 4-4" />
+                <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
+              </svg>
+            ),
+          },
+        ],
+      },
+      {
         id: "settings",
         label: "ການຕັ້ງຄ່າ",
         icon: (
@@ -382,31 +420,6 @@ const sections: NavSection[] = [
                 <path d="M9 3h6" />
                 <path d="M10 3v6l-4.5 8A2 2 0 0 0 7.3 20h9.4a2 2 0 0 0 1.8-3L14 9V3" />
                 <path d="M7 14h10" />
-              </svg>
-            ),
-          },
-          {
-            href: "/promotions",
-            label: "ໂປຣໂມຊັນ",
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
-                <path d="M20.59 13.41 13 21l-9-9V4h8l8.59 8.59a2 2 0 0 1 0 2.82Z" />
-                <circle cx="8" cy="8" r="1.5" />
-              </svg>
-            ),
-          },
-          {
-            // Promotions arrive as a price sheet with a three-day window;
-            // the form takes one at a time, which is why they were never
-            // entered. This is the way they get in.
-            href: "/promotions/import",
-            label: "ນຳເຂົ້າໃບໂປຣ",
-            roles: ["head", "manager"],
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
-                <path d="M12 3v11" />
-                <path d="m8 10 4 4 4-4" />
-                <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
               </svg>
             ),
           },
