@@ -24,6 +24,18 @@ export type CustomerDisplayState = {
   // Of `paid`, the part that is a QR transfer still waiting on the customer.
   // Until they scan it, that money has not arrived.
   pendingTransfer: number;
+  // What the bill came to before anything was taken off. Equal to `total`
+  // when nothing was.
+  grossTotal: number;
+  // Taken off the bill: an approved bill discount, plus whatever the line
+  // prices already had off them (member rate, approved special prices).
+  discount: number;
+  // Loyalty points spent on this bill, and what they were worth in kip.
+  pointsUsed: number;
+  pointsUsedValue: number;
+  // Points this bill will credit once it settles. Worth showing: a scheme
+  // nobody is told about earns nothing.
+  pointsEarned: number;
   changeDue: number; // KIP
   remainingDue: number; // KIP
   transferAmount: number; // KIP to show as a BCEL QR (0 = hide QR)
@@ -42,6 +54,11 @@ export const IDLE_DISPLAY_STATE: CustomerDisplayState = {
   total: 0,
   paid: 0,
   pendingTransfer: 0,
+  grossTotal: 0,
+  discount: 0,
+  pointsUsed: 0,
+  pointsUsedValue: 0,
+  pointsEarned: 0,
   changeDue: 0,
   remainingDue: 0,
   transferAmount: 0,

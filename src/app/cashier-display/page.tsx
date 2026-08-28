@@ -28,6 +28,8 @@ export default function CustomerDisplayPage() {
   // can be balanced against it; the customer must not be told their money
   // is in while the QR is still in front of them.
   const received = Math.max(0, state.paid - state.pendingTransfer);
+  // Everything that came off the bill, however it came off.
+  const savings = Math.max(0, state.discount) + Math.max(0, state.pointsUsedValue);
   const stillOwed = Math.max(0, state.total - received);
 
   if (!hasBill) {
@@ -123,6 +125,41 @@ export default function CustomerDisplayPage() {
             customer is still being asked to scan is a request, not a
             receipt, so it is subtracted before this is shown. */}
         <footer className="border-t border-slate-200 bg-white px-8 py-6 shadow-[0_-16px_45px_rgba(15,23,42,0.10)]">
+          {/* What came off the bill, before the figure it came off. A
+              discount the customer is never shown is a discount they
+              cannot check — and one they will not remember was given. */}
+          {savings > 0 ? (
+            <div className="mb-5 flex flex-wrap items-center gap-x-8 gap-y-2 border-b border-dashed border-slate-200 pb-4">
+              <div className="flex items-baseline gap-2">
+                <span className="text-lg font-bold text-slate-400">ລວມກ່ອນຫຼຸດ</span>
+                <span className="text-2xl font-bold tabular-nums text-slate-400 line-through">
+                  {kip.format(state.grossTotal)}
+                </span>
+              </div>
+              {state.discount > 0 ? (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-lg font-bold text-rose-500">ສ່ວນຫຼຸດ</span>
+                  <span className="text-2xl font-black tabular-nums text-rose-600">
+                    −{kip.format(state.discount)} ₭
+                  </span>
+                </div>
+              ) : null}
+              {state.pointsUsedValue > 0 ? (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-lg font-bold text-violet-500">
+                    ໃຊ້ {kip.format(state.pointsUsed)} ແຕ້ມ
+                  </span>
+                  <span className="text-2xl font-black tabular-nums text-violet-600">
+                    −{kip.format(state.pointsUsedValue)} ₭
+                  </span>
+                </div>
+              ) : null}
+              <div className="ml-auto rounded-full bg-emerald-50 px-5 py-2 text-xl font-black text-emerald-700">
+                ປະຢັດໄດ້ {kip.format(savings)} ₭
+              </div>
+            </div>
+          ) : null}
+
           <div className="flex flex-wrap items-end justify-between gap-6">
             <div>
               <div className="text-lg font-bold text-slate-400">
@@ -131,6 +168,13 @@ export default function CustomerDisplayPage() {
               <div className="text-3xl font-black text-slate-500">
                 ລວມຍອດທັງໝົດ
               </div>
+              {/* Earned points sit under the total, where the customer is
+                  already looking, rather than competing with it. */}
+              {state.pointsEarned > 0 ? (
+                <div className="mt-2 inline-flex items-center gap-2 rounded-full bg-amber-50 px-4 py-1.5 text-lg font-black text-amber-700">
+                  ★ ໄດ້ແຕ້ມສະສົມ {kip.format(state.pointsEarned)} ແຕ້ມ
+                </div>
+              ) : null}
             </div>
             <div className="text-right leading-none">
               <span className="text-[64px] font-black tabular-nums text-[#0b2f5c]">

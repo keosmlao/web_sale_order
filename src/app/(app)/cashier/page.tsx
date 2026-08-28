@@ -1586,6 +1586,15 @@ function SettleForm({
       // customer display subtracts this so it never tells someone their
       // money has arrived while they are still being asked for it.
       pendingTransfer: qrPaymentSelected ? transferInMain : 0,
+      // Everything the customer saved, and what the bill was before it.
+      // itemSubtotal is the sum of the line amounts, which already carry
+      // any member rate or approved special price, so the gross has to be
+      // reconstructed from the bill total plus what came off it.
+      grossTotal: order.totalAmount,
+      discount: billDiscountAmount,
+      pointsUsed: redeemPointsRequested,
+      pointsUsedValue: redeemKipValue,
+      pointsEarned: order.earnedPoints,
       changeDue,
       remainingDue,
       transferAmount: transferQrAmount,
@@ -1601,6 +1610,9 @@ function SettleForm({
       transferQrAmount,
       transferInMain,
       qrPaymentSelected,
+      billDiscountAmount,
+      redeemPointsRequested,
+      redeemKipValue,
     ],
   );
 

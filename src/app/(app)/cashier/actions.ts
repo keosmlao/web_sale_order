@@ -54,6 +54,8 @@ export type CashierOrder = {
     | "HELD";
   deliveryName: string | null;
   extraDiscount: number;
+  /** Loyalty points this bill credits when it settles. */
+  earnedPoints: number;
   note: string | null;
   createdAt: string;
   warehouseCode: string | null;
@@ -140,6 +142,7 @@ type Row = {
   customer_name: string | null;
   customer_phone: string | null;
   amount: number | string | null;
+  sum_point: number | string | null;
   status: number | null;
   remark: string | null;
   create_date_time_now: Date;
@@ -208,6 +211,10 @@ export async function getCashierData() {
         ar.name_1 AS customer_name,
         ar.telephone AS customer_phone,
         t.total_amount_2 AS amount,
+        -- Loyalty points this bill will credit on settle. Shown to the
+        -- customer on the display, because a scheme nobody is told about
+        -- earns nothing.
+        t.sum_point,
         t.status,
         t.remark,
         t.create_date_time_now,
@@ -369,6 +376,7 @@ export async function getCashierData() {
       statusLabel: statusLabel(r.status, r.is_scheduled === true, r.is_held === true),
       deliveryName: parsed.deliveryName,
       extraDiscount: parsed.extraDiscount,
+      earnedPoints: Math.max(0, Math.floor(Number(r.sum_point ?? 0))),
       note: parsed.note,
       createdAt: r.create_date_time_now.toISOString(),
       warehouseCode: r.warehouse_code,
