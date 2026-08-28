@@ -35,8 +35,8 @@ export const APP_RELEASE = {
   notes: "ຂາຍຫຼາຍສາງ · ແກ້ໄຂ/ລົບບິນ · stock ຫັກ order ແລ້ວ · ໜ້າຕາໃໝ່",
 } as const;
 
-const BETA_VERSION = "3.5.0";
-const BETA_BUILD = 43;
+const BETA_VERSION = "3.5.1";
+const BETA_BUILD = 44;
 
 export const APP_BETA = {
   version: BETA_VERSION,
@@ -46,7 +46,7 @@ export const APP_BETA = {
   // behind stable is pulled forward like any other old build.
   minBuildNumber: BUILD,
   downloadUrl: "/downloads/odg-sale-beta.apk",
-  notes: "ເລືອກລູກຄ້າຢູ່ໜ້າຮ້ານ ພ້ອມສ່ວນຫຼຸດ ແລະ ແຕ້ມສະສົມ · ISN ຖືກຕ້ອງ",
+  notes: "ເລືອກລູກຄ້າຢູ່ໜ້າຮ້ານ ທັງມືຖື ແລະ ແທັບເລັດ ພ້ອມສ່ວນຫຼຸດ+ແຕ້ມ",
   // Set when beta is ahead of stable and there is something to try.
   isAhead: BETA_BUILD > BUILD,
 } as const;
