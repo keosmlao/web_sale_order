@@ -179,6 +179,25 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
         await tx.$executeRaw`
           DELETE FROM odg_wms_trans WHERE doc_ref = ${receiptDocNo}
         `;
+        // And the issue document, so the bill goes back into the
+        // warehouse's "ຖ້າຈ່າຍ" queue rather than reading as already
+        // picked. Children first: only the header carries the receipt, so
+        // they are found through it.
+        await tx.$executeRaw`
+          DELETE FROM wms_product_out_serial_detail
+          WHERE ref_out_doc IN (
+            SELECT doc_no FROM wms_product_out WHERE ref_doc_no = ${receiptDocNo}
+          )
+        `;
+        await tx.$executeRaw`
+          DELETE FROM wms_product_out_detail
+          WHERE doc_no IN (
+            SELECT doc_no FROM wms_product_out WHERE ref_doc_no = ${receiptDocNo}
+          )
+        `;
+        await tx.$executeRaw`
+          DELETE FROM wms_product_out WHERE ref_doc_no = ${receiptDocNo}
+        `;
         await tx.$executeRaw`
           DELETE FROM app_transfer_slip
           WHERE doc_no = ${receiptDocNo}
