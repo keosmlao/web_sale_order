@@ -26,6 +26,29 @@ type Row = {
 
 const moneyFmt = new Intl.NumberFormat("en-US");
 
+// Local YYYY-MM-DD, for <input type="date"> values and the quick ranges.
+function ymd(d: Date): string {
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+// The ranges a cashier actually asks for, one tap each. Everything else is
+// behind ຕົວກອງ.
+function quickRanges(): Array<{ label: string; from: string; to: string }> {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const week = new Date(today);
+  week.setDate(today.getDate() - 6);
+  return [
+    { label: "ມື້ນີ້", from: ymd(today), to: ymd(today) },
+    { label: "ວານນີ້", from: ymd(yesterday), to: ymd(yesterday) },
+    { label: "7 ວັນ", from: ymd(week), to: ymd(today) },
+    { label: "ທັງໝົດ", from: "", to: "" },
+  ];
+}
+
 // Badge for the channel that created the order: 'web' (browser POS) or 'app'
 // (Flutter sales app). Older orders have no record → show a neutral dash.
 function SourceBadge({ source }: { source: string | null }) {
@@ -54,6 +77,7 @@ export default function HistoryClient() {
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
   const [status, setStatus] = useState<"all" | "settled" | "voided">("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const fetchHistory = useCallback(async () => {
     setLoading(true);
@@ -130,52 +154,103 @@ export default function HistoryClient() {
         </p>
       </header>
 
-      {/* On a phone the four filters stacked a full screen tall before the
-          first receipt appeared. Two columns: search across the top, the
-          dates side by side, status beside its future neighbour. */}
-      <div className="mb-4 grid grid-cols-2 gap-2 rounded-md border border-odoo-border bg-odoo-surface p-3 sm:grid-cols-5">
-        <label className="col-span-2 grid gap-1">
-          <span className="odoo-label">ຄົ້ນ</span>
+      {/* The filter block used to be four stacked fields — a full phone
+          screen of empty form before the first receipt. What a cashier
+          actually does here is search a number or tap a day. So: one
+          search bar, one row of ready-made ranges, and the seldom-used
+          date pickers and status behind ຕົວກອງ. */}
+      <div className="mb-4 rounded-md border border-odoo-border bg-odoo-surface p-3">
+        <div className="flex items-center gap-2">
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="ເລກບິນ / ຊື່ / ເບີໂທ"
-            className="odoo-input"
+            placeholder="ຄົ້ນ ເລກບິນ / ຊື່ / ເບີໂທ"
+            className="odoo-input flex-1"
           />
-        </label>
-        <label className="grid gap-1">
-          <span className="odoo-label">ຈາກວັນທີ</span>
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            className="odoo-input"
-          />
-        </label>
-        <label className="grid gap-1">
-          <span className="odoo-label">ເຖິງວັນທີ</span>
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            className="odoo-input"
-          />
-        </label>
-        <label className="grid gap-1">
-          <span className="odoo-label">ສະຖານະ</span>
-          <select
-            value={status}
-            onChange={(e) =>
-              setStatus(e.target.value as "all" | "settled" | "voided")
-            }
-            className="odoo-input"
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((v) => !v)}
+            className={`odoo-btn shrink-0 ${
+              from || to || status !== "all"
+                ? "border-odoo-primary text-odoo-primary"
+                : ""
+            }`}
           >
-            <option value="all">ທັງໝົດ</option>
-            <option value="settled">ປົກກະຕິ</option>
-            <option value="voided">ຍົກເລີກ</option>
-          </select>
-        </label>
+            ຕົວກອງ {filtersOpen ? "▴" : "▾"}
+          </button>
+        </div>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {quickRanges().map((r) => {
+            const active = from === r.from && to === r.to;
+            return (
+              <button
+                key={r.label}
+                type="button"
+                onClick={() => {
+                  setFrom(r.from);
+                  setTo(r.to);
+                }}
+                className={
+                  "rounded-full px-3 py-1.5 text-xs font-semibold transition " +
+                  (active
+                    ? "bg-odoo-primary text-white"
+                    : "bg-odoo-surface-muted text-odoo-text hover:bg-odoo-border")
+                }
+              >
+                {r.label}
+              </button>
+            );
+          })}
+        </div>
+        {filtersOpen ? (
+          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-odoo-border pt-3 sm:grid-cols-3">
+            <label className="grid gap-1">
+              <span className="odoo-label">ຈາກວັນທີ</span>
+              <input
+                type="date"
+                value={from}
+                onChange={(e) => setFrom(e.target.value)}
+                className="odoo-input"
+              />
+            </label>
+            <label className="grid gap-1">
+              <span className="odoo-label">ເຖິງວັນທີ</span>
+              <input
+                type="date"
+                value={to}
+                onChange={(e) => setTo(e.target.value)}
+                className="odoo-input"
+              />
+            </label>
+            <div className="col-span-2 grid gap-1 sm:col-span-1">
+              <span className="odoo-label">ສະຖານະ</span>
+              <div className="flex gap-1.5">
+                {(
+                  [
+                    ["all", "ທັງໝົດ"],
+                    ["settled", "ປົກກະຕິ"],
+                    ["voided", "ຍົກເລີກ"],
+                  ] as const
+                ).map(([value, label]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setStatus(value)}
+                    className={
+                      "flex-1 rounded-md px-2 py-2 text-xs font-semibold transition " +
+                      (status === value
+                        ? "bg-odoo-primary text-white"
+                        : "bg-odoo-surface-muted text-odoo-text hover:bg-odoo-border")
+                    }
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {error ? (
