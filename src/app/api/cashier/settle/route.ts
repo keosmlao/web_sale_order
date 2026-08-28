@@ -1229,6 +1229,81 @@ export async function POST(request: NextRequest) {
         `;
       }
 
+      // 5b. The goods-issue document the warehouse works from.
+      //
+      // The sale itself already moved the stock — the CAKAP lines above
+      // are the movement — so this is NOT a second one. calc_flag is 0 and
+      // nothing here touches a balance: it is the instruction to release
+      // what has been paid for.
+      //
+      // Both ic_wms_trans tables are empty, so there was no existing
+      // document to copy a convention from. It mirrors the sale it comes
+      // from — same trans_type/trans_flag, same warehouse and shelf per
+      // line — and carries the receipt in doc_ref and ref_doc_no so the
+      // two can always be tied together. The number is its own WMS series.
+      const wmsNow = new Date();
+      const wmsPrefix = `WMS${String(wmsNow.getFullYear()).slice(2)}${String(
+        wmsNow.getMonth() + 1,
+      ).padStart(2, "0")}`;
+      await tx.$executeRaw`
+        SELECT pg_advisory_xact_lock(hashtext(${`WMS:${wmsPrefix}`}))
+      `;
+      const wmsSeqRows = await tx.$queryRaw<Array<{ next_seq: number }>>`
+        SELECT COALESCE(MAX(CAST(SUBSTRING(doc_no FROM 10) AS INTEGER)), 0) + 1
+               AS next_seq
+        FROM ic_wms_trans
+        WHERE doc_no LIKE ${`${wmsPrefix}%`}
+          AND LENGTH(doc_no) = 13
+      `;
+      const wmsDocNo = `${wmsPrefix}${String(
+        wmsSeqRows[0]?.next_seq ?? 1,
+      ).padStart(4, "0")}`;
+
+      await tx.$executeRaw`
+        INSERT INTO ic_wms_trans (
+          trans_type, trans_flag, doc_date, doc_no, doc_ref, doc_ref_date,
+          cust_code, branch_code, department_code, sale_code,
+          currency_code, exchange_rate,
+          total_amount, balance_amount,
+          remark, status, create_date_time_now
+        ) VALUES (
+          ${TRANS_TYPE}, ${TRANS_FLAG}, CURRENT_DATE, ${wmsDocNo}, ${docNo},
+          CURRENT_DATE,
+          ${custCode}, ${branchCode}, ${effectiveDepartmentCode},
+          ${salespersonCode ?? ""},
+          ${KIP_CURRENCY_CODE}, ${exchangeRate},
+          ${totalKip}, ${totalKip},
+          ${`ຈ່າຍສິນຄ້າອອກສາງ · ບິນ ${docNo}`},
+          0, NOW()
+        )
+      `;
+      for (let i = 0; i < items.length; i++) {
+        const it = items[i];
+        const issueQty = Number(it.qty ?? 0);
+        if (!(issueQty > 0)) continue;
+        await tx.$executeRaw`
+          INSERT INTO ic_wms_trans_detail (
+            trans_type, trans_flag, doc_date, doc_no, doc_ref,
+            cust_code, item_code, item_name, unit_code,
+            qty, total_qty, price, sum_amount,
+            wh_code, shelf_code, branch_code,
+            line_number, ref_doc_no, ref_doc_date, ref_line_number,
+            calc_flag, status, remark, create_date_time_now
+          ) VALUES (
+            ${TRANS_TYPE}, ${TRANS_FLAG}, CURRENT_DATE, ${wmsDocNo}, ${docNo},
+            ${custCode},
+            ${it.item_code}, ${it.item_name ?? it.item_code},
+            ${it.unit_code ?? ""},
+            ${issueQty}, ${issueQty},
+            ${Number(it.price ?? 0)}, ${Number(it.amount ?? 0)},
+            ${(it.wh_code ?? "").trim()}, ${(it.shelf_code ?? "").trim()},
+            ${branchCode},
+            ${i}, ${docNo}, CURRENT_DATE, ${i},
+            0, 0, ${(it.remark ?? "").slice(0, 255)}, NOW()
+          )
+        `;
+      }
+
       // 6. Insert cb_trans (cash/transfer receipt) — amounts in THB (base currency).
       // SML convention for foreign-currency sales: cb_trans.currency_code is
       // left empty and exchange_rate = 0; everything is stored in THB.
@@ -1526,7 +1601,22 @@ export async function POST(request: NextRequest) {
         const dpcNo = `${dpcPrefix}${String(
           dpcSeqRows[0]?.next_seq ?? 1,
         ).padStart(4, "0")}`;
+        // The header for those detail lines. It was never written: the
+        // ledger had DPC detail rows belonging to a document that did not
+        // exist, so anything reading sn_trans saw no issue at all.
+        await tx.$executeRaw`
+          INSERT INTO sn_trans (
+            trans_flag, doc_no, doc_date, user_created, status,
+            item_count, doc_def, doc_format_code, wh_code,
+            create_date_time_now
+          ) VALUES (
+            44, ${dpcNo}, CURRENT_DATE, ${userCode}, 0,
+            ${soldSerials.length}, ${docNo}, 'DPC',
+            ${soldSerials[0]?.warehouse_code ?? ""}, NOW()
+          )
+        `;
         for (const unit of soldSerials) {
+          const unitKey = unit.isn?.trim() || unit.serial_number;
           await tx.$executeRaw`
             INSERT INTO sn_trans_detail (
               trans_flag, doc_no, doc_date, user_created, item_code, sn, qty,
@@ -1534,10 +1624,20 @@ export async function POST(request: NextRequest) {
               create_date_time_now
             ) VALUES (
               44, ${dpcNo}, CURRENT_DATE, ${userCode}, ${unit.item_code},
-              ${unit.isn?.trim() || unit.serial_number}, 1, -1,
+              ${unitKey}, 1, -1,
               ${unit.warehouse_code},
               ${unit.location_code}, ${unit.isn}, ${docNo}, NOW()
             )
+          `;
+          // And take the unit off the shelf in the serial master. The
+          // ledger is what the stock figures are read from, but
+          // sn_inventory.status is what the warehouse's own screens show,
+          // and leaving it at 0 kept a sold television listed as on hand.
+          await tx.$executeRaw`
+            UPDATE sn_inventory
+            SET status = 1, updated_at = NOW()
+            WHERE isn = ${unitKey}
+              AND (${unit.warehouse_code} = '' OR wh_code = ${unit.warehouse_code})
           `;
         }
       }

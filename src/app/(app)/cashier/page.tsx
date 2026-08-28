@@ -2331,7 +2331,10 @@ function SettleForm({
                   const need = Math.max(0, remainingDue + cashNow - 0);
                   const steps = [10000, 100000, 1000000];
                   const opts: Array<{ label: string; value: number }> = [
-                    { label: "ພໍດີ", value: need },
+                    // Named and figured: on its own the word read as a
+                    // heading over the round-ups rather than the first of
+                    // them.
+                    { label: `ພໍດີ ${moneyFmt.format(need)}`, value: need },
                   ];
                   for (const step of steps) {
                     const up = Math.ceil(need / step) * step;

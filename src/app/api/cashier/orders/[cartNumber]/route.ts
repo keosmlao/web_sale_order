@@ -152,6 +152,33 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
           LIMIT 1
         `;
 
+        // The warehouse must not go on picking goods for a sale that no
+        // longer exists, and a unit taken off the shelf for it has to go
+        // back on.
+        await tx.$executeRaw`
+          UPDATE sn_inventory SET status = 0, updated_at = NOW()
+          WHERE isn IN (
+            SELECT isn FROM sn_trans_detail
+            WHERE doc_ref = ${receiptDocNo} AND COALESCE(isn, '') <> ''
+          )
+        `;
+        // The serial issue goes too — detail first, then its header, which
+        // is now written and would otherwise be left pointing at nothing.
+        await tx.$executeRaw`
+          DELETE FROM sn_trans WHERE doc_no IN (
+            SELECT DISTINCT doc_no FROM sn_trans_detail
+            WHERE doc_ref = ${receiptDocNo}
+          )
+        `;
+        await tx.$executeRaw`
+          DELETE FROM sn_trans_detail WHERE doc_ref = ${receiptDocNo}
+        `;
+        await tx.$executeRaw`
+          DELETE FROM ic_wms_trans_detail WHERE doc_ref = ${receiptDocNo}
+        `;
+        await tx.$executeRaw`
+          DELETE FROM ic_wms_trans WHERE doc_ref = ${receiptDocNo}
+        `;
         await tx.$executeRaw`
           DELETE FROM app_transfer_slip
           WHERE doc_no = ${receiptDocNo}
