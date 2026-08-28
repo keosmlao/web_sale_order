@@ -701,29 +701,63 @@ function OrdersView({
       {/* The cards and the filter chips said the same numbers twice — a row
           of coloured counters to look at, then a row of grey chips to
           actually press. The cards ARE the filter now: press one to see
-          that pile, press it again for everything. */}
-      <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {(
-          [
-            ["PENDING", "ລໍຖ້າຮັບເງິນ", "amber"],
-            ["HELD", "ພັກໄວ້", "slate"],
-            ["COMPLETED", "ຮັບເງິນສຳເລັດ", "emerald"],
-            ["SCHEDULED", "ຈັດຖ້ຽວ", "sky"],
-            ["CANCELLED", "ຍົກເລີກ", "red"],
-          ] as Array<[StatusFilter, string, "amber" | "slate" | "emerald" | "sky" | "red"]>
-        ).map(([status, label, tone]) => (
-          <SummaryCard
-            key={status}
-            label={label}
-            value={counts[status]}
-            tone={tone}
-            active={statusFilter === status}
-            onClick={() =>
-              onStatusFilterChange(statusFilter === status ? "ALL" : status)
-            }
-          />
-        ))}
-      </div>
+          that pile, press it again for everything.
+
+          On a phone five cards stacked two screens tall before the first
+          order appeared, so below sm the same filters render as one wrap
+          row of chips — label and count, the active one filled. */}
+      {(() => {
+        const filterDefs = [
+          ["PENDING", "ລໍຖ້າຮັບເງິນ", "amber"],
+          ["HELD", "ພັກໄວ້", "slate"],
+          ["COMPLETED", "ຮັບເງິນສຳເລັດ", "emerald"],
+          ["SCHEDULED", "ຈັດຖ້ຽວ", "sky"],
+          ["CANCELLED", "ຍົກເລີກ", "red"],
+        ] as Array<
+          [StatusFilter, string, "amber" | "slate" | "emerald" | "sky" | "red"]
+        >;
+        return (
+          <>
+            <div className="mb-3 flex flex-wrap gap-1.5 sm:hidden">
+              {filterDefs.map(([status, label]) => (
+                <button
+                  key={status}
+                  type="button"
+                  onClick={() =>
+                    onStatusFilterChange(
+                      statusFilter === status ? "ALL" : status,
+                    )
+                  }
+                  className={
+                    "rounded-full px-3 py-1.5 text-xs font-bold transition " +
+                    (statusFilter === status
+                      ? "bg-odoo-primary text-white"
+                      : "bg-white text-odoo-text border border-odoo-border")
+                  }
+                >
+                  {label} {counts[status]}
+                </button>
+              ))}
+            </div>
+            <div className="mb-4 hidden gap-3 sm:grid sm:grid-cols-5">
+              {filterDefs.map(([status, label, tone]) => (
+                <SummaryCard
+                  key={status}
+                  label={label}
+                  value={counts[status]}
+                  tone={tone}
+                  active={statusFilter === status}
+                  onClick={() =>
+                    onStatusFilterChange(
+                      statusFilter === status ? "ALL" : status,
+                    )
+                  }
+                />
+              ))}
+            </div>
+          </>
+        );
+      })()}
 
       <section className="odoo-card overflow-hidden">
         <div className="flex flex-wrap items-center gap-3 border-b border-odoo-border p-4">
