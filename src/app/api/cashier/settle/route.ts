@@ -1231,24 +1231,25 @@ export async function POST(request: NextRequest) {
 
       // 5b. The goods-issue document — ໃບຈ່າຍເຄື່ອງອອກສາງ.
       //
-      // odg_wms_trans, not SML's ic_wms_trans: this is what the warehouse's
-      // own screens read. Written as a DP document, which is what an issue
-      // looks like there now — DP260828-89391 against a CAKAP receipt is the
-      // shape the warehouse handed back as the example.
+      // Written the way the WMS's own ຢືນຢັນຈ່າຍ writes it (executeIssue in
+      // odg_wms/src/lib/issueCore.ts), because that is the document every
+      // screen over there is built to read:
       //
-      // The bare-numeric series this used to mint into (202608nnnnn) is the
-      // ERP mirror, and it has not moved since 26 June; every series the
-      // warehouse writes itself carries a prefix and its own counter — DP
-      // for issues, RC for receipts, ADJ for adjustments. The number comes
-      // from odg_wms_trans_roworder_seq, which is where the DP documents in
-      // the table take theirs: a sequence cannot hand out the same number
-      // twice, so there is no lock and no high-water mark to read.
+      //  · The "ຖ້າຈ່າຍ" queue nets a flag-44 bill against
+      //    odg_wms_trans_detail rows with trans_flag 72, calc_flag -1,
+      //    status 0, doc_ref = the bill. These rows ARE that netting: the
+      //    bill leaves the queue the moment the till settles it.
+      //  · doc_no is DP<YYMMDD>-<seq5> from odg_wms_trans_roworder_seq —
+      //    their generator, verbatim. A sequence cannot hand out the same
+      //    number twice, so no lock and no high-water mark.
+      //  · The line's shelf_code/shelf_code1 are the WMS's PHYSICAL rack
+      //    and bin (110101 / 110101-A01), not the ERP condition shelf —
+      //    their pick validation sums balance per rack+bin, so an issue
+      //    written against the ERP shelf would strand the real bin's
+      //    balance. The unit's own sn_inventory row says where it sat.
       //
-      // trans_flag 72, header status 0, calc_flag -1 on the lines — the
-      // fourteen DP documents, to the column. It cannot double-count the
-      // sale: nothing that computes stock reads these tables (no function,
-      // no view, and not sml_ic_function_stock_balance_warehouse). The CAKAP
-      // lines remain the one movement.
+      // It cannot double-count the sale: nothing that computes ERP stock
+      // reads these tables. The CAKAP lines remain the one ERP movement.
       const wmsDocRows = await tx.$queryRaw<Array<{ doc_no: string }>>`
         SELECT 'DP' || to_char(CURRENT_DATE, 'YYMMDD') || '-' ||
                lpad(nextval('public.odg_wms_trans_roworder_seq')::text, 5, '0')
@@ -1257,76 +1258,107 @@ export async function POST(request: NextRequest) {
       const wmsDocNo = wmsDocRows[0]?.doc_no ?? "";
       const issueWh = (items[0]?.wh_code ?? "").trim();
 
-      // Where the goods are picked from. The lines carry the shelf in
-      // shelf_code and the bin in shelf_code1 — 110101 and 110101-A01 — and
-      // the bin is the only thing on the document that tells a picker where
-      // to walk; ours were going out blank. app_order_serial is where the
-      // till recorded it as the unit went onto the order. A line can only
-      // name one bin, so an item split across bins takes the first: that is
-      // the document, not the stock, and the serial ledger still issues each
-      // unit from where it actually sat.
+      // Every serialised unit on the order, joined to its sn_inventory row
+      // for the printed serial, the ISN, and the physical rack/bin/pallet
+      // it is being taken from. Feeds the DP lines here and the serial
+      // ledger in 11b.
       const allocRows = await tx.$queryRaw<
         Array<{
           item_code: string;
-          location_code: string | null;
-          serial_number: string | null;
+          sn: string | null;
+          isn: string | null;
+          rack: string | null;
+          location: string | null;
+          pallet: string | null;
+          wh_code: string | null;
         }>
       >`
-        SELECT item_code, location_code, serial_number
-        FROM app_order_serial
-        WHERE doc_no = ${cart.doc_no}
+        SELECT s.item_code,
+               inv.sn,
+               COALESCE(inv.isn, s.isn, s.serial_number) AS isn,
+               inv.rack, inv.location, inv.pallet,
+               COALESCE(inv.wh_code, s.warehouse_code) AS wh_code
+        FROM app_order_serial s
+        LEFT JOIN sn_inventory inv
+          ON inv.isn = COALESCE(NULLIF(TRIM(s.isn), ''), s.serial_number)
+        WHERE s.doc_no = ${cart.doc_no}
+          AND COALESCE(s.serial_number, '') <> ''
       `;
-      const binByItem = new Map<string, string>();
-      for (const row of allocRows) {
-        const bin = (row.location_code ?? "").trim();
-        if (bin && !binByItem.has(row.item_code)) {
-          binByItem.set(row.item_code, bin);
-        }
-      }
 
       await tx.$executeRaw`
         INSERT INTO odg_wms_trans (
-          doc_date, doc_time, doc_no, doc_ref, wh_code, user_created,
-          status, create_date_time_now, trans_flag, wh_to
+          trans_flag, doc_date, doc_time, doc_no, doc_ref, wh_code,
+          user_created, status, create_date_time_now
         ) VALUES (
-          CURRENT_DATE, to_char(NOW(), 'HH24:MI'), ${wmsDocNo}, ${docNo},
-          ${issueWh}, ${userCode},
-          0, NOW(), 72, ''
+          72, CURRENT_DATE, to_char(NOW(), 'HH24:MI'), ${wmsDocNo}, ${docNo},
+          ${issueWh}, ${userCode}, 0, NOW()
         )
       `;
+
+      // One DP line per (item, rack, bin) the serials actually occupy —
+      // that is the node the WMS receive put the +1 on, so it is the node
+      // the -1 has to land on. An item with no serials falls back to one
+      // line on the ERP shelf, which is all anyone recorded for it.
+      type WmsLine = {
+        rack: string;
+        location: string;
+        pallet: string;
+        qty: number;
+      };
+      const wmsLinesByItem = new Map<string, Map<string, WmsLine>>();
+      for (const a of allocRows) {
+        const byNode =
+          wmsLinesByItem.get(a.item_code) ?? new Map<string, WmsLine>();
+        wmsLinesByItem.set(a.item_code, byNode);
+        const rack = (a.rack ?? "").trim();
+        const location = (a.location ?? "").trim();
+        const pallet = (a.pallet ?? "").trim();
+        const key = `${rack}|${location}|${pallet}`;
+        const node = byNode.get(key) ?? { rack, location, pallet, qty: 0 };
+        node.qty += 1;
+        byNode.set(key, node);
+      }
+
       for (const it of items) {
         const issueQty = Number(it.qty ?? 0);
         if (!(issueQty > 0)) continue;
-        await tx.$executeRaw`
-          INSERT INTO odg_wms_trans_detail (
-            trans_flag, doc_date, doc_no, doc_ref, item_code, item_name,
-            qty, unit_code, shelf_code, shelf_code1, wh_code, user_created,
-            status, calc_flag, create_date_time_now, doc_time
-          ) VALUES (
-            72, CURRENT_DATE, ${wmsDocNo}, ${docNo},
-            ${it.item_code}, ${it.item_name ?? it.item_code},
-            ${issueQty}, ${it.unit_code ?? ""},
-            ${(it.shelf_code ?? "").trim()},
-            ${binByItem.get(it.item_code) ?? ""},
-            ${(it.wh_code ?? "").trim()}, ${userCode},
-            0, -1, NOW(), to_char(NOW(), 'HH24:MI')
-          )
-        `;
+        const nodes = [...(wmsLinesByItem.get(it.item_code)?.values() ?? [])];
+        const lines: WmsLine[] = nodes.length
+          ? nodes
+          : [
+              {
+                rack: (it.shelf_code ?? "").trim(),
+                location: "",
+                pallet: "",
+                qty: issueQty,
+              },
+            ];
+        for (const line of lines) {
+          await tx.$executeRaw`
+            INSERT INTO odg_wms_trans_detail (
+              trans_flag, doc_date, doc_no, doc_ref, item_code, item_name,
+              qty, unit_code, shelf_code, shelf_code1, wh_code, user_created,
+              status, calc_flag, doc_time, pallet, create_date_time_now
+            ) VALUES (
+              72, CURRENT_DATE, ${wmsDocNo}, ${docNo},
+              ${it.item_code}, ${it.item_name ?? it.item_code},
+              ${line.qty}, ${it.unit_code ?? ""},
+              ${line.rack || null}, ${line.location || null},
+              ${(it.wh_code ?? "").trim()}, ${userCode},
+              0, -1, to_char(NOW(), 'HH24:MI'), ${line.pallet || null}, NOW()
+            )
+          `;
+        }
       }
 
-      // 5c. The issue document itself — ໃບຈ່າຍ (OUT).
+      // 5c. The pick document — ໃບສັ່ງຈ່າຍ (OUT).
       //
-      // The DP rows above are the ledger. They are not what the warehouse's
-      // "ຖ້າຈ່າຍ" queue reads: a bill leaves that queue when an OUT document
-      // in wms_product_out references it, which is why a counter sale sat
-      // there waiting to be picked long after the customer had walked out
-      // with the goods in their hands.
-      //
-      // So the till raises it, exactly as the WMS's own ຢືນຢັນຈ່າຍ does:
-      // both documents, one after the other, in this transaction. doc_type
-      // 44 is the sale — the same flag the bill carries — and status 1 is
-      // issued, because at the counter it is. Numbered from the table's own
-      // sequence, the way OUT260731-00072 was.
+      // The WMS's own flow raises this at pick time (stage 1) and the DP at
+      // confirm (stage 2); at the counter both stages have already happened
+      // in the customer's hands, so the till writes them together. status 1
+      // marks it issued, which also keeps it out of the queue's
+      // pending-pick subtraction — the DP rows above are what actually net
+      // the bill off the queue.
       const outDocRows = await tx.$queryRaw<Array<{ doc_no: string }>>`
         SELECT 'OUT' || to_char(CURRENT_DATE, 'YYMMDD') || '-' ||
                lpad(nextval('public.wms_product_out_roworder_seq')::text, 5, '0')
@@ -1349,31 +1381,43 @@ export async function POST(request: NextRequest) {
       for (const it of items) {
         const issueQty = Number(it.qty ?? 0);
         if (!(issueQty > 0)) continue;
-        const shelf = (it.shelf_code ?? "").trim();
-        const bin = binByItem.get(it.item_code) ?? "";
-        // The lines carry the walk as one string — "120102|120102-B0409|",
-        // shelf then bin then a trailing bar — and the bin again on its own
-        // in box_code. Without a bin there is only the shelf to give.
-        const shelfPath = bin ? `${shelf}|${bin}|` : shelf;
-        await tx.$executeRaw`
-          INSERT INTO wms_product_out_detail (
-            doc_no, doc_date, doc_time, item_code, item_name, unit_code,
-            qty, price, sum_amount, box_code, shelf_code, ref_doc_no,
-            create_date_time_now
-          ) VALUES (
-            ${outDocNo}, CURRENT_DATE, '',
-            ${it.item_code}, ${it.item_name ?? it.item_code},
-            ${it.unit_code ?? ""},
-            ${issueQty}, 0, 0, ${bin}, ${shelfPath}, '',
-            NOW()
-          )
-        `;
+        const nodes = [...(wmsLinesByItem.get(it.item_code)?.values() ?? [])];
+        const lines: WmsLine[] = nodes.length
+          ? nodes
+          : [
+              {
+                rack: (it.shelf_code ?? "").trim(),
+                location: "",
+                pallet: "",
+                qty: issueQty,
+              },
+            ];
+        for (const line of lines) {
+          // The lines carry the walk as one string — "110101|110101-A01|",
+          // rack then bin then a trailing bar — and the bin again on its
+          // own in box_code. Without a bin there is only the rack to give.
+          const shelfPath = line.location
+            ? `${line.rack}|${line.location}|`
+            : line.rack;
+          await tx.$executeRaw`
+            INSERT INTO wms_product_out_detail (
+              doc_no, doc_date, doc_time, item_code, item_name, unit_code,
+              qty, price, sum_amount, box_code, shelf_code, ref_doc_no,
+              create_date_time_now
+            ) VALUES (
+              ${outDocNo}, CURRENT_DATE, '',
+              ${it.item_code}, ${it.item_name ?? it.item_code},
+              ${it.unit_code ?? ""},
+              ${line.qty}, 0, 0, ${line.location}, ${shelfPath}, '',
+              NOW()
+            )
+          `;
+        }
       }
-      // Which units left, by their serial. The WMS records the printed
-      // serial here, not the ISN — the ISN is the ledger's business, and
-      // section 11b below is where it nets the unit off the shelf.
+      // Which units left, by their printed serial — that is what the WMS
+      // records here; the ISN is the ledger's business in 11b.
       for (const alloc of allocRows) {
-        const serial = (alloc.serial_number ?? "").trim();
+        const serial = (alloc.sn ?? alloc.isn ?? "").trim();
         if (!serial) continue;
         await tx.$executeRaw`
           INSERT INTO wms_product_out_serial_detail (
@@ -1626,115 +1670,56 @@ export async function POST(request: NextRequest) {
 
       // 11b. Issue the serial-tracked units out of the storefront.
       //
-      // Nothing else does this. The WMS serial ledger has never referenced a
-      // SOK and references a CAKAP exactly once — a row somebody wrote by
-      // hand in May for CAKAP26000001. Until now a television sold over the
-      // counter stayed "ຢູ່ໃນສາງ" in the WMS for good.
-      //
-      // That hand-written row is the pattern followed here: trans_flag 44,
-      // calc_flag -1, qty 1, doc_ref pointing at the receipt, and a doc_no
-      // in the DPC{YYYY}{MM}{seq} series the WMS mints for itself.
+      // Under the SAME DP document as the stock rows, exactly as the WMS's
+      // executeIssue writes it: sn_trans header flag 56, doc_format_code
+      // 'DP', doc_def carrying the source document; sn_trans_detail flag 56,
+      // calc_flag -1, the printed serial in sn, the company serial in isn,
+      // and the physical rack/bin/pallet the unit sat in. This used to mint
+      // a separate DPC document — a series SML also mints into, which is
+      // how two unrelated documents ended up sharing a number, and a
+      // document the WMS's own DP screens never joined to.
       //
       // Storefront only. Every other warehouse issues serials through the
       // WMS's own flow, and posting on their behalf would take the stock out
       // twice.
-      const soldSerials = await tx.$queryRaw<
-        Array<{
-          item_code: string;
-          serial_number: string | null;
-          warehouse_code: string | null;
-          location_code: string | null;
-          isn: string | null;
-        }>
-      >`
-        -- sn_trans_detail.sn holds the ISN, whatever the column is
-        -- called: joining the ledger on sn_inventory.isn matches 807 of
-        -- the 852 units in warehouse 1101, against 120 joining sn to sn.
-        -- So the issue-out has to carry the ISN, or it will not net off
-        -- against the movement that brought the unit in and the unit
-        -- stays on the shelf forever.
-        --
-        -- serial_number is the fallback for orders written before the
-        -- endpoint told the two numbers apart: back then it WAS the ISN.
-        SELECT item_code, serial_number, warehouse_code, location_code, isn
-        FROM app_order_serial
-        WHERE doc_no = ${cart.doc_no}
-          AND warehouse_code = ${STOREFRONT_WAREHOUSE}
-          AND COALESCE(serial_number, '') <> ''
-      `;
+      const soldSerials = allocRows.filter(
+        (a) => (a.wh_code ?? "").trim() === STOREFRONT_WAREHOUSE,
+      );
       if (soldSerials.length > 0) {
-        const now = new Date();
-        const dpcPrefix = `DPC${now.getFullYear()}${String(
-          now.getMonth() + 1,
-        ).padStart(2, "0")}`;
-        // Same guard the receipt number uses: serialise allocation for the
-        // month so two tills cannot mint the same DPC.
-        await tx.$executeRaw`
-          SELECT pg_advisory_xact_lock(hashtext(${`DPC:${dpcPrefix}`}))
-        `;
-        // Read the high-water mark from BOTH serial tables.
-        //
-        // It scanned sn_trans_detail alone, and SML mints its own DPC
-        // numbers into sn_trans independently of us: on 28 Aug we issued
-        // DPC2026082906 at 16:08 and SML created its own DPC2026082906 for
-        // FT26080420 a minute later. Two unrelated documents, one number.
-        //
-        // The advisory lock above only serialises our own tills, so this
-        // cannot make a collision impossible while another system allocates
-        // from the same series — but reading both tables closes the window
-        // that actually bit.
-        const dpcSeqRows = await tx.$queryRaw<Array<{ next_seq: number }>>`
-          SELECT COALESCE(MAX(seq), 0) + 1 AS next_seq
-          FROM (
-            SELECT CAST(SUBSTRING(doc_no FROM 10) AS INTEGER) AS seq
-            FROM sn_trans_detail
-            WHERE doc_no LIKE ${`${dpcPrefix}%`} AND LENGTH(doc_no) = 13
-            UNION ALL
-            SELECT CAST(SUBSTRING(doc_no FROM 10) AS INTEGER) AS seq
-            FROM sn_trans
-            WHERE doc_no LIKE ${`${dpcPrefix}%`} AND LENGTH(doc_no) = 13
-          ) t
-        `;
-        const dpcNo = `${dpcPrefix}${String(
-          dpcSeqRows[0]?.next_seq ?? 1,
-        ).padStart(4, "0")}`;
-        // The header for those detail lines. It was never written: the
-        // ledger had DPC detail rows belonging to a document that did not
-        // exist, so anything reading sn_trans saw no issue at all.
         await tx.$executeRaw`
           INSERT INTO sn_trans (
             trans_flag, doc_no, doc_date, user_created, status,
             item_count, doc_def, doc_format_code, wh_code,
             create_date_time_now
           ) VALUES (
-            44, ${dpcNo}, CURRENT_DATE, ${userCode}, 0,
-            ${soldSerials.length}, ${docNo}, 'DPC',
-            ${soldSerials[0]?.warehouse_code ?? ""}, NOW()
+            56, ${wmsDocNo}, CURRENT_DATE, ${userCode}, 0,
+            ${soldSerials.length}, ${docNo}, 'DP',
+            ${STOREFRONT_WAREHOUSE}, NOW()
           )
         `;
         for (const unit of soldSerials) {
-          const unitKey = unit.isn?.trim() || unit.serial_number;
+          const unitKey = (unit.isn ?? "").trim() || unit.sn;
           await tx.$executeRaw`
             INSERT INTO sn_trans_detail (
               trans_flag, doc_no, doc_date, user_created, item_code, sn, qty,
-              calc_flag, warehouse, location, isn, doc_ref,
+              calc_flag, warehouse, rack, location, pallet, isn, doc_ref,
               create_date_time_now
             ) VALUES (
-              44, ${dpcNo}, CURRENT_DATE, ${userCode}, ${unit.item_code},
-              ${unitKey}, 1, -1,
-              ${unit.warehouse_code},
-              ${unit.location_code}, ${unit.isn}, ${docNo}, NOW()
+              56, ${wmsDocNo}, CURRENT_DATE, ${userCode}, ${unit.item_code},
+              ${unit.sn ?? unitKey}, 1, -1,
+              ${STOREFRONT_WAREHOUSE},
+              ${unit.rack}, ${unit.location}, ${unit.pallet},
+              ${unitKey}, ${docNo}, NOW()
             )
           `;
-          // And take the unit off the shelf in the serial master. The
-          // ledger is what the stock figures are read from, but
-          // sn_inventory.status is what the warehouse's own screens show,
-          // and leaving it at 0 kept a sold television listed as on hand.
+          // And take the unit off the shelf in the serial master — what the
+          // warehouse's own screens show. user_mapping records who, the way
+          // the WMS's update does.
           await tx.$executeRaw`
             UPDATE sn_inventory
-            SET status = 1, updated_at = NOW()
-            WHERE isn = ${unitKey}
-              AND (${unit.warehouse_code} = '' OR wh_code = ${unit.warehouse_code})
+            SET status = 1, user_mapping = ${userCode}, updated_at = NOW()
+            WHERE (isn = ${unitKey} OR sn = ${unitKey})
+              AND wh_code = ${STOREFRONT_WAREHOUSE}
           `;
         }
       }
