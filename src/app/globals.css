@@ -10163,3 +10163,64 @@ a {
 /* Tighter, so more of the work fits without scrolling. */
 .settle-payment .settle-card { padding: 13px; }
 .settle-payment .settle-payment-body { gap: 10px; }
+
+/* ─── The till is a 15-inch laptop ───────────────────────────────────────
+   The panel was proportioned on a big monitor: a 92px hero with a 42px
+   figure, 16-18px of padding everywhere, and 50px buttons. On the screen
+   it is actually used on — around 768 to 900px tall — that pushed the
+   tenders, the keypad and the bill discount below the fold, so settling a
+   sale meant scrolling a panel that should fit in one look.
+
+   Nothing is removed and nothing reflows: the same panel, drawn tighter,
+   from the height where the room runs out. Touch targets stay above 34px,
+   which is still a finger on a touchscreen till. */
+@media (max-height: 900px) {
+  .settle-header { padding: 10px 16px; }
+  .settle-header-mark {
+    width: 36px;
+    height: 36px;
+    border-radius: 11px;
+    font-size: 18px;
+  }
+  .settle-header h2 { font-size: 17px; margin-top: 2px; }
+  .settle-header p { font-size: 12px; margin-top: 2px; }
+  .settle-eyebrow { gap: 6px; font-size: 10px; }
+  .settle-header-identity { gap: 10px; }
+
+  .settle-layout { gap: 12px; padding: 12px; }
+  .settle-left, .settle-payment { gap: 10px; }
+  .settle-payment { border-radius: 16px; padding: 10px; }
+
+  /* The hero says one number. It does not need 92px to say it. */
+  .settle-total-card {
+    min-height: 0;
+    border-radius: 14px;
+    padding: 12px 14px;
+  }
+  .settle-total-card strong { font-size: clamp(24px, 2.2vw, 32px); }
+  .settle-total-card small { font-size: 12px; }
+  .settle-total-card p { margin-top: 7px; padding-top: 7px; }
+  .settle-total-state { margin-top: 8px; padding-top: 7px; }
+  .settle-total-state b { font-size: 18px; }
+
+  .settle-card { padding: 12px; }
+  .settle-card-title { margin-bottom: 10px; }
+  .settle-payment .settle-card { padding: 10px; }
+  .settle-payment .settle-card-title { margin-bottom: 8px; }
+
+  .settle-pad { gap: 5px; margin-top: 6px; }
+  .settle-pad button { height: 34px; font-size: 15px; }
+  .settle-pad-head b { font-size: 16px; }
+  .settle-pad-wrap { gap: 10px; }
+  .settle-pad-wrap > .settle-cash-quick .settle-cash-quick-btn {
+    min-height: 34px;
+    padding: 5px 9px;
+  }
+  .settle-tender-row { margin-bottom: 5px; padding: 5px 8px; }
+  .settle-tender-chip { padding: 5px 10px; }
+  .settle-qr-none { padding: 16px 12px; }
+
+  /* The footer spans the payment column's padding, so it follows it. */
+  .settle-actions { margin: 10px -10px -10px; padding: 9px 10px; }
+  .settle-actions .odoo-btn-primary { height: 42px; }
+}
