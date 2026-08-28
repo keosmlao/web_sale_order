@@ -8,7 +8,11 @@ export const CUSTOMER_DISPLAY_ROUTE = "/cashier-display";
 export type CustomerDisplayItem = {
   name: string;
   qty: number;
-  amount: number; // line total, KIP
+  amount: number; // line total after this line's discount, KIP
+  // List price for one unit, KIP. `unitPrice * qty` is what the line would
+  // have cost, so the difference from `amount` is what came off it — which
+  // is where a member's discount actually lives.
+  unitPrice: number;
 };
 
 export type CustomerDisplayState = {

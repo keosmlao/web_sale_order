@@ -102,25 +102,52 @@ export default function CustomerDisplayPage() {
           </div>
           <table className="w-full border-separate border-spacing-y-2.5">
             <tbody>
-              {state.items.map((it, i) => (
-                <tr key={i} className="bg-white shadow-sm">
-                  <td className="rounded-l-2xl border-y border-l border-slate-200 px-5 py-4 text-xl font-bold">
-                    <span className="mr-4 inline-flex h-9 w-9 items-center justify-center rounded-full bg-blue-50 text-base font-black text-blue-600">
-                      {i + 1}
-                    </span>
-                    {it.name}
-                  </td>
-                  <td className="w-[100px] border-y border-slate-200 py-4 text-center">
-                    <span className="inline-flex min-w-14 justify-center rounded-xl bg-slate-100 px-3 py-2 text-xl font-black tabular-nums text-slate-700">
-                      {kip.format(it.qty)}
-                    </span>
-                  </td>
-                  <td className="w-[200px] rounded-r-2xl border-y border-r border-slate-200 px-5 py-4 text-right text-2xl font-black tabular-nums">
-                    {kip.format(it.amount)}
-                    <span className="ml-1 text-lg text-slate-400">₭</span>
-                  </td>
-                </tr>
-              ))}
+              {state.items.map((it, i) => {
+                // What this line would have cost at list, and what came off
+                // it. Shown on the row itself: a customer checking a bill
+                // checks it line by line, and a discount that only appears
+                // in the summary cannot be tied to the thing it applied to.
+                const listTotal = it.unitPrice * it.qty;
+                const off = Math.max(0, listTotal - it.amount);
+                return (
+                  <tr key={i} className="bg-white shadow-sm">
+                    <td className="rounded-l-2xl border-y border-l border-slate-200 px-5 py-4">
+                      <div className="flex items-start gap-4">
+                        <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-blue-50 text-base font-black text-blue-600">
+                          {i + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <div className="text-xl font-bold">{it.name}</div>
+                          <div className="mt-1 text-base font-bold text-slate-400 tabular-nums">
+                            {kip.format(it.unitPrice)} ₭ × {kip.format(it.qty)}
+                            {off > 0 ? (
+                              <span className="ml-3 rounded-full bg-rose-50 px-2.5 py-0.5 font-black text-rose-600">
+                                ຫຼຸດ {kip.format(off)} ₭
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="w-[100px] border-y border-slate-200 py-4 text-center align-middle">
+                      <span className="inline-flex min-w-14 justify-center rounded-xl bg-slate-100 px-3 py-2 text-xl font-black tabular-nums text-slate-700">
+                        {kip.format(it.qty)}
+                      </span>
+                    </td>
+                    <td className="w-[210px] rounded-r-2xl border-y border-r border-slate-200 px-5 py-4 text-right align-middle">
+                      {off > 0 ? (
+                        <div className="text-lg font-bold tabular-nums text-slate-400 line-through">
+                          {kip.format(listTotal)}
+                        </div>
+                      ) : null}
+                      <div className="text-2xl font-black tabular-nums">
+                        {kip.format(it.amount)}
+                        <span className="ml-1 text-lg text-slate-400">₭</span>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

@@ -1588,6 +1588,7 @@ function SettleForm({
         name: it.itemName ?? it.itemCode ?? "—",
         qty: it.quantity,
         amount: it.amount,
+        unitPrice: it.unitPrice,
       })),
       total: effectiveTotal,
       paid: paidInMain,
