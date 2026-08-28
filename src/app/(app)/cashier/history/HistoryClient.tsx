@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import VoidButton from "../receipts/[docNo]/VoidButton";
+
 
 type Row = {
   docNo: string;
@@ -78,6 +78,37 @@ export default function HistoryClient() {
       setLoading(false);
     }
   }, [q, from, to, status]);
+
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  // Take the receipt off and put the order back to waiting for payment.
+  // The server does the unwinding and checks the role; this only makes
+  // sure nobody does it by accident — the figure is in the question so
+  // there is something to recognise before saying yes.
+  async function deleteReceipt(r: Row) {
+    if (deleting || !r.cartNumber) return;
+    const ok = window.confirm(
+      `ລົບໃບຮັບເງິນ ${r.docNo} (${moneyFmt.format(r.totalKip)} ກີບ)?\n` +
+        `ອໍເດີ #${r.cartNumber} ຈະກັບໄປສະຖານະລໍຖ້າຮັບເງິນ, ` +
+        `stock ຄືນ ແລະ ແຕ້ມທີ່ໃຊ້ຈະຖືກຄືນໃຫ້ລູກຄ້າ.`,
+    );
+    if (!ok) return;
+    setDeleting(r.docNo);
+    try {
+      const res = await fetch(
+        `/api/cashier/orders/${encodeURIComponent(r.cartNumber)}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        window.alert(data?.error ?? `ຂໍ້ຜິດພາດ ${res.status}`);
+        return;
+      }
+      await fetchHistory();
+    } finally {
+      setDeleting(null);
+    }
+  }
 
   useEffect(() => {
     Promise.resolve().then(() => {
@@ -239,11 +270,14 @@ export default function HistoryClient() {
                     )}
                   </td>
                   <td className="px-3 py-2 text-right">
-                    {/* Same control as the receipt page, not a second way
-                        of doing it: a manager's code and PIN, a reason,
-                        and the reversal that puts the stock back and takes
-                        the points off. A bill already cancelled has
-                        nothing left to cancel. */}
+                    {/* Delete, not void. Voiding writes a reversal document
+                        and leaves both halves on the books; deleting takes
+                        the receipt off and puts the order back to waiting
+                        for payment, which is what a receipt raised by
+                        mistake needs. The API unwinds the cash ledger, the
+                        stock movement and any points spent, and it already
+                        requires a manager for a settled bill — the same bar
+                        as voiding, because it is the same outcome. */}
                     {r.isVoided ? (
                       <span
                         className="text-[11px] text-odoo-text-muted"
@@ -251,8 +285,17 @@ export default function HistoryClient() {
                       >
                         {r.voidDocNo ?? "—"}
                       </span>
+                    ) : r.cartNumber ? (
+                      <button
+                        type="button"
+                        disabled={deleting === r.docNo}
+                        onClick={() => void deleteReceipt(r)}
+                        className="odoo-btn odoo-btn-danger !px-2 !py-1 !text-[11px]"
+                      >
+                        {deleting === r.docNo ? "ກຳລັງລົບ…" : "ລົບໃບຮັບ"}
+                      </button>
                     ) : (
-                      <VoidButton docNo={r.docNo} onDone={fetchHistory} compact />
+                      <span className="text-[11px] text-odoo-text-muted">—</span>
                     )}
                   </td>
                 </tr>
