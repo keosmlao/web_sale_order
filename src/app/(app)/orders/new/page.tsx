@@ -1977,6 +1977,11 @@ function PosScreen({
     });
   }
 
+  // The picked customer's discount, as a percentage. Drives the catalogue
+  // as well as the cart: the price on the shelf tile has to be the price
+  // this customer pays, or the counter quotes one number and bills another.
+  const memberPct = customer?.discountPct ?? 0;
+
   // Pricing preview. The server recalculates the same promotion rules in
   // /api/orders when saving; this keeps the POS total and submitted order
   // visually aligned before the user presses submit.
@@ -2486,6 +2491,10 @@ function PosScreen({
             <div className="pos-catalog-grid">
               {catalogProducts.map((p) => {
                 const isSet = isAirSetProduct(p);
+                // What this customer actually pays. A member's discount is
+                // settled the moment they are picked, so a tile showing
+                // the list price quotes a number the bill contradicts.
+                const net = p.price * (1 - memberPct / 100);
                 const out = p.stock <= 0 && !isSet;
                 const low = !out && p.stock > 0 && p.stock <= 5;
                 const inCartQty = cartQtyByProduct.get(p.id) ?? 0;
@@ -2538,8 +2547,12 @@ function PosScreen({
                     </span>
                     <span className="pos-ctile-name">{p.name}</span>
                     <span className="pos-ctile-foot">
-                      <span className="pos-ctile-price">
-                        {moneyFmt.format(p.price)}
+                      <span
+                        className={
+                          "pos-ctile-price" + (memberPct > 0 ? " is-member" : "")
+                        }
+                      >
+                        {moneyFmt.format(net)}
                         <em>ກີບ</em>
                       </span>
                       <span
@@ -2552,6 +2565,14 @@ function PosScreen({
                         {isSet ? "ຊຸດ" : out ? "ໝົດ" : moneyFmt.format(p.stock)}
                       </span>
                     </span>
+                    {memberPct > 0 ? (
+                      // Showing what they saved, not just a smaller number
+                      // the customer has no way to judge.
+                      <span className="pos-ctile-was">
+                        <s>{moneyFmt.format(p.price)}</s>
+                        <em>-{memberPct}%</em>
+                      </span>
+                    ) : null}
                   </button>
                 );
               })}
@@ -2610,7 +2631,12 @@ function PosScreen({
                         )}
                       </td>
                       <td className="pos-cat-cell pos-cat-price">
-                        {moneyFmt.format(p.price)}
+                        {moneyFmt.format(p.price * (1 - memberPct / 100))}
+                        {memberPct > 0 ? (
+                          <s className="pos-cat-was">
+                            {moneyFmt.format(p.price)}
+                          </s>
+                        ) : null}
                       </td>
                     </tr>
                   );

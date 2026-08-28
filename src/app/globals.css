@@ -7966,6 +7966,37 @@ a {
   font-weight: 800;
   color: var(--odoo-text-soft);
 }
+/* A member's price is not the shelf price, so it does not wear the shelf
+   price's colour. The list price stays under it, struck through — what
+   was saved, not just a smaller number. */
+.pos-ctile-price.is-member {
+  color: var(--odoo-danger);
+}
+.pos-ctile-was {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--odoo-text-soft);
+}
+.pos-ctile-was em {
+  font-style: normal;
+  padding: 1px 5px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 900;
+  color: var(--odoo-danger);
+  background: color-mix(in srgb, var(--odoo-danger) 12%, transparent);
+}
+.pos-cat-was {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--odoo-text-soft);
+}
 .pos-ctile-qty {
   display: inline-flex;
   align-items: center;
