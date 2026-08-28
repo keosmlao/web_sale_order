@@ -28,6 +28,34 @@ type Row = {
 
 const moneyFmt = new Intl.NumberFormat("en-US");
 
+type DailyTender = {
+  payMethod: string;
+  currencyCode: string;
+  amount: number;
+  amountKip: number;
+  bills: number;
+};
+
+type DailySummary = {
+  bills: number;
+  tenders: DailyTender[];
+  totalKip: number;
+  cashKip: number;
+  transferKip: number;
+  redeemedKip: number;
+  changeKip: number;
+  remitKip: number;
+};
+
+const CURRENCY_NAMES: Record<string, string> = {
+  "02": "ກີບ (LAK)",
+  "01": "ບາດ (THB)",
+};
+
+function currencyName(code: string): string {
+  return CURRENCY_NAMES[code] ?? code;
+}
+
 // Local YYYY-MM-DD, for <input type="date"> values and the quick ranges.
 function ymd(d: Date): string {
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -88,6 +116,10 @@ export default function HistoryClient() {
   const [to, setTo] = useState("");
   const [status, setStatus] = useState<"all" | "settled" | "voided">("all");
   const [filtersOpen, setFiltersOpen] = useState(false);
+  const [tab, setTab] = useState<"list" | "summary">("list");
+  const [sumDate, setSumDate] = useState(() => ymd(new Date()));
+  const [summary, setSummary] = useState<DailySummary | null>(null);
+  const [summaryLoading, setSummaryLoading] = useState(false);
 
   const fetchHistory = useCallback(async () => {
     setLoading(true);
@@ -150,6 +182,29 @@ export default function HistoryClient() {
     });
   }, [fetchHistory]);
 
+  // The day-close tab: one fetch per chosen date.
+  useEffect(() => {
+    if (tab !== "summary") return;
+    let cancelled = false;
+    setSummaryLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/cashier/daily-summary?date=${encodeURIComponent(sumDate)}`,
+        );
+        const data = res.ok ? await res.json() : null;
+        if (!cancelled) setSummary(data);
+      } catch {
+        if (!cancelled) setSummary(null);
+      } finally {
+        if (!cancelled) setSummaryLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [tab, sumDate]);
+
   return (
     <div className="px-4 py-6 sm:px-6 sm:py-8">
       <header className="mb-4">
@@ -164,6 +219,38 @@ export default function HistoryClient() {
         </p>
       </header>
 
+      <div className="mb-4 flex gap-1 rounded-lg bg-odoo-surface-muted p-1 sm:w-fit">
+        {(
+          [
+            ["list", "ໃບຮັບເງິນ"],
+            ["summary", "ສະຫລຸບຮັບເງິນປະຈຳວັນ"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setTab(value)}
+            className={
+              "flex-1 rounded-md px-4 py-2 text-sm font-bold transition sm:flex-none " +
+              (tab === value
+                ? "bg-white text-odoo-primary shadow-sm"
+                : "text-odoo-text-muted hover:text-odoo-text")
+            }
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
+      {tab === "summary" ? (
+        <DailySummaryView
+          date={sumDate}
+          onDateChange={setSumDate}
+          summary={summary}
+          loading={summaryLoading}
+        />
+      ) : (
+        <>
       {/* The filter block used to be four stacked fields — a full phone
           screen of empty form before the first receipt. What a cashier
           actually does here is search a number or tap a day. So: one
@@ -501,6 +588,184 @@ export default function HistoryClient() {
           </tbody>
         </table>
       </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function DailySummaryView({
+  date,
+  onDateChange,
+  summary,
+  loading,
+}: {
+  date: string;
+  onDateChange: (v: string) => void;
+  summary: DailySummary | null;
+  loading: boolean;
+}) {
+  const cash = (summary?.tenders ?? []).filter((t) => t.payMethod === "cash");
+  const transfer = (summary?.tenders ?? []).filter(
+    (t) => t.payMethod === "transfer",
+  );
+  const other = (summary?.tenders ?? []).filter(
+    (t) => t.payMethod !== "cash" && t.payMethod !== "transfer",
+  );
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex flex-wrap items-center gap-2 rounded-md border border-odoo-border bg-odoo-surface p-3">
+        <span className="odoo-label">ວັນທີ</span>
+        <input
+          type="date"
+          value={date}
+          onChange={(e) => onDateChange(e.target.value)}
+          className="odoo-input w-auto"
+        />
+        {summary ? (
+          <span className="ml-auto text-sm font-semibold text-odoo-text-muted">
+            {moneyFmt.format(summary.bills)} ບິນ
+          </span>
+        ) : null}
+      </div>
+
+      {loading ? (
+        <p className="px-3 py-8 text-center text-sm text-odoo-text-muted">
+          ກຳລັງໂຫລດ…
+        </p>
+      ) : !summary ? (
+        <p className="px-3 py-8 text-center text-sm text-odoo-text-muted">
+          ໂຫລດຂໍ້ມູນບໍ່ສຳເລັດ
+        </p>
+      ) : (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <section className="rounded-xl border border-odoo-border bg-odoo-surface p-4">
+              <h2 className="text-sm font-black text-odoo-text-strong">
+                ເງິນສົດ — ແຍກສະກຸນ
+              </h2>
+              {cash.length === 0 ? (
+                <p className="mt-3 text-sm text-odoo-text-muted">ບໍ່ມີ</p>
+              ) : (
+                <ul className="mt-2 divide-y divide-odoo-border">
+                  {cash.map((t) => (
+                    <li
+                      key={t.currencyCode}
+                      className="flex items-baseline justify-between py-2"
+                    >
+                      <span className="text-sm font-semibold">
+                        {currencyName(t.currencyCode)}
+                      </span>
+                      <span className="text-right">
+                        <b className="font-mono text-[15px]">
+                          {moneyFmt.format(t.amount)}
+                        </b>
+                        {t.currencyCode !== "02" ? (
+                          <small className="block text-[11px] text-odoo-text-muted">
+                            ≈ {moneyFmt.format(t.amountKip)} ກີບ
+                          </small>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {summary.changeKip > 0 ? (
+                <div className="mt-2 flex items-baseline justify-between border-t border-odoo-border pt-2 text-sm">
+                  <span className="text-odoo-text-muted">ເງິນທອນ (ກີບ)</span>
+                  <span className="font-mono font-bold text-odoo-danger">
+                    −{moneyFmt.format(summary.changeKip)}
+                  </span>
+                </div>
+              ) : null}
+            </section>
+
+            <section className="rounded-xl border border-odoo-border bg-odoo-surface p-4">
+              <h2 className="text-sm font-black text-odoo-text-strong">
+                ເງິນໂອນ — ແຍກສະກຸນ
+              </h2>
+              {transfer.length === 0 ? (
+                <p className="mt-3 text-sm text-odoo-text-muted">ບໍ່ມີ</p>
+              ) : (
+                <ul className="mt-2 divide-y divide-odoo-border">
+                  {transfer.map((t) => (
+                    <li
+                      key={t.currencyCode}
+                      className="flex items-baseline justify-between py-2"
+                    >
+                      <span className="text-sm font-semibold">
+                        {currencyName(t.currencyCode)}
+                      </span>
+                      <span className="text-right">
+                        <b className="font-mono text-[15px]">
+                          {moneyFmt.format(t.amount)}
+                        </b>
+                        {t.currencyCode !== "02" ? (
+                          <small className="block text-[11px] text-odoo-text-muted">
+                            ≈ {moneyFmt.format(t.amountKip)} ກີບ
+                          </small>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {other.length > 0 ? (
+                <div className="mt-2 border-t border-odoo-border pt-2">
+                  {other.map((t) => (
+                    <div
+                      key={`${t.payMethod}-${t.currencyCode}`}
+                      className="flex items-baseline justify-between py-1 text-sm"
+                    >
+                      <span className="text-odoo-text-muted">
+                        {t.payMethod} · {currencyName(t.currencyCode)}
+                      </span>
+                      <span className="font-mono font-semibold">
+                        {moneyFmt.format(t.amount)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </section>
+          </div>
+
+          {/* The figure the drawer is counted against at day close. */}
+          <section className="rounded-xl border border-odoo-primary/40 bg-odoo-primary/5 p-4">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-sm font-black text-odoo-text-strong">
+                ລວມເງິນທີ່ຕ້ອງສົ່ງ (ສົດ)
+              </h2>
+              <b className="font-mono text-2xl font-black text-odoo-primary">
+                {moneyFmt.format(summary.remitKip)} ກີບ
+              </b>
+            </div>
+            <div className="mt-2 grid gap-1 border-t border-odoo-primary/20 pt-2 text-sm sm:grid-cols-3">
+              <div className="flex items-baseline justify-between sm:block">
+                <span className="text-odoo-text-muted">ໂອນເຂົ້າບັນຊີ</span>
+                <b className="font-mono sm:block">
+                  {moneyFmt.format(summary.transferKip)} ກີບ
+                </b>
+              </div>
+              <div className="flex items-baseline justify-between sm:block">
+                <span className="text-odoo-text-muted">ສ່ວນຫຼຸດແຕ້ມ</span>
+                <b className="font-mono sm:block">
+                  {moneyFmt.format(summary.redeemedKip)} ກີບ
+                </b>
+              </div>
+              <div className="flex items-baseline justify-between sm:block">
+                <span className="text-odoo-text-muted">ລວມຮັບທັງໝົດ</span>
+                <b className="font-mono sm:block">
+                  {moneyFmt.format(summary.totalKip)} ກີບ
+                </b>
+              </div>
+            </div>
+            <p className="mt-2 text-[11px] text-odoo-text-muted">
+              ສະເພາະບິນທີ່ຮັບເງິນຢູ່ໜ້າຮັບເງິນນີ້ (CAKAP) · ບິນ SML ສະຫລຸບໃນ SML
+            </p>
+          </section>
+        </>
+      )}
     </div>
   );
 }
