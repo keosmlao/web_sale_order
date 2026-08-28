@@ -1881,12 +1881,12 @@ function PosScreen({
         const free = (updated.serialOptions ?? []).filter(
           (u) => !held.some((h) => h.isn === u.isn),
         );
-        // Nothing to choose between: take the only one left.
-        if (free.length === 1 && updated.quantity - held.length === 1) {
-          updated.serialUnits = [...held, free[0]];
-          updated.serialNo = updated.serialUnits[0]?.sn ?? null;
-          updated.serialIsn = updated.serialUnits[0]?.isn ?? null;
-        } else if (free.length > 0) {
+        // Always ask, even when one candidate is left. Auto-picking the
+        // last one was tidier and wrong: raising the quantity is the
+        // moment the counter decides which physical fridge goes out, and
+        // it happens with the customer standing there. A line that filled
+        // itself in put an ISN on the bill nobody chose.
+        if (free.length > 0) {
           queueMicrotask(() => setSerialPickerIdx(idx));
         }
       }
