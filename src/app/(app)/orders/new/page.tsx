@@ -1,6 +1,13 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useRouter } from "next/navigation";
 import {
   priceCart,
@@ -772,6 +779,14 @@ function PosScreen({
   // catalogue over the wire to pick those was the page's main cost.
   const [catalogProducts, setCatalogProducts] = useState<Product[]>([]);
   const [catalogBusy, setCatalogBusy] = useState(true);
+  // Paging. The first page fills the grid; scrolling asks for ten more at
+  // a time, which arrives before the scroll reaches the end of what is
+  // already drawn.
+  const CATALOG_PAGE = 10;
+  const [catalogLoadingMore, setCatalogLoadingMore] = useState(false);
+  const [catalogExhausted, setCatalogExhausted] = useState(false);
+  const catalogRef = useRef<Product[]>([]);
+  catalogRef.current = catalogProducts;
   useEffect(() => {
     if (!warehouseCode) return;
     let cancelled = false;
@@ -789,9 +804,17 @@ function PosScreen({
             const res = await fetch(`/api/products?${params.toString()}`);
             if (!res.ok) throw new Error(`catalog ${res.status}`);
             const data = (await res.json()) as Product[];
-            if (!cancelled) setCatalogProducts(data);
+            if (!cancelled) {
+              setCatalogProducts(data);
+              // A fresh query starts a fresh list, so whatever the last
+              // one had reached is no longer true.
+              setCatalogExhausted(data.length === 0);
+            }
           } catch {
-            if (!cancelled) setCatalogProducts([]);
+            if (!cancelled) {
+              setCatalogProducts([]);
+              setCatalogExhausted(true);
+            }
           } finally {
             if (!cancelled) setCatalogBusy(false);
           }
@@ -804,6 +827,50 @@ function PosScreen({
       clearTimeout(timer);
     };
   }, [warehouseCode, salesWarehouses, quickSearch]);
+
+  // Next page, appended.
+  //
+  // Stops on an EMPTY page rather than a short one: the rule that hides
+  // air units without a set composition runs after the SQL limit, so a
+  // full page of rows can arrive here as fewer, and a short page is not
+  // the end of the list.
+  const loadMoreCatalog = useCallback(async () => {
+    if (catalogBusy || catalogLoadingMore || catalogExhausted) return;
+    if (!warehouseCode) return;
+    setCatalogLoadingMore(true);
+    try {
+      const params = new URLSearchParams({
+        warehouses: salesWarehouses.join(","),
+        q: quickSearch.trim(),
+        limit: String(CATALOG_PAGE),
+        offset: String(catalogRef.current.length),
+      });
+      const res = await fetch(`/api/products?${params.toString()}`);
+      if (!res.ok) throw new Error(`catalog ${res.status}`);
+      const rows = (await res.json()) as Product[];
+      if (rows.length === 0) {
+        setCatalogExhausted(true);
+      } else {
+        setCatalogProducts((prev) => {
+          // The offset counts rows the server returned and it returns each
+          // once, but a concurrent stock change can shift the window.
+          const seen = new Set(prev.map((p) => p.id));
+          return [...prev, ...rows.filter((r) => !seen.has(r.id))];
+        });
+      }
+    } catch {
+      // Leave the list as it is; the next scroll can try again.
+    } finally {
+      setCatalogLoadingMore(false);
+    }
+  }, [
+    catalogBusy,
+    catalogLoadingMore,
+    catalogExhausted,
+    warehouseCode,
+    salesWarehouses,
+    quickSearch,
+  ]);
 
   // The inline dropdown shows the first few of the same server result.
   const quickResults = useMemo(
@@ -2305,7 +2372,11 @@ function PosScreen({
           <div className="pos-catalog-title">
             <span>ສິນຄ້າ</span>
             <span className="pos-catalog-count">
-              {catalogBusy ? "…" : `${catalogProducts.length} ລາຍການ`}
+              {/* "+" while there are more to come: a bare count reads as
+                  the whole shop. */}
+              {catalogBusy
+                ? "…"
+                : `${catalogProducts.length}${catalogExhausted ? "" : "+"} ລາຍການ`}
             </span>
           </div>
 
@@ -2353,7 +2424,17 @@ function PosScreen({
           </form>
         </div>
 
-        <div className="pos-catalog-body">
+        <div
+          className="pos-catalog-body"
+          onScroll={(e) => {
+            // Ask a screen early, so the grid keeps moving instead of
+            // stopping at a spinner.
+            const el = e.currentTarget;
+            if (el.scrollHeight - el.scrollTop - el.clientHeight < 600) {
+              void loadMoreCatalog();
+            }
+          }}
+        >
           {catalogBusy && catalogProducts.length === 0 ? (
             <div className="pos-catalog-empty">ກຳລັງໂຫລດສິນຄ້າ...</div>
           ) : catalogProducts.length === 0 ? (
