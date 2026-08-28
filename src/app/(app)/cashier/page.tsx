@@ -22,7 +22,6 @@ import {
   subscribeCustomerDisplay,
   IDLE_DISPLAY_STATE,
 } from "@/lib/customer-display";
-import TransferQr from "@/components/TransferQr";
 import {
   getCashierData,
   type CashierOrder,
@@ -2498,28 +2497,28 @@ function SettleForm({
 
           {qrPaymentSelected || transferInMain > 0 ? (
             <div className="settle-card settle-qr-card">
+              {/* The code itself belongs on the customer's screen — that
+                  is the screen they scan. A second copy here was taking a
+                  third of the cashier's panel to show them something they
+                  never look at; what the cashier needs is the amount and
+                  whether the money has landed. */}
               <div className="settle-card-title">
                 <span className="flex items-center gap-2">
                   <i className="settle-step">2</i>
-                  ໃຫ້ລູກຄ້າສະແກນ QR
+                  ລູກຄ້າໂອນ — QR ຢູ່ໜ້າຈໍລູກຄ້າ
                 </span>
                 <strong className="settle-pay-curtag">
                   {moneyFmt.format(transferQrAmount)} ₭
                 </strong>
               </div>
-              <div className="flex justify-center py-1">
-                {transferQrAmount > 0 ? (
-                  <TransferQr amount={transferQrAmount} size={210} />
-                ) : (
-                  // Cash is covering the whole bill, so there is nothing
-                  // left to transfer. Say so instead of showing a code for
-                  // zero kip — or, worse, vanishing and taking the payment
-                  // listener with it.
-                  <p className="settle-qr-none">
-                    ບໍ່ມີຍອດຕ້ອງໂອນ — ເງິນສົດຄຸ້ມທັງບິນແລ້ວ
-                  </p>
-                )}
-              </div>
+              {transferQrAmount > 0 ? null : (
+                // Cash is covering the whole bill, so there is nothing
+                // left to transfer. Say so — and the card stays put rather
+                // than vanishing and taking the payment listener with it.
+                <p className="settle-qr-none">
+                  ບໍ່ມີຍອດຕ້ອງໂອນ — ເງິນສົດຄຸ້ມທັງບິນແລ້ວ
+                </p>
+              )}
               {/* Listen for the OnePay payment push while this QR is on screen. */}
               <OnePayWatcher
                 active={qrPaymentSelected && transferInMain > 0 && canSettle}
@@ -2541,7 +2540,7 @@ function SettleForm({
                     </p>
                   ) : (
                     <p className="mt-1 text-center text-xs text-odoo-text-muted">
-                      ໃຫ້ລູກຄ້າສະແກນເພື່ອໂອນ · QR ດຽວກັນສະແດງຢູ່ໜ້າຈໍລູກຄ້າ
+                      ໃຫ້ລູກຄ້າສະແກນຈາກໜ້າຈໍລູກຄ້າ
                     </p>
                   )}
                 </>
