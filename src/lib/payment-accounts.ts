@@ -13,11 +13,26 @@ const key = (currency: string, method: string): PaymentAccountKey =>
 // Bootstrap fallback, mirrored by the seed in sql/add-payment-account.sql.
 // Used only when app_payment_account has no row for a (currency, method) yet
 // (or the table is missing on an un-migrated DB).
-export const DEFAULT_PAYMENT_ACCOUNTS: Record<PaymentAccountKey, string> = {
+export const DEFAULT_PAYMENT_ACCOUNTS: Partial<
+  Record<PaymentAccountKey, string>
+> = {
   "02:cash": "1010101",     // ເງິນສົດ-ກີບ
   "02:transfer": "1010201", // BCEL LAK current account
   "01:cash": "1010102",     // ເງິນສົດ-ບາດ
   "01:transfer": "1010302", // BCEL THB current account
+  // A transfer into another of the shop's accounts posts wherever the
+  // cashier says it landed; the line carries its own account code and only
+  // falls back here if it somehow arrives without one.
+  "02:transfer_other": "1010201",
+  "01:transfer_other": "1010302",
+  // Deliberately absent: coupon.
+  //
+  // Redeeming a coupon is not money arriving. Posting it to cash or to a
+  // bank account would overstate both, and the till would not reconcile at
+  // the end of the day. It belongs against whatever account ODIEN books
+  // promotional giveaways to, and guessing which one is worse than not
+  // taking coupons yet — so settle refuses a coupon line until a manager
+  // sets the account in /settings/payment-accounts.
 };
 
 type AccountRow = {
@@ -31,7 +46,9 @@ type AccountRow = {
 export async function getPaymentAccountMap(): Promise<
   Record<PaymentAccountKey, string>
 > {
-  const map: Record<string, string> = { ...DEFAULT_PAYMENT_ACCOUNTS };
+  const map: Record<string, string> = {
+    ...(DEFAULT_PAYMENT_ACCOUNTS as Record<string, string>),
+  };
   try {
     const rows = await prisma.$queryRaw<AccountRow[]>`
       SELECT currency_code, pay_method, account_code
@@ -54,9 +71,11 @@ export function resolvePaymentAccount(
   map: Record<PaymentAccountKey, string>,
   currency: CurrencyCode,
   method: PayMethod,
-): string {
+): string | null {
   return (
-    map[key(currency, method)] ?? DEFAULT_PAYMENT_ACCOUNTS[key(currency, method)]
+    map[key(currency, method)] ??
+    DEFAULT_PAYMENT_ACCOUNTS[key(currency, method)] ??
+    null
   );
 }
 

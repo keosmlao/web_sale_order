@@ -10,6 +10,7 @@ import {
   BILL_DISCOUNT_ITEM_CODE,
   BASE_CURRENCY,
   MAIN_CURRENCY,
+  PAY_METHODS,
   type CurrencyCode,
   type PayMethod,
 } from "@/lib/payment";
@@ -80,6 +81,13 @@ type PaymentInput = {
   currency: CurrencyCode;
   method: PayMethod;
   amount: number; // native units, e.g. KIP or THB
+  // Where a transfer into another of the shop's accounts landed. Only set
+  // for `transfer_other`, and the whole difference between it and a QR
+  // transfer — otherwise the two are indistinguishable on the ledger.
+  accountCode?: string | null;
+  // The coupon this line redeems. Only set for `coupon`; the balance comes
+  // off coupon_list inside the settlement transaction.
+  couponNumber?: string | null;
 };
 
 type SettlementResult = {
@@ -105,6 +113,8 @@ type SettlementResult = {
     amount: number;
     rateToMain: number;
     amountInMain: number;
+    accountCode?: string | null;
+    couponNumber?: string | null;
   }>;
   _salespersonCode: string | null;
 };
@@ -125,12 +135,18 @@ function parsePayments(body: {
       const method = typeof r.method === "string" ? r.method.trim() : "";
       const amount = typeof r.amount === "number" ? r.amount : Number(r.amount);
       if (!ACCEPTED_CURRENCIES.includes(currency as CurrencyCode)) continue;
-      if (method !== "cash" && method !== "transfer") continue;
+      if (!PAY_METHODS.includes(method as PayMethod)) continue;
       if (!Number.isFinite(amount) || amount <= 0) continue;
+      const accountCode =
+        typeof r.accountCode === "string" ? r.accountCode.trim() : "";
+      const couponNumber =
+        typeof r.couponNumber === "string" ? r.couponNumber.trim() : "";
       out.push({
         currency: currency as CurrencyCode,
         method: method as PayMethod,
         amount,
+        accountCode: accountCode || null,
+        couponNumber: couponNumber || null,
       });
     }
     return out;
@@ -426,6 +442,62 @@ export async function POST(request: NextRequest) {
           `ກະຕ່າ ${cartNumber} ຖືກຮັບເງິນແລ້ວ`,
         );
       }
+      // Coupons come off here, inside the same transaction and under a row
+      // lock, not when the cashier looked them up. Two tills can have the
+      // same coupon on screen; only the bill that saves first gets it, and
+      // the second is told why rather than silently double-spending it.
+      for (const p of payments) {
+        if (p.method !== "coupon") continue;
+        const number = (p.couponNumber ?? "").trim();
+        if (!number) {
+          throw new HandledError(400, "ແຖວ coupon ບໍ່ມີເລກໃບ");
+        }
+        const held = await tx.$queryRaw<
+          Array<{
+            roworder: number;
+            number: string;
+            balance_amount: string | number | null;
+            last_status: number | null;
+            date_expire: Date | null;
+          }>
+        >`
+          SELECT roworder, number, balance_amount, last_status, date_expire
+          FROM coupon_list
+          WHERE UPPER(REPLACE(number, ' ', '')) = UPPER(REPLACE(${number}, ' ', ''))
+          ORDER BY create_date_time_now DESC NULLS LAST
+          LIMIT 1
+          FOR UPDATE
+        `;
+        const c = held[0];
+        if (!c) throw new HandledError(404, `ບໍ່ພົບ coupon ${number}`);
+        if (Number(c.last_status ?? 0) !== 0) {
+          throw new HandledError(409, `Coupon ${number} ຖືກໃຊ້ໄປແລ້ວ`);
+        }
+        if (c.date_expire && c.date_expire.getTime() < Date.now()) {
+          throw new HandledError(409, `Coupon ${number} ໝົດອາຍຸແລ້ວ`);
+        }
+        const balance = Number(c.balance_amount ?? 0);
+        if (p.amount > balance + 0.005) {
+          throw new HandledError(
+            409,
+            `Coupon ${number} ເຫຼືອ ${balance.toLocaleString()} — ຫັກ ${p.amount.toLocaleString()} ບໍ່ໄດ້`,
+          );
+        }
+        const left = balance - p.amount;
+        await tx.$executeRaw`
+          UPDATE coupon_list
+          SET balance_amount = ${left},
+              -- Spent to the last unit, or single-use and touched at all:
+              -- either way it must not come round again.
+              last_status = CASE
+                WHEN ${left} <= 0.005 THEN 1
+                WHEN COALESCE(single_use, 0) = 1 THEN 1
+                ELSE COALESCE(last_status, 0)
+              END
+          WHERE roworder = ${c.roworder}
+        `;
+      }
+
       // Walk-in support: cust_code may be NULL (no customer attached). The
       // SML columns are VARCHAR, so we coalesce to '' at every insert site;
       // ar_customer joins downstream skip the row when the code is blank.
@@ -918,6 +990,8 @@ export async function POST(request: NextRequest) {
         amount: number;
         rateToMain: number;
         amountInMain: number;
+        accountCode?: string | null;
+        couponNumber?: string | null;
       }> = [];
       for (const p of payments) {
         const toMain = rateToMain(p.currency);
@@ -940,6 +1014,8 @@ export async function POST(request: NextRequest) {
           method: p.method,
           amount: p.amount,
           rateToMain: toMain,
+          accountCode: p.accountCode ?? null,
+          couponNumber: p.couponNumber ?? null,
           amountInMain,
         });
       }
@@ -954,6 +1030,23 @@ export async function POST(request: NextRequest) {
         throw new HandledError(
           400,
           `ຈຳນວນເງິນທີ່ຮັບບໍ່ພໍ (${receivedInMain} < ${totalKip})`,
+        );
+      }
+      // Only cash can be given back, so only cash may exceed the bill.
+      // Change out of a coupon would turn a discount into money; change out
+      // of a transfer would hand back cash the shop never received. Cash is
+      // therefore always the last tender applied, and the change is its
+      // overflow — which is also why the check is on everything else.
+      const nonCashInMain = roundMoney(
+        paymentBreakdown
+          .filter((p) => p.method !== "cash")
+          .reduce((sum, p) => sum + p.amountInMain, 0),
+      );
+      if (nonCashInMain > totalKip + 0.005) {
+        throw new HandledError(
+          400,
+          `ຮັບເກີນຍອດບິນ — ມີແຕ່ເງິນສົດທີ່ຈ່າຍເກີນໄດ້ (ທອນໄດ້). ` +
+            `ບໍ່ແມ່ນສົດ ${nonCashInMain} > ບິນ ${totalKip}`,
         );
       }
       const changeAmountKip = roundMoney(receivedInMain - totalKip);
@@ -1201,11 +1294,19 @@ export async function POST(request: NextRequest) {
         // on (currency, method) — e.g. KIP transfer → '1010201' (BCEL LAK).
         // SML's bank reconciliation reads this; writing the currency code '02'
         // here (the old behaviour) left every line unreconcilable.
-        const accountCode = resolvePaymentAccount(
-          paymentAccounts,
-          pb.currency,
-          pb.method,
-        );
+        // A transfer into another account posts where the cashier said it
+        // landed; everything else follows the configured map.
+        const accountCode =
+          (pb.method === "transfer_other" ? pb.accountCode : null) ??
+          resolvePaymentAccount(paymentAccounts, pb.currency, pb.method);
+        if (!accountCode) {
+          // Only reachable for a method with no account configured — today
+          // that is coupon. Refusing is the point: a coupon posted to cash
+          // overstates the till and the day will not reconcile.
+          throw new Error(
+            `ຍັງບໍ່ໄດ້ຕັ້ງບັນຊີສຳລັບວິທີຮັບເງິນນີ້ (${pb.method}) — ຕັ້ງທີ່ ຕັ້ງຄ່າ › ບັນຊີຮັບເງິນ`,
+          );
+        }
         await tx.$executeRaw`
           INSERT INTO cb_trans_detail (
             trans_type, trans_flag,

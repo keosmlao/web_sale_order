@@ -6,6 +6,8 @@ import { roleFromEmployee } from "@/lib/roles";
 import {
   ACCEPTED_CURRENCIES,
   CURRENCY_LABEL,
+  PAY_METHODS,
+  PAY_METHOD_LABEL,
   type CurrencyCode,
   type PayMethod,
 } from "@/lib/payment";
@@ -14,19 +16,20 @@ import {
   getSelectableAccounts,
 } from "@/lib/payment-accounts";
 
-// The four (currency, method) slots a cashier can settle into. Order drives
-// the settings grid.
+// Every (currency, method) slot a cashier can settle into. Order drives the
+// settings grid.
+//
+// The coupon slot has no built-in default on purpose — a redeemed coupon is
+// not money arriving, so it must not land in cash or in a bank account.
+// Until a manager sets it here, settle refuses coupon lines.
 const SLOTS: Array<{ currencyCode: CurrencyCode; payMethod: PayMethod }> = [];
 for (const currencyCode of ACCEPTED_CURRENCIES) {
-  for (const payMethod of ["cash", "transfer"] as const) {
+  for (const payMethod of PAY_METHODS) {
     SLOTS.push({ currencyCode, payMethod });
   }
 }
 
-const METHOD_LABEL: Record<PayMethod, string> = {
-  cash: "ເງິນສົດ",
-  transfer: "ເງິນໂອນ",
-};
+const METHOD_LABEL: Record<PayMethod, string> = { ...PAY_METHOD_LABEL };
 
 function canManage(
   employee: Awaited<ReturnType<typeof getEmployeeFromRequest>>,
