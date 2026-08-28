@@ -8454,6 +8454,18 @@ a {
   }
 }
 
+/* The counter's 27" screen is not a wide tablet. Four was measured against
+   a pane about 700px across; on this monitor that same four leaves each
+   tile the width of a phone screen and most of the shelf below the fold.
+   Past 1600px the count follows the room instead — 200px is the width at
+   which a Lao product name still reads over two lines, so tiles keep the
+   size the four were protecting and there are simply more of them. */
+@media (min-width: 1600px) {
+  .pos-shell2.pos-has-catalog .pos-catalog-grid {
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  }
+}
+
 /* ═══════════════════════════════════════════════════════════════════
    Cart line, compact
    A row was ~300px tall — name, code, an always-open "ຂໍລາຄາພິເສດ"
@@ -9126,8 +9138,13 @@ a {
 }
 
 /* 11" tablets: three cards to a row, not four. At ~620px of catalogue a
-   quarter is 145px, which is narrower than the names need. */
-@media (min-width: 1180px) and (max-height: 900px) {
+   quarter is 145px, which is narrower than the names need.
+ *
+ * max-height alone was standing in for "tablet", and it caught the
+ * counter's 27" monitor as well — a browser window there is under 900px
+ * tall, so the widest screen in the shop was being squeezed to three
+ * cards. A tablet is short AND narrow; the max-width says so. */
+@media (min-width: 1180px) and (max-width: 1500px) and (max-height: 900px) {
   .pos-shell2.pos-has-catalog .pos-catalog-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
@@ -9603,4 +9620,6 @@ a {
   .pos-shell2.pos-has-catalog.pos-cart-empty .pos-catalog-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+  /* Tablet portrait only — a desktop with an empty cart is handled by the
+     1600px rule above, which this must not undo. */
 }
