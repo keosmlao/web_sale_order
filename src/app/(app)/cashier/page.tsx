@@ -1134,6 +1134,9 @@ function SettleForm({
   // difference from the QR, so the line is not usable without one.
   const [otherAccount, setOtherAccount] = useState("");
   const [otherAmount, setOtherAmount] = useState("");
+  // Which source-backed method is mid-add, so its one input shows.
+  const [addingCoupon, setAddingCoupon] = useState(false);
+  const [addingOther, setAddingOther] = useState(false);
   const [otherAccounts, setOtherAccounts] = useState<
     Array<{ code: string; name: string }>
   >([]);
@@ -1286,6 +1289,7 @@ function SettleForm({
         },
       ]);
       setCouponInput("");
+      setAddingCoupon(false);
     } catch {
       setCouponError("ກວດ coupon ບໍ່ສຳເລັດ");
     } finally {
@@ -1353,6 +1357,143 @@ function SettleForm({
   const remainingDue = Math.max(0, -change);
   const canSettle =
     order.statusLabel === "PENDING" || order.statusLabel === "HELD";
+
+  // ── The tender list ──────────────────────────────────────────────────
+  // A view over the state that already exists, not a second copy of it:
+  // the kip cash/transfer inputs, the coupons and the other-account line
+  // are the same values the submit path reads. Rendering them as one list
+  // is the whole change — the money math underneath is untouched.
+  const TENDER_COLOUR = {
+    cash: "#0f9d68",
+    transfer: "#2b70b5",
+    transfer_other: "#003361",
+    coupon: "#d0384e",
+  } as const;
+
+  const cashKey = paymentKey(MAIN_CURRENCY, "cash");
+  const qrKey = paymentKey(MAIN_CURRENCY, "transfer");
+  const cashNow = Number(paymentInputs[cashKey] ?? "0") || 0;
+  const qrNow = Number(paymentInputs[qrKey] ?? "0") || 0;
+  const otherNow = Number(otherAmount) || 0;
+
+  const setInput = (key: PaymentField, value: number) =>
+    setPaymentInputs((prev) => ({ ...prev, [key]: String(Math.max(0, value)) }));
+
+  type TenderRow = {
+    key: string;
+    label: string;
+    source?: string;
+    amount: number;
+    max?: number;
+    colour: string;
+    readOnly?: boolean;
+    setAmount: (v: number) => void;
+    remove: () => void;
+  };
+
+  const tenderRows: TenderRow[] = [];
+  if (cashNow > 0) {
+    tenderRows.push({
+      key: "cash",
+      label: "ເງິນສົດ",
+      colour: TENDER_COLOUR.cash,
+      amount: cashNow,
+      setAmount: (v) => setInput(cashKey, v),
+      remove: () => setInput(cashKey, 0),
+    });
+  }
+  if (qrNow > 0) {
+    tenderRows.push({
+      key: "qr",
+      label: "ໂອນ QR",
+      source: qrPaymentSelected ? "ລໍຖ້າລູກຄ້າໂອນ" : undefined,
+      colour: TENDER_COLOUR.transfer,
+      amount: qrNow,
+      // While a QR is live an effect keeps this equal to what is still
+      // owed, so the field is not the cashier's to type into — the QR the
+      // customer is looking at would no longer be for this number.
+      readOnly: qrPaymentSelected,
+      setAmount: (v) => setInput(qrKey, v),
+      remove: () => cancelQrPayment(),
+    });
+  }
+  for (let i = 0; i < coupons.length; i++) {
+    const c = coupons[i];
+    tenderRows.push({
+      key: `coupon:${c.number}`,
+      label: "Coupon",
+      source: `${c.number} · ເຫຼືອ ${moneyFmt.format(c.balance)}`,
+      colour: TENDER_COLOUR.coupon,
+      amount: c.amount,
+      max: c.balance,
+      // Never more than the coupon holds; the server checks again under a
+      // lock, but the counter should not be able to promise it either.
+      setAmount: (v) =>
+        setCoupons((prev) =>
+          prev.map((x, j) =>
+            j === i ? { ...x, amount: Math.min(c.balance, Math.max(0, v)) } : x,
+          ),
+        ),
+      remove: () => setCoupons((prev) => prev.filter((_, j) => j !== i)),
+    });
+  }
+  if (otherNow > 0 && otherAccount) {
+    const acc = otherAccounts.find((a) => a.code === otherAccount);
+    tenderRows.push({
+      key: "other",
+      label: "ໂອນບັນຊີອື່ນ",
+      source: acc ? `${acc.code} · ${acc.name}` : otherAccount,
+      colour: TENDER_COLOUR.transfer_other,
+      amount: otherNow,
+      setAmount: (v) => setOtherAmount(String(Math.max(0, v))),
+      remove: () => {
+        setOtherAmount("");
+        setOtherAccount("");
+        setAddingOther(false);
+      },
+    });
+  }
+
+  // Whatever is still owed goes into the next tender the cashier picks.
+  const fill = Math.max(0, remainingDue);
+  const tenderChips: Array<{
+    key: string;
+    label: string;
+    colour: string;
+    add: () => void;
+  }> = [];
+  if (cashNow <= 0) {
+    tenderChips.push({
+      key: "cash",
+      label: "ເງິນສົດ",
+      colour: TENDER_COLOUR.cash,
+      add: () => setInput(cashKey, fill),
+    });
+  }
+  if (qrNow <= 0) {
+    tenderChips.push({
+      key: "qr",
+      label: "ໂອນ QR",
+      colour: TENDER_COLOUR.transfer,
+      // Not just an amount: this also opens the customer-facing display so
+      // they have something to scan.
+      add: () => selectQrPayment(),
+    });
+  }
+  if (!(otherNow > 0 && otherAccount)) {
+    tenderChips.push({
+      key: "other",
+      label: "ໂອນບັນຊີອື່ນ",
+      colour: TENDER_COLOUR.transfer_other,
+      add: () => setAddingOther(true),
+    });
+  }
+  tenderChips.push({
+    key: "coupon",
+    label: "Coupon",
+    colour: TENDER_COLOUR.coupon,
+    add: () => setAddingCoupon(true),
+  });
   // Transfer-slip upload removed — QR payment replaces the manual slip, so the
   // section is hidden and settlement is never blocked on a slip.
   const needsSlip = false;
@@ -1369,8 +1510,6 @@ function SettleForm({
   const billDifference = order.totalAmount - itemSubtotal;
   const cashKipKey = paymentKey(MAIN_CURRENCY, "cash");
   const transferKipKey = paymentKey(MAIN_CURRENCY, "transfer");
-  const cashKipInput = paymentInputs[cashKipKey] ?? "0";
-  const transferKipInput = paymentInputs[transferKipKey] ?? "0";
 
   // Split cash + transfer: the QR (KIP transfer) only needs to cover whatever
   // the non-QR payments (cash KIP/THB, manual THB transfer) don't. So the
@@ -1461,12 +1600,6 @@ function SettleForm({
     // The fresh window mounts its listener async; re-publish shortly after so
     // it shows the current bill without waiting for the next edit.
     window.setTimeout(() => publishCustomerDisplay(displaySnapshot), 900);
-  }
-
-  function resetPayments(next: Partial<Record<PaymentField, string>>) {
-    const reset: Record<PaymentField, string> = {} as Record<PaymentField, string>;
-    for (const k of PAYMENT_FIELDS) reset[k] = "0";
-    setPaymentInputs({ ...reset, ...next });
   }
 
   // Set just the KIP transfer field (leaves cash intact). Wrapped in a plain
@@ -1870,166 +2003,201 @@ function SettleForm({
           </div>
 
           <div className="settle-payment-body">
+          {/* ── Tenders ────────────────────────────────────────────
+              The screen has one job: get "ຍັງຂາດ" to zero.
+
+              Five methods laid out as five open boxes made a form long
+              enough to scroll, and left the cashier adding up in their
+              head what was still owed. Instead the methods that are in
+              use are rows, the ones that are not are chips, and the
+              figure at the top counts down as rows are added. Tapping a
+              chip fills it with the whole remainder, because one method
+              paying the lot is what usually happens — a split is the
+              exception and only the exception has to be typed. */}
           <div className="settle-card">
             <div className="settle-card-title">
               <span className="flex items-center gap-2">
                 <i className="settle-step">1</i>
-                ເລືອກວິທີຮັບເງິນ
+                ຮັບເງິນ
               </span>
-              <strong className="settle-pay-curtag">ກີບ · ບາດ</strong>
+              <strong className="settle-pay-curtag">
+                {remainingDue > 0
+                  ? `ຍັງຂາດ ${moneyFmt.format(remainingDue)}`
+                  : changeDue > 0
+                    ? `ທອນ ${moneyFmt.format(changeDue)}`
+                    : "ຄົບພໍດີ"}
+              </strong>
             </div>
 
-            {/* ກີບ — ສະກຸນຫຼັກ. ປຸ່ມ “ຄົບ” ຕື່ມຍອດເຕັມໃຫ້ທັນທີ. */}
-            <div className="settle-pay-grid">
-              <label className="settle-pay-field settle-method-card">
-                <span className="settle-pay-label">ເງິນສົດ <b>ກີບ</b></span>
-                <div className="settle-money-input">
-                  <input
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    step={1000}
-                    value={cashKipInput}
-                    disabled={!canSettle}
-                    onChange={(e) => {
-                      // Keep any active QR selection — the transfer auto-adjusts
-                      // to the new remaining, enabling split cash + transfer.
-                      setPaymentInputs((prev) => ({
-                        ...prev,
-                        [cashKipKey]: e.target.value,
-                      }));
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="settle-exact"
-                    disabled={!canSettle}
-                    onClick={() => {
-                      setQrPaymentSelected(false);
-                      resetPayments({ [cashKipKey]: String(effectiveTotal) });
-                    }}
-                  >
-                    ຄົບ
-                  </button>
-                </div>
-              </label>
-              <div className="settle-pay-field">
-                <span className="settle-pay-label">ເງິນໂອນ <b>ຜ່ານ QR</b></span>
-                {qrPaymentSelected ? (
-                  <div className="settle-qr-method settle-qr-method--active">
-                    <span>
-                      <strong className="block text-sm">✓ ຮັບໂອນຜ່ານ QR</strong>
-                      <small className="text-[10px] opacity-70">
-                        ສ່ວນທີ່ເຫຼືອ · ສະແດງ QR ໃຫ້ລູກຄ້າ
-                      </small>
-                    </span>
-                    <span className="flex items-center gap-2">
-                      <strong className="font-mono text-lg">
-                        {moneyFmt.format(Number(transferKipInput))} ₭
-                      </strong>
-                      <button
-                        type="button"
-                        disabled={!canSettle}
-                        onClick={cancelQrPayment}
-                        className="rounded-md border border-odoo-border bg-white px-2 py-1 text-[11px] font-bold text-odoo-text-muted transition hover:border-odoo-danger hover:text-odoo-danger"
-                      >
-                        ຍົກເລີກ
-                      </button>
-                    </span>
-                  </div>
-                ) : transferRemaining > 0 ? (
-                  <button
-                    type="button"
-                    disabled={!canSettle}
-                    onClick={selectQrPayment}
-                    className="settle-qr-method"
-                  >
-                    <span>
-                      <strong className="block text-sm">
-                        ▦ ຮັບສ່ວນທີ່ເຫຼືອເປັນເງິນໂອນ?
-                      </strong>
-                      <small className="text-[10px] opacity-70">
-                        ກົດເພື່ອສະແດງ QR ໃຫ້ລູກຄ້າ
-                      </small>
-                    </span>
-                    <strong className="font-mono text-lg">
-                      {moneyFmt.format(transferRemaining)} ₭
-                    </strong>
-                  </button>
-                ) : (
-                  <div className="settle-qr-method opacity-60">
-                    <span>
-                      <small className="text-[11px]">
-                        ຮັບຄົບແລ້ວ — ບໍ່ຕ້ອງໂອນ
-                      </small>
-                    </span>
-                    <strong className="font-mono text-lg">0 ₭</strong>
-                  </div>
-                )}
+            {tenderRows.length === 0 ? (
+              <div className="settle-tender-none">
+                ຍັງບໍ່ໄດ້ຮັບເງິນ — ເລືອກວິທີຂ້າງລຸ່ມ
               </div>
+            ) : null}
+
+            {tenderRows.map((t) => (
+              <div key={t.key} className="settle-tender-row">
+                <i
+                  className="settle-tender-dot"
+                  style={{ background: t.colour }}
+                  aria-hidden
+                />
+                <div className="settle-tender-who">
+                  <b>{t.label}</b>
+                  {t.source ? <small>{t.source}</small> : null}
+                </div>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={t.max}
+                  step={1000}
+                  value={t.amount || ""}
+                  disabled={!canSettle || t.readOnly}
+                  onChange={(e) => t.setAmount(Number(e.target.value) || 0)}
+                />
+                <button
+                  type="button"
+                  className="settle-tender-x"
+                  disabled={!canSettle}
+                  onClick={() => t.remove()}
+                  aria-label="ເອົາອອກ"
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
+
+            {/* Only the methods not already on the bill. Cash is always
+                offered — it is the one that can absorb an overpayment. */}
+            <div className="settle-tender-chips">
+              {tenderChips.map((c) => (
+                <button
+                  key={c.key}
+                  type="button"
+                  className="settle-tender-chip"
+                  disabled={!canSettle}
+                  onClick={c.add}
+                >
+                  <i style={{ background: c.colour }} aria-hidden />
+                  {c.label}
+                </button>
+              ))}
             </div>
 
-            {/* ບາດ — ເປີດເມື່ອລູກຄ້າຈ່າຍເປັນເງິນບາດ */}
+            {/* Coupon and other-account need their source before they can
+                carry an amount, so they get one line of input each — shown
+                only while that method is being added. */}
+            {addingCoupon ? (
+              <div className="settle-tender-add">
+                <input
+                  type="text"
+                  autoFocus
+                  value={couponInput}
+                  disabled={couponBusy}
+                  placeholder="ເລກ coupon — ພິມ ຫຼື ສະແກນ"
+                  onChange={(e) => setCouponInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault();
+                      void addCoupon();
+                    }
+                  }}
+                />
+                <button
+                  type="button"
+                  className="odoo-btn odoo-btn-secondary"
+                  disabled={couponBusy || !couponInput.trim()}
+                  onClick={() => void addCoupon()}
+                >
+                  {couponBusy ? "ກຳລັງກວດ..." : "ກວດ"}
+                </button>
+                <button
+                  type="button"
+                  className="settle-tender-x"
+                  onClick={() => {
+                    setAddingCoupon(false);
+                    setCouponError(null);
+                    setCouponInput("");
+                  }}
+                  aria-label="ຍົກເລີກ"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : null}
+            {couponError ? (
+              <div className="settle-tender-err">{couponError}</div>
+            ) : null}
+
+            {addingOther ? (
+              <div className="settle-tender-add">
+                <select
+                  autoFocus
+                  value={otherAccount}
+                  onChange={(e) => {
+                    setOtherAccount(e.target.value);
+                    if (e.target.value && !Number(otherAmount)) {
+                      setOtherAmount(String(remainingDue));
+                    }
+                  }}
+                >
+                  <option value="">— ເລືອກບັນຊີ —</option>
+                  {otherAccounts.map((a) => (
+                    <option key={a.code} value={a.code}>
+                      {a.code} · {a.name}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  className="settle-tender-x"
+                  onClick={() => {
+                    setAddingOther(false);
+                    setOtherAccount("");
+                    setOtherAmount("");
+                  }}
+                  aria-label="ຍົກເລີກ"
+                >
+                  ✕
+                </button>
+              </div>
+            ) : null}
+
+            {/* THB stays a footnote: it is the same cash, counted in the
+                other currency, and most bills never touch it. */}
             <button
               type="button"
               className="settle-thb-toggle"
               onClick={() => setShowThb((v) => !v)}
-              aria-expanded={showThbInputs}
             >
-              <span>{showThbInputs ? "▾" : "▸"} ຮັບເປັນເງິນບາດ (THB)</span>
+              {showThb ? "▾" : "▸"} ຮັບເປັນເງິນບາດ (THB)
               {currencyRates["01"] ? (
                 <em>1 ฿ ≈ {moneyFmt.format(currencyRates["01"])} ກີບ</em>
               ) : null}
             </button>
-            {showThbInputs ? (
-              <div className="settle-pay-grid">
-                <label className="settle-pay-field">
-                  <span className="settle-pay-label">ເງິນສົດ <b>ບາດ</b></span>
-                  <div className="settle-money-input">
+            {showThbInputs
+              ? (["cash", "transfer"] as const).map((m) => (
+                  <div key={m} className="settle-tender-add">
+                    <span className="settle-tender-thb-label">
+                      {m === "cash" ? "ສົດ ບາດ" : "ໂອນ ບາດ"}
+                    </span>
                     <input
                       type="number"
                       inputMode="numeric"
                       min={0}
-                      step={1}
-                      value={paymentInputs[paymentKey("01", "cash")] ?? "0"}
+                      value={paymentInputs[paymentKey("01", m)] ?? "0"}
                       disabled={!canSettle}
-                      onChange={(e) => {
+                      onChange={(e) =>
                         setPaymentInputs((prev) => ({
                           ...prev,
-                          [paymentKey("01", "cash")]: e.target.value,
-                        }));
-                      }}
+                          [paymentKey("01", m)]: e.target.value,
+                        }))
+                      }
                     />
-                    <em className="settle-unit">฿</em>
                   </div>
-                </label>
-                <label className="settle-pay-field">
-                  <span className="settle-pay-label">ເງິນໂອນ <b>ບາດ</b></span>
-                  <div className="settle-money-input">
-                    <input
-                      type="number"
-                      inputMode="numeric"
-                      min={0}
-                      step={1}
-                      value={paymentInputs[paymentKey("01", "transfer")] ?? "0"}
-                      disabled={!canSettle}
-                      onChange={(e) => {
-                        setQrPaymentSelected(false);
-                        setPaymentInputs((prev) => ({
-                          ...prev,
-                          [paymentKey("01", "transfer")]: e.target.value,
-                        }));
-                      }}
-                    />
-                    <em className="settle-unit">฿</em>
-                  </div>
-                </label>
-              </div>
-            ) : null}
-
-            <div className="settle-simple-hint">
-              ເລືອກ QR ແລ້ວລະບົບຈະໃສ່ຍອດເຕັມ ແລະເປີດໜ້າ QR ໃຫ້ອັດຕະໂນມັດ.
-            </div>
+                ))
+              : null}
           </div>
 
           {transferInMain > 0 ? (
@@ -2168,130 +2336,6 @@ function SettleForm({
               )}
             </div>
           ) : null}
-
-          {/* ── Coupon ──────────────────────────────────────────────
-              A coupon is not a number the cashier types, it is a balance
-              held elsewhere: the number is looked up, and the line is
-              capped by what the coupon has left and by what the bill
-              still owes. Several are allowed — a customer can hand over
-              more than one. */}
-          <div className="settle-card">
-            <div className="settle-card-title">
-              <span className="flex items-center gap-2">
-                <i className="settle-step">C</i>
-                ຫັກ Coupon
-              </span>
-              {coupons.length > 0 ? (
-                <strong className="settle-pay-curtag">
-                  {coupons.length} ໃບ
-                </strong>
-              ) : null}
-            </div>
-
-            {coupons.map((c, i) => (
-              <div key={c.number} className="settle-tender-row">
-                <div className="settle-tender-who">
-                  <b>{c.number}</b>
-                  <small>ເຫຼືອ {moneyFmt.format(c.balance)}</small>
-                </div>
-                <input
-                  type="number"
-                  inputMode="numeric"
-                  min={0}
-                  max={c.balance}
-                  value={c.amount || ""}
-                  disabled={!canSettle}
-                  onChange={(e) => {
-                    // Never more than the coupon holds. Over-redeeming would
-                    // be refused by the server anyway, with the customer
-                    // already told a total.
-                    const v = Math.max(
-                      0,
-                      Math.min(c.balance, Number(e.target.value) || 0),
-                    );
-                    setCoupons((prev) =>
-                      prev.map((x, j) => (j === i ? { ...x, amount: v } : x)),
-                    );
-                  }}
-                />
-                <button
-                  type="button"
-                  className="settle-tender-x"
-                  disabled={!canSettle}
-                  onClick={() =>
-                    setCoupons((prev) => prev.filter((_, j) => j !== i))
-                  }
-                  aria-label="ເອົາອອກ"
-                >
-                  ✕
-                </button>
-              </div>
-            ))}
-
-            <div className="settle-tender-add">
-              <input
-                type="text"
-                value={couponInput}
-                disabled={!canSettle || couponBusy}
-                placeholder="ເລກ coupon — ພິມ ຫຼື ສະແກນ"
-                onChange={(e) => setCouponInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    void addCoupon();
-                  }
-                }}
-              />
-              <button
-                type="button"
-                className="odoo-btn odoo-btn-secondary"
-                disabled={!canSettle || couponBusy || !couponInput.trim()}
-                onClick={() => void addCoupon()}
-              >
-                {couponBusy ? "ກຳລັງກວດ..." : "ເພີ່ມ"}
-              </button>
-            </div>
-            {couponError ? (
-              <div className="settle-tender-err">{couponError}</div>
-            ) : null}
-          </div>
-
-          {/* ── Transfer into another account ───────────────────────
-              Which account it landed in is the whole difference from the
-              QR, so the amount is inert until one is chosen — a line
-              without it would be unreconcilable on the bank statement. */}
-          <div className="settle-card">
-            <div className="settle-card-title">
-              <span className="flex items-center gap-2">
-                <i className="settle-step">B</i>
-                ໂອນເຂົ້າບັນຊີອື່ນ
-              </span>
-            </div>
-            <div className="settle-tender-add">
-              <select
-                value={otherAccount}
-                disabled={!canSettle}
-                onChange={(e) => setOtherAccount(e.target.value)}
-              >
-                <option value="">— ເລືອກບັນຊີ —</option>
-                {otherAccounts.map((a) => (
-                  <option key={a.code} value={a.code}>
-                    {a.code} · {a.name}
-                  </option>
-                ))}
-              </select>
-              <input
-                type="number"
-                inputMode="numeric"
-                min={0}
-                step={1000}
-                value={otherAmount}
-                disabled={!canSettle || !otherAccount}
-                placeholder="ຈຳນວນ (ກີບ)"
-                onChange={(e) => setOtherAmount(e.target.value)}
-              />
-            </div>
-          </div>
 
           <label className="settle-note">
             <span>ໝາຍເຫດ</span>
