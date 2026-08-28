@@ -935,10 +935,11 @@ function PosScreen({
     const kept = (target.serialUnits ?? []).filter((picked) =>
       units.some((u) => u.isn === picked.isn),
     );
-    // One unit on the shelf is not a choice. Take it and say so on the
-    // line, rather than making the counter open a list of one.
+    // Nothing to choose when the line is taking every number the shelf
+    // has — one of one, or two of two. Take them and say so on the line
+    // rather than opening a list with no decision in it.
     const autoPicked =
-      kept.length === 0 && units.length === 1 ? [units[0]] : kept;
+      kept.length === 0 && units.length <= target.quantity ? [...units] : kept;
     patchLine(idx, productId, {
       serialOptions: units,
       loadingSerials: false,
@@ -946,8 +947,8 @@ function PosScreen({
       serialNo: autoPicked[0]?.sn ?? null,
       serialIsn: autoPicked[0]?.isn ?? null,
     });
-    // More on the shelf than the line has claimed: ask which ones.
-    if (units.length > 1 && autoPicked.length < 1) {
+    // More on the shelf than the line is taking: ask which ones.
+    if (units.length > target.quantity && autoPicked.length < target.quantity) {
       setSerialPickerIdx(idx);
     }
   }
@@ -1878,15 +1879,21 @@ function PosScreen({
         updated.serialNo = updated.serialUnits[0]?.sn ?? null;
         updated.serialIsn = updated.serialUnits[0]?.isn ?? null;
       } else if (held.length < updated.quantity) {
-        const free = (updated.serialOptions ?? []).filter(
-          (u) => !held.some((h) => h.isn === u.isn),
-        );
-        // Always ask, even when one candidate is left. Auto-picking the
-        // last one was tidier and wrong: raising the quantity is the
-        // moment the counter decides which physical fridge goes out, and
-        // it happens with the customer standing there. A line that filled
-        // itself in put an ISN on the bill nobody chose.
-        if (free.length > 0) {
+        const options = updated.serialOptions ?? [];
+        if (options.length <= updated.quantity) {
+          // The line is taking every numbered unit the shelf has. Which
+          // ones is a question with one answer, so don't ask it — two of
+          // two go out. Same when the shelf has fewer numbers than the
+          // line sells: take what exists, and the n/qty counter says how
+          // many it still cannot name.
+          updated.serialUnits = [...options];
+          updated.serialNo = options[0]?.sn ?? null;
+          updated.serialIsn = options[0]?.isn ?? null;
+        } else {
+          // More on the shelf than the line is taking, so it is a real
+          // decision — and the counter's, not the line's. Raising the
+          // quantity is the moment they choose which physical fridge goes
+          // out, with the customer standing there.
           queueMicrotask(() => setSerialPickerIdx(idx));
         }
       }
