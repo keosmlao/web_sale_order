@@ -105,12 +105,28 @@ export function meNamesCte(employeeCode: string) {
 
 export const meNamesFilter = Prisma.sql`AND salename IN (SELECT salename FROM names)`;
 
+/**
+ * Whose sales the figures describe.
+ *
+ * `me` — one seller's own. `team` — the whole front-store floor, which is
+ * what a head or a manager is accountable for and what the web home page
+ * has always shown them. Rank stays personal in both: a manager still
+ * wants to know where they sit among their own department.
+ *
+ * The caller decides from the role, and both surfaces decide the same way,
+ * or the person who most often has the web and the app open side by side
+ * is the one who sees two different numbers.
+ */
+export type HomeScope = "me" | "team";
+
 export async function getHomeDashboard(
   employeeCode: string,
   departmentCode: string,
+  scope: HomeScope = "me",
 ): Promise<HomeDashboard> {
-  const names = meNamesCte(employeeCode);
-  const mine = meNamesFilter;
+  const team = scope === "team";
+  const names = team ? Prisma.empty : meNamesCte(employeeCode);
+  const mine = team ? Prisma.empty : meNamesFilter;
   const deptIn = Prisma.sql`department_code IN (${Prisma.join([...KHUA_LUANG_DEPTS])})`;
 
   const [
@@ -150,24 +166,42 @@ export async function getHomeDashboard(
         AND ${saleReportCurrentMonth("odg_sale_detail")}
         ${mine}
     `,
-    prisma.$queryRaw<TargetRow[]>`
-      ${names}
-      SELECT
-        COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
-          WHERE ${saleBasis("detail")}
-            ${targetSalesScope("detail")}
-            AND ${saleReportCurrentMonth("detail")}
-            AND detail.salename IN (SELECT salename FROM names)), 0) AS sales,
-        COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
-          WHERE ${saleBasis("detail")}
-            ${targetSalesScope("detail")}
-            AND ${saleReportCurrentMonth("detail")}
-            AND detail.salename IN (SELECT salename FROM names)), 0) AS qty,
-        COALESCE((SELECT SUM(target) FROM odg_retail_target_employee
-          WHERE emp_code = ${employeeCode}
-            AND year = to_char(CURRENT_DATE, 'YYYY')
-            AND LPAD(month, 2, '0') = to_char(CURRENT_DATE, 'MM')), 0) AS target
-    `,
+    team
+      ? // Supervisor view: the whole storefront, every seller in scope —
+        // not only the ones given a target. Matches the department reward
+        // card and /api/reports/my-sales.
+        prisma.$queryRaw<TargetRow[]>`
+          SELECT
+            COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
+              WHERE ${saleBasis("detail")}
+                ${targetSalesScope("detail")}
+                AND ${saleReportCurrentMonth("detail")}), 0) AS sales,
+            COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
+              WHERE ${saleBasis("detail")}
+                ${targetSalesScope("detail")}
+                AND ${saleReportCurrentMonth("detail")}), 0) AS qty,
+            COALESCE((SELECT SUM(employee_target.target) FROM odg_retail_target_employee employee_target
+              WHERE employee_target.year = to_char(CURRENT_DATE, 'YYYY')
+                AND LPAD(employee_target.month, 2, '0') = to_char(CURRENT_DATE, 'MM')), 0) AS target
+        `
+      : prisma.$queryRaw<TargetRow[]>`
+          ${names}
+          SELECT
+            COALESCE((SELECT SUM(detail.sum_amount) FROM odg_sale_detail detail
+              WHERE ${saleBasis("detail")}
+                ${targetSalesScope("detail")}
+                AND ${saleReportCurrentMonth("detail")}
+                AND detail.salename IN (SELECT salename FROM names)), 0) AS sales,
+            COALESCE((SELECT SUM(detail.qty) FROM odg_sale_detail detail
+              WHERE ${saleBasis("detail")}
+                ${targetSalesScope("detail")}
+                AND ${saleReportCurrentMonth("detail")}
+                AND detail.salename IN (SELECT salename FROM names)), 0) AS qty,
+            COALESCE((SELECT SUM(target) FROM odg_retail_target_employee
+              WHERE emp_code = ${employeeCode}
+                AND year = to_char(CURRENT_DATE, 'YYYY')
+                AND LPAD(month, 2, '0') = to_char(CURRENT_DATE, 'MM')), 0) AS target
+        `,
     // Rank within this person's own department.
     prisma.$queryRaw<RankRow[]>`
       WITH sold AS (
