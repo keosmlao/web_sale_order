@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
+import { isPrivilegedRole, roleFromEmployee } from "@/lib/roles";
 
 // /api/cashier/daily-summary — what the till took on one day, ready to be
 // counted and handed over.
@@ -57,6 +58,17 @@ export async function GET(request: NextRequest) {
   const raw = url.searchParams.get("date")?.trim() ?? "";
   const date = /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
 
+  // Same visibility rule as the receipt list: a cashier counts their own
+  // drawer; heads and managers count the shop. '' matches everything so
+  // the privileged case needs no separate SQL.
+  const privileged = isPrivilegedRole(
+    roleFromEmployee({
+      appRole: employee.appRole,
+      positionCode: employee.positionCode,
+    }),
+  );
+  const own = privileged ? "" : (employee.employeeCode ?? "");
+
   const salesWhs = await getConfiguredSalesWarehouses();
   const [tenders, audits, smlRows] = await Promise.all([
     prisma.$queryRaw<TenderRow[]>`
@@ -70,6 +82,7 @@ export async function GET(request: NextRequest) {
       JOIN app_settle_audit sa ON sa.doc_no = p.doc_no
       WHERE sa.is_voided = FALSE
         AND sa.created_at::date = COALESCE(${date}::date, CURRENT_DATE)
+        AND (${own} = '' OR sa.cashier_code = ${own})
       GROUP BY p.pay_method, p.currency_code
       ORDER BY p.pay_method, p.currency_code
     `,
@@ -83,6 +96,7 @@ export async function GET(request: NextRequest) {
       FROM app_settle_audit
       WHERE is_voided = FALSE
         AND created_at::date = COALESCE(${date}::date, CURRENT_DATE)
+        AND (${own} = '' OR cashier_code = ${own})
     `,
     prisma.$queryRaw<SmlRow[]>`
       SELECT
@@ -95,6 +109,11 @@ export async function GET(request: NextRequest) {
       WHERE t.trans_flag = 44
         AND t.doc_format_code <> 'CAKAP'
         AND t.doc_date = COALESCE(${date}::date, CURRENT_DATE)
+        AND (
+          ${own} = ''
+          OR COALESCE(NULLIF(TRIM(t.last_editor_code), ''), t.cashier_code)
+             = ${own}
+        )
         AND EXISTS (
           SELECT 1 FROM ic_trans_detail dd
           WHERE dd.doc_no = t.doc_no

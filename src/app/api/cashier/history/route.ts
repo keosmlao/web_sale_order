@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { Prisma } from "@/generated/prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
+import { isPrivilegedRole, roleFromEmployee } from "@/lib/roles";
 import { getConfiguredSalesWarehouses } from "@/lib/inventory-config";
 
 // /api/cashier/history — receipt lookup for the in-store cashier.
@@ -100,6 +101,25 @@ export async function GET(request: NextRequest) {
     where.push(
       Prisma.sql`t.create_date_time_now < (${to}::date + INTERVAL '1 day')`,
     );
+  }
+  // A cashier sees their own money and nobody else's — matched on the
+  // same "who took it" rule the list displays: cashier_code on our
+  // CAKAPs, last_editor_code on SML bills. Heads and managers still see
+  // the whole shop.
+  const privileged = isPrivilegedRole(
+    roleFromEmployee({
+      appRole: employee.appRole,
+      positionCode: employee.positionCode,
+    }),
+  );
+  const own = employee.employeeCode ?? "";
+  if (!privileged && own) {
+    where.push(Prisma.sql`
+      CASE
+        WHEN t.doc_format_code = 'CAKAP' THEN t.cashier_code
+        ELSE COALESCE(NULLIF(TRIM(t.last_editor_code), ''), t.cashier_code)
+      END = ${own}
+    `);
   }
   if (cashier) {
     where.push(Prisma.sql`t.cashier_code = ${cashier}`);
