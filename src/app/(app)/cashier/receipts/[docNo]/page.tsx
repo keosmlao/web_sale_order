@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import AutoPrint from "./AutoPrint";
 import PrintButton from "./PrintButton";
 import ReceiptPrintView from "./ReceiptPrintView";
+import ReturnButton from "./ReturnButton";
 import VoidButton from "./VoidButton";
 
 export const dynamic = "force-dynamic";
@@ -206,7 +207,21 @@ export default async function ReceiptPage({
         <div className="flex items-center gap-2">
           {/* Voiding unwinds documents this app wrote. A receipt raised
               inside SML has none of them — it is corrected in SML. */}
-          {receipt.origin === "pos" ? <VoidButton docNo={docNo} /> : null}
+          {receipt.origin === "pos" ? (
+            <>
+              <ReturnButton
+                docNo={docNo}
+                items={receipt.items.map((it) => ({
+                  lineNumber: it.lineNumber,
+                  itemCode: it.itemCode,
+                  itemName: it.itemName,
+                  qty: it.qty,
+                  priceKip: it.priceKip,
+                }))}
+              />
+              <VoidButton docNo={docNo} />
+            </>
+          ) : null}
           <PrintButton />
         </div>
       </div>
