@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fmtDate } from "@/lib/datetime";
 
 // ສາງສິນຄ້າ / ສະຕັອກ — the whole catalog, filterable by group, category
@@ -54,7 +54,9 @@ type ItemDetail = {
 
 const moneyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const qtyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
-const PAGE_SIZE = 50;
+// First screen loads 20; scrolling the bottom into view fetches 10 more.
+const FIRST_PAGE = 20;
+const NEXT_PAGE = 10;
 
 function StockBadge({ qty }: { qty: number }) {
   if (qty <= 0) {
@@ -82,10 +84,10 @@ export default function InventoryClient() {
   const [stock, setStock] = useState<"all" | "in" | "out">("all");
   const [items, setItems] = useState<Item[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
   const [openCode, setOpenCode] = useState<string | null>(null);
   const [detail, setDetail] = useState<ItemDetail | "loading" | "error" | null>(
@@ -99,46 +101,71 @@ export default function InventoryClient() {
       .catch(() => setFacets(null));
   }, []);
 
-  const fetchList = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const p = new URLSearchParams({
-        page: String(page),
-        pageSize: String(PAGE_SIZE),
-        stock,
-      });
-      if (q.trim()) p.set("q", q.trim());
-      if (groupMain) p.set("groupMain", groupMain);
-      if (groupSub) p.set("groupSub", groupSub);
-      if (groupSub2) p.set("groupSub2", groupSub2);
-      if (category) p.set("category", category);
-      if (brand) p.set("brand", brand);
-      const res = await fetch(`/api/inventory/list?${p}`);
-      if (!res.ok) {
-        setError(`Error ${res.status}`);
-        return;
+  // offset-addressed fetch: offset 0 pulls the first 20 (a fresh list);
+  // any other offset pulls 10 and appends. The API pages by
+  // (page, pageSize), so the offset maps onto exact page boundaries.
+  const fetchList = useCallback(
+    async (offset: number) => {
+      if (offset === 0) setLoading(true);
+      else setLoadingMore(true);
+      setError(null);
+      try {
+        const pageSize = offset === 0 ? FIRST_PAGE : NEXT_PAGE;
+        const page = offset === 0 ? 1 : offset / NEXT_PAGE + 1;
+        const p = new URLSearchParams({
+          page: String(page),
+          pageSize: String(pageSize),
+          stock,
+        });
+        if (q.trim()) p.set("q", q.trim());
+        if (groupMain) p.set("groupMain", groupMain);
+        if (groupSub) p.set("groupSub", groupSub);
+        if (groupSub2) p.set("groupSub2", groupSub2);
+        if (category) p.set("category", category);
+        if (brand) p.set("brand", brand);
+        const res = await fetch(`/api/inventory/list?${p}`);
+        if (!res.ok) {
+          setError(`Error ${res.status}`);
+          return;
+        }
+        const data = await res.json();
+        const fresh: Item[] = data.items ?? [];
+        setItems((prev) => (offset === 0 ? fresh : [...prev, ...fresh]));
+        setTotal(data.total ?? 0);
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "fetch failed");
+      } finally {
+        setLoading(false);
+        setLoadingMore(false);
       }
-      const data = await res.json();
-      setItems(data.items ?? []);
-      setTotal(data.total ?? 0);
-      setTotalPages(data.totalPages ?? 1);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "fetch failed");
-    } finally {
-      setLoading(false);
-    }
-  }, [q, page, stock, groupMain, groupSub, groupSub2, category, brand]);
+    },
+    [q, stock, groupMain, groupSub, groupSub2, category, brand],
+  );
 
+  // Any filter change restarts the list from the top.
   useEffect(() => {
-    const t = setTimeout(() => void fetchList(), q ? 300 : 0);
+    const t = setTimeout(() => void fetchList(0), q ? 300 : 0);
     return () => clearTimeout(t);
   }, [fetchList, q]);
 
-  // Any filter change starts the pager over.
+  // The bottom sentinel pulls the next 10 as it scrolls into view.
+  const hasMore = items.length < total;
   useEffect(() => {
-    setPage(1);
-  }, [q, stock, groupMain, groupSub, groupSub2, category, brand]);
+    const el = sentinelRef.current;
+    if (!el || !hasMore || loading) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && !loadingMore) {
+          // 20 first, then 10 at a time — offsets stay on NEXT_PAGE
+          // boundaries after the first pull (20 = 2 × 10).
+          void fetchList(items.length);
+        }
+      },
+      { rootMargin: "300px" },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [fetchList, hasMore, loading, loadingMore, items.length]);
 
   useEffect(() => {
     if (!openCode) {
@@ -367,29 +394,15 @@ export default function InventoryClient() {
         </table>
       </div>
 
-      {totalPages > 1 ? (
-        <div className="mt-3 flex items-center justify-between text-sm">
-          <button
-            type="button"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => p - 1)}
-            className="odoo-btn odoo-btn-secondary disabled:opacity-40"
-          >
-            ← ກ່ອນ
-          </button>
-          <span className="font-mono text-odoo-text-muted">
-            {page} / {totalPages}
-          </span>
-          <button
-            type="button"
-            disabled={page >= totalPages}
-            onClick={() => setPage((p) => p + 1)}
-            className="odoo-btn odoo-btn-secondary disabled:opacity-40"
-          >
-            ຕໍ່ໄປ →
-          </button>
-        </div>
-      ) : null}
+      <div ref={sentinelRef} className="py-3 text-center text-[12px] text-odoo-text-muted">
+        {loadingMore
+          ? "ກຳລັງໂຫລດເພີ່ມ…"
+          : hasMore
+            ? `ເລື່ອນລົງເພື່ອໂຫລດເພີ່ມ (${moneyFmt.format(items.length)} / ${moneyFmt.format(total)})`
+            : items.length > 0
+              ? `ຄົບແລ້ວ ${moneyFmt.format(total)} ລາຍການ`
+              : ""}
+      </div>
 
       {/* ── Detail drawer ── */}
       {openCode ? (
