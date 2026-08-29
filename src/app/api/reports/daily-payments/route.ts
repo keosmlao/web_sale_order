@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
+import { isPrivilegedRole, roleFromEmployee } from "@/lib/roles";
 import { getConfiguredSalesWarehouses } from "@/lib/inventory-config";
 
 // /api/reports/daily-payments
@@ -89,6 +90,16 @@ export async function GET(request: NextRequest) {
 
   // Three parallel queries — same shape as the page. Fan-out is cheap and
   // halves the wall-clock vs. sequential.
+  // Same visibility rule as the cashier's own screens: '' matches all.
+  const own = isPrivilegedRole(
+    roleFromEmployee({
+      appRole: employee.appRole,
+      positionCode: employee.positionCode,
+    }),
+  )
+    ? ""
+    : (employee.employeeCode ?? "");
+
   const salesWhs = await getConfiguredSalesWarehouses();
   const [headers, payments, slips, smlHeaders] = await Promise.all([
     prisma.$queryRaw<HeaderRow[]>`
@@ -107,6 +118,7 @@ export async function GET(request: NextRequest) {
       LEFT JOIN odg_employee emp ON emp.employee_code = NULLIF(t.sale_code, '')
       WHERE t.doc_format_code = 'CAKAP'
         AND t.doc_date = ${selectedDate}::date
+        AND (${own} = '' OR t.cashier_code = ${own})
       ORDER BY t.doc_time NULLS LAST, t.doc_no
     `,
     prisma.$queryRaw<PaymentLineRow[]>`
@@ -119,12 +131,14 @@ export async function GET(request: NextRequest) {
       FROM app_payment_line p
       JOIN ic_trans t ON t.doc_no = p.doc_no AND t.doc_format_code = 'CAKAP'
       WHERE t.doc_date = ${selectedDate}::date
+        AND (${own} = '' OR t.cashier_code = ${own})
     `,
     prisma.$queryRaw<SlipCountRow[]>`
       SELECT s.doc_no, COUNT(*)::int AS slip_count
       FROM app_transfer_slip s
       JOIN ic_trans t ON t.doc_no = s.doc_no AND t.doc_format_code = 'CAKAP'
       WHERE t.doc_date = ${selectedDate}::date
+        AND (${own} = '' OR t.cashier_code = ${own})
       GROUP BY s.doc_no
     `,
     // The shop's receipts raised inside SML (any flag-44 format with a
@@ -153,6 +167,11 @@ export async function GET(request: NextRequest) {
       WHERE t.trans_flag = 44
         AND t.doc_format_code <> 'CAKAP'
         AND t.doc_date = ${selectedDate}::date
+        AND (
+          ${own} = ''
+          OR COALESCE(NULLIF(TRIM(t.last_editor_code), ''), t.cashier_code)
+             = ${own}
+        )
         AND EXISTS (
           SELECT 1 FROM ic_trans_detail dd
           WHERE dd.doc_no = t.doc_no

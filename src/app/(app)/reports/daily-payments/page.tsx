@@ -1,4 +1,5 @@
 import { requireEmployee } from "@/lib/auth";
+import { isPrivilegedRole, roleFromEmployee } from "@/lib/roles";
 import { prisma } from "@/lib/prisma";
 import { getConfiguredSalesWarehouses } from "@/lib/inventory-config";
 import { CURRENCY_LABEL, type CurrencyCode } from "@/lib/payment";
@@ -54,7 +55,14 @@ export default async function DailyPaymentsReportPage({
 }: {
   searchParams: Promise<{ date?: string }>;
 }) {
-  await requireEmployee();
+  const me = await requireEmployee();
+  // Same visibility rule as the cashier's own screens: a cashier reads
+  // their own drawer, heads and managers read the shop. '' matches all.
+  const own = isPrivilegedRole(
+    roleFromEmployee({ appRole: me.appRole, positionCode: me.positionCode }),
+  )
+    ? ""
+    : (me.employeeCode ?? "");
   const params = await searchParams;
   const selectedDate =
     params.date && isValidDate(params.date) ? params.date : todayIso;
@@ -77,6 +85,7 @@ export default async function DailyPaymentsReportPage({
       LEFT JOIN odg_employee emp ON emp.employee_code = NULLIF(t.sale_code, '')
       WHERE t.doc_format_code = 'CAKAP'
         AND t.doc_date = ${selectedDate}::date
+        AND (${own} = '' OR t.cashier_code = ${own})
       ORDER BY t.doc_time NULLS LAST, t.doc_no
     `,
     prisma.$queryRaw<PaymentLineRow[]>`
@@ -89,12 +98,14 @@ export default async function DailyPaymentsReportPage({
       FROM app_payment_line p
       JOIN ic_trans t ON t.doc_no = p.doc_no AND t.doc_format_code = 'CAKAP'
       WHERE t.doc_date = ${selectedDate}::date
+        AND (${own} = '' OR t.cashier_code = ${own})
     `,
     prisma.$queryRaw<SlipCountRow[]>`
       SELECT s.doc_no, COUNT(*)::int AS slip_count
       FROM app_transfer_slip s
       JOIN ic_trans t ON t.doc_no = s.doc_no AND t.doc_format_code = 'CAKAP'
       WHERE t.doc_date = ${selectedDate}::date
+        AND (${own} = '' OR t.cashier_code = ${own})
       GROUP BY s.doc_no
     `,
     // The shop's SML-raised receipts (flag 44, a line out of the sales
@@ -123,6 +134,11 @@ export default async function DailyPaymentsReportPage({
       WHERE t.trans_flag = 44
         AND t.doc_format_code <> 'CAKAP'
         AND t.doc_date = ${selectedDate}::date
+        AND (
+          ${own} = ''
+          OR COALESCE(NULLIF(TRIM(t.last_editor_code), ''), t.cashier_code)
+             = ${own}
+        )
         AND EXISTS (
           SELECT 1 FROM ic_trans_detail dd
           WHERE dd.doc_no = t.doc_no
