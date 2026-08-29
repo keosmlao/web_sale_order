@@ -24,9 +24,11 @@ import { getConfiguredSalesWarehouses } from "@/lib/inventory-config";
 type SalesRow = {
   item_code: string;
   sold: string | number;
+  revenue: string | number | null;
   last_sale: Date | null;
   bills: number;
 };
+type WmsRow = { item_code: string; qty: string | number };
 type BalRow = { ic_code: string; qty: string | number };
 type InfoRow = {
   code: string;
@@ -53,10 +55,11 @@ export async function GET(request: NextRequest) {
     SELECT code, name_1 FROM ic_warehouse WHERE code = ANY(${warehouses})
   `;
 
-  const [sales, balances] = await Promise.all([
+  const [sales, balances, wmsRows] = await Promise.all([
     prisma.$queryRaw<SalesRow[]>`
       SELECT d.item_code,
              SUM(d.qty) AS sold,
+             SUM(d.sum_amount_2) AS revenue,
              MAX(d.doc_date) AS last_sale,
              COUNT(DISTINCT d.doc_no)::int AS bills
       FROM ic_trans_detail d
@@ -77,7 +80,17 @@ export async function GET(request: NextRequest) {
       GROUP BY ic_code
       HAVING SUM(balance_qty) > 0
     `,
+    // The WMS's own view of the same shelf — SUM(qty × calc_flag), the
+    // exact arithmetic its balance screens use. Where the two ledgers
+    // disagree the buyer should count before ordering.
+    prisma.$queryRaw<WmsRow[]>`
+      SELECT item_code, SUM(qty * calc_flag) AS qty
+      FROM odg_wms_trans_detail
+      WHERE wh_code = ${wh}
+      GROUP BY item_code
+    `.catch(() => [] as WmsRow[]),
   ]);
+  const wmsByCode = new Map(wmsRows.map((w) => [w.item_code, Number(w.qty)]));
 
   const balByCode = new Map(balances.map((b) => [b.ic_code, Number(b.qty)]));
   const salesByCode = new Map(sales.map((r) => [r.item_code, r]));
@@ -105,6 +118,11 @@ export async function GET(request: NextRequest) {
     refillQty: number;
     refillValue: number;
     stockValue: number;
+    revenue: number;
+    abc: "A" | "B" | "C" | null;
+    fsn: "F" | "S" | "N";
+    wmsQty: number | null;
+    wmsDiff: boolean;
   };
 
   const items: Item[] = codes.map((code) => {
@@ -129,6 +147,15 @@ export async function GET(request: NextRequest) {
       status === "out" || status === "critical" || status === "reorder"
         ? Math.max(0, Math.ceil(avgDay * reorder - balance))
         : 0;
+    // FSN by recency of the last sale: Fast within 30 days, Slow within
+    // the window, Non-moving never sold in it.
+    const lastSaleAge = s?.last_sale
+      ? (Date.now() - s.last_sale.getTime()) / 86400_000
+      : null;
+    const fsn: "F" | "S" | "N" =
+      lastSaleAge === null ? "N" : lastSaleAge <= 30 ? "F" : "S";
+    const revenueRaw = s?.revenue ? Number(s.revenue) : 0;
+    const wmsQty = wmsByCode.has(code) ? wmsByCode.get(code)! : null;
     return {
       code,
       name: i?.name_1 ?? code,
@@ -143,8 +170,27 @@ export async function GET(request: NextRequest) {
       refillQty,
       refillValue: Math.round(refillQty * cost),
       stockValue: Math.round(balance * cost),
+      revenue: Number.isFinite(revenueRaw) ? Math.round(revenueRaw) : 0,
+      abc: null,
+      fsn,
+      wmsQty,
+      wmsDiff: wmsQty !== null && Math.abs(wmsQty - balance) > 0.01,
     };
   });
+
+  // ABC over the sellers: A carries the first 80% of the window's revenue,
+  // B to 95%, C the tail. Non-sellers stay unclassed.
+  {
+    const sellers = items
+      .filter((x) => x.revenue > 0)
+      .sort((a, b) => b.revenue - a.revenue);
+    const totalRev = sellers.reduce((a, x) => a + x.revenue, 0);
+    let cum = 0;
+    for (const x of sellers) {
+      cum += x.revenue;
+      x.abc = totalRev > 0 ? (cum <= totalRev * 0.8 ? "A" : cum <= totalRev * 0.95 ? "B" : "C") : "C";
+    }
+  }
 
   const rank: Record<Item["status"], number> = {
     out: 0,
@@ -159,8 +205,19 @@ export async function GET(request: NextRequest) {
   );
 
   const count = (st: Item["status"]) => items.filter((x) => x.status === st).length;
+  const selling = items.filter((x) => x.sold > 0).length;
+  const short = items.filter(
+    (x) => x.status === "out" || x.status === "critical" || x.status === "reorder",
+  ).length;
+  const wmsCompared = items.filter((x) => x.wmsQty !== null).length;
+  const wmsMismatch = items.filter((x) => x.wmsDiff).length;
   const summary = {
     total: items.length,
+    selling,
+    // Of the items that actually sell, how many the shelf can serve today.
+    fillRate: selling > 0 ? Math.round(((selling - short) / selling) * 100) : 100,
+    wmsCompared,
+    wmsMismatch,
     out: count("out"),
     critical: count("critical"),
     reorder: count("reorder"),

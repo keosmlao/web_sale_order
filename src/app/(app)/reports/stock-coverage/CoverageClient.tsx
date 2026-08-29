@@ -25,6 +25,11 @@ type Item = {
   refillQty: number;
   refillValue: number;
   stockValue: number;
+  revenue: number;
+  abc: "A" | "B" | "C" | null;
+  fsn: "F" | "S" | "N";
+  wmsQty: number | null;
+  wmsDiff: boolean;
 };
 
 type Resp = {
@@ -33,6 +38,10 @@ type Resp = {
   warehouses: Array<{ code: string; name: string }>;
   summary: {
     total: number;
+    selling: number;
+    fillRate: number;
+    wmsCompared: number;
+    wmsMismatch: number;
     out: number;
     critical: number;
     reorder: number;
@@ -74,6 +83,9 @@ export default function CoverageClient() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<Status | "all">("all");
   const [q, setQ] = useState("");
+  const [abcFilter, setAbcFilter] = useState("");
+  const [fsnFilter, setFsnFilter] = useState("");
+  const [sort, setSort] = useState("severity");
 
   const load = useCallback(
     async (targetWh?: string) => {
@@ -107,13 +119,32 @@ export default function CoverageClient() {
   }, []);
 
   const s = data?.summary;
-  const visible = (data?.items ?? []).filter(
-    (it) =>
-      (statusFilter === "all" || it.status === statusFilter) &&
-      (!q.trim() ||
-        it.code.toLowerCase().includes(q.trim().toLowerCase()) ||
-        it.name.toLowerCase().includes(q.trim().toLowerCase())),
-  );
+  const visible = (data?.items ?? [])
+    .filter(
+      (it) =>
+        (statusFilter === "all" || it.status === statusFilter) &&
+        (!abcFilter || it.abc === abcFilter) &&
+        (!fsnFilter || it.fsn === fsnFilter) &&
+        (!q.trim() ||
+          it.code.toLowerCase().includes(q.trim().toLowerCase()) ||
+          it.name.toLowerCase().includes(q.trim().toLowerCase())),
+    )
+    .sort((a, b) => {
+      switch (sort) {
+        case "refill":
+          return b.refillValue - a.refillValue || b.refillQty - a.refillQty;
+        case "cover":
+          return (a.coverDays ?? 1e9) - (b.coverDays ?? 1e9);
+        case "sold":
+          return b.sold - a.sold;
+        case "revenue":
+          return b.revenue - a.revenue;
+        case "sunk":
+          return b.stockValue - a.stockValue;
+        default:
+          return 0; // severity — the API's own order
+      }
+    });
 
   return (
     <div className="px-4 py-5 sm:px-6">
@@ -191,6 +222,17 @@ export default function CoverageClient() {
         </div>
       ) : (
         <>
+          {/* The reference's headline: not-enough band + fill rate */}
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/60 px-4 py-2.5">
+            <span className="rounded-full border border-rose-300 bg-white px-3 py-1 text-xs font-black text-rose-600">
+              ບໍ່ພຽງພໍ — ຕ້ອງເຕີມ
+            </span>
+            <span className="text-[12.5px] font-semibold text-odoo-text">
+              ໃຫ້ບໍລິການໄດ້ <b className="text-rose-600">{s.fillRate}%</b>{" "}
+              ຂອງສິນຄ້າທີ່ຂາຍຢູ່ ({n.format(s.selling)} ລາຍການ, ຊ່ວງ {data?.days} ວັນ)
+            </span>
+          </div>
+
           {/* Stat cards */}
           <div className="mb-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
             <div className="rounded-xl border border-odoo-border bg-odoo-surface p-3.5">
@@ -266,15 +308,47 @@ export default function CoverageClient() {
                   {ST[st].label} {n.format(s[st])}
                 </button>
               ))}
-              <input
-                type="search"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="ຄົ້ນຫາ ລະຫັດ / ຊື່…"
-                className="odoo-input ml-auto !w-52"
-              />
+              <span className="ml-auto flex flex-wrap items-center gap-1.5">
+                <select value={abcFilter} onChange={(e) => setAbcFilter(e.target.value)} className="odoo-input !w-auto">
+                  <option value="">ABC ທັງໝົດ</option>
+                  <option value="A">A — 80% ລາຍຮັບ</option>
+                  <option value="B">B</option>
+                  <option value="C">C</option>
+                </select>
+                <select value={fsnFilter} onChange={(e) => setFsnFilter(e.target.value)} className="odoo-input !w-auto">
+                  <option value="">FSN ທັງໝົດ</option>
+                  <option value="F">F — ຂາຍໄວ (30ວັນ)</option>
+                  <option value="S">S — ຊ້າ</option>
+                  <option value="N">N — ບໍ່ຂາຍ</option>
+                </select>
+                <select value={sort} onChange={(e) => setSort(e.target.value)} className="odoo-input !w-auto">
+                  <option value="severity">ຮ້າຍແຮງກ່ອນ</option>
+                  <option value="refill">ຕ້ອງເຕີມຫຼາຍ</option>
+                  <option value="cover">ວັນພໍໃຊ້ໜ້ອຍ</option>
+                  <option value="sold">ຂາຍຫຼາຍ</option>
+                  <option value="revenue">ລາຍຮັບສູງ</option>
+                  <option value="sunk">ເງິນຈົມຫຼາຍ</option>
+                </select>
+                <input
+                  type="search"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="ຄົ້ນຫາ ລະຫັດ / ຊື່…"
+                  className="odoo-input !w-48"
+                />
+              </span>
             </div>
           </div>
+
+          {/* WMS vs ERP disagreement — count before ordering. */}
+          {s.wmsCompared > 0 && s.wmsMismatch > 0 ? (
+            <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50/70 px-4 py-2.5 text-[12px] font-semibold text-amber-800">
+              ຍອດ WMS ກັບ ERP ບໍ່ກົງກັນ{" "}
+              <b>{Math.round((s.wmsMismatch / s.wmsCompared) * 100)}%</b> (
+              {n.format(s.wmsMismatch)} / {n.format(s.wmsCompared)} ລາຍການທີ່ທຽບໄດ້) —
+              ລາຍການທີ່ມີໝາຍ <b>WMS ຕ່າງ</b> ຄວນນັບກວດກ່ອນຕັດສິນສັ່ງຊື້
+            </div>
+          ) : null}
 
           {/* Items */}
           <div className="overflow-x-auto rounded-xl border border-odoo-border bg-odoo-surface">
@@ -289,6 +363,7 @@ export default function CoverageClient() {
                   <th className="px-3 py-2 text-right">ສະເລ່ຍ/ມື້</th>
                   <th className="px-3 py-2 text-right">ວັນທີ່ພໍໃຊ້</th>
                   <th className="px-3 py-2 text-right">ຕ້ອງເຕີມ</th>
+                  <th className="px-3 py-2 text-right">WMS</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-odoo-border">
@@ -302,7 +377,17 @@ export default function CoverageClient() {
                     </td>
                     <td className="px-3 py-2">
                       <div className="max-w-md truncate font-bold text-odoo-text-strong">{it.name}</div>
-                      <div className="font-mono text-[11px] text-odoo-text-muted">{it.code}</div>
+                      <div className="flex items-center gap-1.5 font-mono text-[11px] text-odoo-text-muted">
+                        {it.code}
+                        {it.abc ? (
+                          <span className={`rounded px-1 text-[9px] font-black ${it.abc === "A" ? "bg-indigo-100 text-indigo-700" : it.abc === "B" ? "bg-slate-100 text-slate-600" : "bg-slate-50 text-slate-400"}`}>
+                            {it.abc}
+                          </span>
+                        ) : null}
+                        <span className={`rounded px-1 text-[9px] font-black ${it.fsn === "F" ? "bg-emerald-50 text-emerald-600" : it.fsn === "S" ? "bg-amber-50 text-amber-600" : "bg-slate-50 text-slate-400"}`}>
+                          {it.fsn}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-right font-mono font-bold">
                       {n2.format(it.balance)}{" "}
@@ -338,6 +423,20 @@ export default function CoverageClient() {
                         </>
                       ) : (
                         <span className="text-odoo-text-muted">—</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {it.wmsQty === null ? (
+                        <span className="text-[11px] text-odoo-text-muted">—</span>
+                      ) : it.wmsDiff ? (
+                        <span
+                          className="rounded bg-amber-50 px-1.5 py-0.5 font-mono text-[11px] font-bold text-amber-700"
+                          title={`WMS ${n2.format(it.wmsQty)} · ERP ${n2.format(it.balance)}`}
+                        >
+                          ⚠ {n2.format(it.wmsQty)}
+                        </span>
+                      ) : (
+                        <span className="text-[11px] font-bold text-emerald-600">✓</span>
                       )}
                     </td>
                   </tr>
