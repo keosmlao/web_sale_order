@@ -8,6 +8,7 @@ import {
   visibleUnitRewards,
   type Reward,
   type UnitReward,
+  RewardShowcase,
 } from "../../SpecialRewardCard";
 
 // ລາງວັນພິເສດ report — the same reward cards as the home page, but browsable
@@ -64,24 +65,35 @@ export default function SpecialRewardsClient() {
 
   return (
     <div className="space-y-4 px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2.5">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-amber-500 to-orange-600 text-xl shadow-sm shadow-amber-300">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-[#003361] via-[#174f87] to-[#2b70b5] px-4 py-4 text-white shadow-lg sm:px-5">
+        <div className="flex items-center gap-3">
+          <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 text-2xl">
             🎁
           </span>
           <div>
-            <h1 className="text-lg font-black text-slate-900 sm:text-xl">ລາງວັນພິເສດ</h1>
-            <p className="text-xs font-semibold text-slate-500">
+            <h1 className="text-lg font-black sm:text-xl">
+              ລາງວັນພິເສດ · ເດືອນ{monthLabel}
+            </h1>
+            <p className="text-xs font-semibold text-white/70">
               ບັນລຸເປົ້າພະແນກ · ຮັບເງິນລາງວັນເພີ່ມ · ເບິ່ງຍ້ອນຫຼັງໄດ້
             </p>
           </div>
+          {isCurrent ? (
+            <span className="ml-1 hidden rounded-full bg-emerald-400/20 px-2.5 py-1 text-[11px] font-black text-emerald-200 sm:inline">
+              ເດືອນປັດຈຸບັນ
+            </span>
+          ) : (
+            <span className="ml-1 hidden rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-black text-white/70 sm:inline">
+              ຍ້ອນຫຼັງ
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
           <button
             type="button"
             onClick={() => shiftMonth(-1)}
             aria-label="ເດືອນກ່ອນ"
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 active:scale-95"
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 text-white transition hover:bg-white/25 active:scale-95"
           >
             ‹
           </button>
@@ -90,45 +102,31 @@ export default function SpecialRewardsClient() {
             value={period}
             max={currentPeriod()}
             onChange={(event) => event.target.value && setPeriod(event.target.value)}
-            className="h-9 rounded-xl border border-slate-200 bg-white px-2.5 text-sm font-bold text-slate-700"
+            className="h-9 rounded-xl border-0 bg-white/90 px-2.5 text-sm font-bold text-slate-800"
           />
           <button
             type="button"
             onClick={() => shiftMonth(1)}
             disabled={isCurrent}
             aria-label="ເດືອນຕໍ່ໄປ"
-            className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:bg-slate-50 active:scale-95 disabled:opacity-30"
+            className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/15 text-white transition hover:bg-white/25 active:scale-95 disabled:opacity-30"
           >
             ›
           </button>
         </div>
       </div>
 
-      <section className="overflow-hidden rounded-2xl border border-amber-200/70 bg-white shadow-[0_10px_35px_-18px_rgba(217,119,6,0.45)]">
-        <div className="flex items-center justify-between border-b border-amber-100 bg-gradient-to-r from-amber-50 via-orange-50 to-amber-50/60 px-4 py-2.5">
-          <span className="text-sm font-black text-slate-800">
-            ເດືອນ{monthLabel}
-          </span>
-          {isCurrent ? (
-            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-[11px] font-black text-emerald-700">
-              ເດືອນປັດຈຸບັນ
-            </span>
-          ) : (
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-black text-slate-500">
-              ຍ້ອນຫຼັງ
-            </span>
-          )}
+      {loading ? (
+        <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center text-sm font-semibold text-slate-400">
+          ກຳລັງໂຫລດ…
         </div>
-        {loading ? (
-          <div className="py-10 text-center text-sm font-semibold text-slate-400">ກຳລັງໂຫລດ…</div>
-        ) : !rewards || (rewards.length === 0 && unitRewards.length === 0) ? (
-          <div className="py-10 text-center text-sm font-semibold text-slate-400">
-            ບໍ່ມີໂຄງການລາງວັນພິເສດໃນເດືອນນີ້
-          </div>
-        ) : (
-          <RewardList rewards={rewards} unitRewards={unitRewards} />
-        )}
-      </section>
+      ) : !rewards || (rewards.length === 0 && unitRewards.length === 0) ? (
+        <div className="rounded-2xl border border-slate-200 bg-white py-12 text-center text-sm font-semibold text-slate-400">
+          ບໍ່ມີໂຄງການລາງວັນພິເສດໃນເດືອນນີ້
+        </div>
+      ) : (
+        <RewardShowcase rewards={rewards} unitRewards={unitRewards} />
+      )}
 
       <p className="text-xs font-semibold text-slate-400">
         * ເປົ້າ ແລະ ເງິນລາງວັນ ເປັນຄ່າທີ່ຕັ້ງໄວ້ປັດຈຸບັນ — ຍອດຂາຍ/ສັດສ່ວນ ຄິດຈາກຂໍ້ມູນຈິງຂອງເດືອນທີ່ເລືອກ
