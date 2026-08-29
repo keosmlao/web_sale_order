@@ -83,8 +83,10 @@ export default function CoverageClient() {
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<Status | "all">("all");
   const [q, setQ] = useState("");
-  const [abcFilter, setAbcFilter] = useState("");
-  const [fsnFilter, setFsnFilter] = useState("");
+  // Sets, not single values — a buyer wants "A and B" or "F and S" at
+  // once. Empty set = everything.
+  const [abcFilter, setAbcFilter] = useState<Set<string>>(new Set());
+  const [fsnFilter, setFsnFilter] = useState<Set<string>>(new Set());
   const [sort, setSort] = useState("severity");
 
   const load = useCallback(
@@ -123,8 +125,8 @@ export default function CoverageClient() {
     .filter(
       (it) =>
         (statusFilter === "all" || it.status === statusFilter) &&
-        (!abcFilter || it.abc === abcFilter) &&
-        (!fsnFilter || it.fsn === fsnFilter) &&
+        (abcFilter.size === 0 || (it.abc !== null && abcFilter.has(it.abc))) &&
+        (fsnFilter.size === 0 || fsnFilter.has(it.fsn)) &&
         (!q.trim() ||
           it.code.toLowerCase().includes(q.trim().toLowerCase()) ||
           it.name.toLowerCase().includes(q.trim().toLowerCase())),
@@ -309,18 +311,58 @@ export default function CoverageClient() {
                 </button>
               ))}
               <span className="ml-auto flex flex-wrap items-center gap-1.5">
-                <select value={abcFilter} onChange={(e) => setAbcFilter(e.target.value)} className="odoo-input !w-auto">
-                  <option value="">ABC ທັງໝົດ</option>
-                  <option value="A">A — 80% ລາຍຮັບ</option>
-                  <option value="B">B</option>
-                  <option value="C">C</option>
-                </select>
-                <select value={fsnFilter} onChange={(e) => setFsnFilter(e.target.value)} className="odoo-input !w-auto">
-                  <option value="">FSN ທັງໝົດ</option>
-                  <option value="F">F — ຂາຍໄວ (30ວັນ)</option>
-                  <option value="S">S — ຊ້າ</option>
-                  <option value="N">N — ບໍ່ຂາຍ</option>
-                </select>
+                <span className="inline-flex items-center gap-1 rounded-full bg-odoo-surface-muted p-1">
+                  <span className="pl-2 text-[10px] font-black text-odoo-text-soft">ABC</span>
+                  {(["A", "B", "C"] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      title={v === "A" ? "A — 80% ຂອງລາຍຮັບ" : v === "B" ? "B — ຮອດ 95%" : "C — ສ່ວນຫາງ"}
+                      onClick={() =>
+                        setAbcFilter((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(v)) next.delete(v);
+                          else next.add(v);
+                          return next;
+                        })
+                      }
+                      className={
+                        "h-7 w-7 rounded-full text-[11px] font-black transition " +
+                        (abcFilter.has(v)
+                          ? "bg-odoo-primary text-white"
+                          : "text-odoo-text-muted hover:bg-odoo-border")
+                      }
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </span>
+                <span className="inline-flex items-center gap-1 rounded-full bg-odoo-surface-muted p-1">
+                  <span className="pl-2 text-[10px] font-black text-odoo-text-soft">FSN</span>
+                  {(["F", "S", "N"] as const).map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      title={v === "F" ? "F — ຂາຍໄວ (30 ວັນ)" : v === "S" ? "S — ຂາຍຊ້າ" : "N — ບໍ່ຂາຍໃນຊ່ວງ"}
+                      onClick={() =>
+                        setFsnFilter((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(v)) next.delete(v);
+                          else next.add(v);
+                          return next;
+                        })
+                      }
+                      className={
+                        "h-7 w-7 rounded-full text-[11px] font-black transition " +
+                        (fsnFilter.has(v)
+                          ? "bg-odoo-primary text-white"
+                          : "text-odoo-text-muted hover:bg-odoo-border")
+                      }
+                    >
+                      {v}
+                    </button>
+                  ))}
+                </span>
                 <select value={sort} onChange={(e) => setSort(e.target.value)} className="odoo-input !w-auto">
                   <option value="severity">ຮ້າຍແຮງກ່ອນ</option>
                   <option value="refill">ຕ້ອງເຕີມຫຼາຍ</option>
