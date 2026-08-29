@@ -91,10 +91,15 @@ export async function GET(request: NextRequest) {
     );
   }
   if (from) {
-    where.push(Prisma.sql`t.create_date_time_now >= ${from}::timestamp`);
+    where.push(Prisma.sql`t.create_date_time_now >= ${from}::date`);
   }
   if (to) {
-    where.push(Prisma.sql`t.create_date_time_now <= ${to}::timestamp`);
+    // A bare date parses as midnight, and <= midnight throws away the
+    // whole day it names — ມື້ນີ້ came back empty and the quick buttons
+    // read as broken. The bound is exclusive of the NEXT day instead.
+    where.push(
+      Prisma.sql`t.create_date_time_now < (${to}::date + INTERVAL '1 day')`,
+    );
   }
   if (cashier) {
     where.push(Prisma.sql`t.cashier_code = ${cashier}`);
