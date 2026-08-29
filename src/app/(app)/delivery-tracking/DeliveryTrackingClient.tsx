@@ -181,15 +181,18 @@ export default function DeliveryTrackingClient({
   const items = useMemo(() => data?.items ?? [], [data]);
 
   // ຄ້າງເກີນ 7 ວັນ — unfinished bills whose bill date is older than a week.
+  // "Now" is pinned at mount: render stays pure, and a page left open a
+  // few minutes does not need its overdue line re-judged live.
+  const [mountedAt] = useState(() => Date.now());
   const overdue = useMemo(() => {
-    const limit = Date.now() - 7 * 86400_000;
+    const limit = mountedAt - 7 * 86400_000;
     return items.filter(
       (b) =>
         OPEN_STATUSES.includes(b.status) &&
         b.billDateIso &&
         new Date(b.billDateIso).getTime() < limit,
     ).length;
-  }, [items]);
+  }, [items, mountedAt]);
 
   const tabItems = useMemo(
     () =>
