@@ -114,7 +114,10 @@ export async function GET(request: NextRequest) {
     const sold = s ? Number(s.sold) : 0;
     const avgDay = sold > 0 ? sold / days : 0;
     const coverDays = avgDay > 0 ? balance / avgDay : null;
-    const cost = i?.unit_cost ? Number(i.unit_cost) : 0;
+    const rawCost = i?.unit_cost ? Number(i.unit_cost) : 0;
+    // A malformed unit_cost turned one addend NaN and the whole day's
+    // refill total into null. Money maths only over finite numbers.
+    const cost = Number.isFinite(rawCost) ? rawCost : 0;
     let status: Item["status"];
     if (sold > 0 && balance <= 0) status = "out";
     else if (avgDay > 0 && (coverDays ?? 0) < crit) status = "critical";
