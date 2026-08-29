@@ -160,7 +160,7 @@ export default function InventoryClient() {
     };
   }, [openCode]);
 
-  const selectCls = "odoo-input !w-auto min-w-36 text-sm";
+  const selectCls = "odoo-input w-full text-sm sm:!w-auto sm:min-w-36";
 
   return (
     <div className="px-4 py-6 sm:px-6">
@@ -174,13 +174,13 @@ export default function InventoryClient() {
       </header>
 
       <div className="mb-4 rounded-xl border border-odoo-border bg-odoo-surface p-3">
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="ຄົ້ນຫາ ຊື່ / ລະຫັດສິນຄ້າ"
-            className="odoo-input w-full sm:w-64"
+            className="odoo-input col-span-2 w-full sm:w-64"
           />
           <select value={groupMain} onChange={(e) => setGroupMain(e.target.value)} className={selectCls}>
             <option value="">ທຸກກຸ່ມຫຼັກ</option>
@@ -244,7 +244,55 @@ export default function InventoryClient() {
         </p>
       ) : null}
 
-      <div className="overflow-x-auto rounded-xl border border-odoo-border bg-odoo-surface">
+      {/* On a phone the table clipped both edges — name cut left, price and
+          stock off the right. Below sm each item is a card: image, name,
+          the stock badge and the price all inside the screen. */}
+      <div className="sm:hidden">
+        {loading ? (
+          <p className="py-10 text-center text-sm text-odoo-text-muted">ກຳລັງໂຫລດ…</p>
+        ) : items.length === 0 ? (
+          <p className="py-10 text-center text-sm text-odoo-text-muted">ບໍ່ພົບສິນຄ້າ</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {items.map((it) => (
+              <li key={it.code}>
+                <button
+                  type="button"
+                  onClick={() => setOpenCode(it.code)}
+                  className="flex w-full items-center gap-3 rounded-xl border border-odoo-border bg-odoo-surface p-3 text-left"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={`/api/products/image/${encodeURIComponent(it.code)}`}
+                    alt=""
+                    className="h-12 w-12 shrink-0 rounded-lg border border-odoo-border object-contain"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).style.visibility = "hidden";
+                    }}
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-bold text-odoo-text-strong">
+                      {it.nameLo ?? it.nameEng ?? it.code}
+                    </span>
+                    <span className="block font-mono text-[11px] text-odoo-text-muted">
+                      {it.code}
+                      {it.brand ? ` · ${it.brand}` : ""}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-right">
+                    <StockBadge qty={it.companyBalance} />
+                    <span className="mt-0.5 block font-mono text-[13px] font-bold">
+                      {it.salePriceKip > 0 ? moneyFmt.format(it.salePriceKip) : "—"}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="hidden overflow-x-auto rounded-xl border border-odoo-border bg-odoo-surface sm:block">
         <table className="w-full text-sm">
           <thead className="bg-odoo-surface-muted text-left text-[11px] font-bold uppercase tracking-wider text-odoo-text-muted">
             <tr>
