@@ -82,7 +82,9 @@ export default function DeliveryTrackingClient({
 }: {
   canSeeAll: boolean;
 }) {
-  const [date, setDate] = useState(todayLocal());
+  const [from, setFrom] = useState(todayLocal());
+  const [to, setTo] = useState(todayLocal());
+  const [statusFilter, setStatusFilter] = useState<Status | "all">("all");
   const [round, setRound] = useState("");
   // Managers open the shared delivery queue by default. Storefront bills may
   // belong to another cashier, so defaulting to "own" hid valid delivery jobs.
@@ -97,7 +99,7 @@ export default function DeliveryTrackingClient({
   const loadList = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ date, scope });
+      const params = new URLSearchParams({ from, to, scope });
       if (round) params.set("round", round);
       if (q.trim()) params.set("q", q.trim());
       const res = await fetch(`/api/tms/deliveries?${params.toString()}`);
@@ -105,7 +107,7 @@ export default function DeliveryTrackingClient({
     } finally {
       setLoading(false);
     }
-  }, [date, scope, round, q]);
+  }, [from, to, scope, round, q]);
 
   useEffect(() => {
     void loadList();
@@ -156,6 +158,13 @@ export default function DeliveryTrackingClient({
   }, [data]);
 
   const s = data?.summary;
+  const visibleBills = useMemo(
+    () =>
+      (data?.items ?? []).filter(
+        (item) => statusFilter === "all" || item.status === statusFilter,
+      ),
+    [data, statusFilter],
+  );
   const waitingBills = useMemo(
     () => (data?.items ?? []).filter(
       (item) => item.status === "opened" || item.status === "scheduled",
@@ -211,11 +220,20 @@ export default function DeliveryTrackingClient({
       {/* Filters */}
       <div className="mb-4 flex flex-wrap items-end gap-2">
         <label className="text-sm">
-          <span className="odoo-label">ວັນທີ່</span>
+          <span className="odoo-label">ຈາກວັນທີ</span>
           <input
             type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
+            value={from}
+            onChange={(e) => setFrom(e.target.value)}
+            className="odoo-input"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="odoo-label">ເຖິງວັນທີ</span>
+          <input
+            type="date"
+            value={to}
+            onChange={(e) => setTo(e.target.value)}
             className="odoo-input"
           />
         </label>
@@ -272,6 +290,37 @@ export default function DeliveryTrackingClient({
         </div>
       ) : null}
 
+      {/* Status chips, counts in colour — one tap filters the bill list. */}
+      {s ? (
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          {(
+            [
+              ["all", "ທັງໝົດ", s.total, "text-odoo-text-strong"],
+              ["opened", "ເປີດບິນແລ້ວ", s.opened, "text-slate-600"],
+              ["scheduled", "ນັດສົ່ງ", s.scheduled, "text-sky-600"],
+              ["inprogress", "ກຳລັງຈັດສົ່ງ", s.inprogress, "text-amber-600"],
+              ["done", "ສົ່ງສຳເລັດ", s.done, "text-emerald-600"],
+              ["cancelled", "ຍົກເລີກ", s.cancelled, "text-rose-600"],
+            ] as Array<[Status | "all", string, number, string]>
+          ).map(([value, label, count, tone]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setStatusFilter(value)}
+              className={
+                "rounded-full border px-3.5 py-1.5 text-xs font-bold transition " +
+                (statusFilter === value
+                  ? "border-odoo-primary bg-odoo-primary text-white"
+                  : "border-odoo-border bg-odoo-surface hover:bg-odoo-surface-muted")
+              }
+            >
+              {label}{" "}
+              <b className={statusFilter === value ? "" : tone}>{count}</b>
+            </button>
+          ))}
+        </div>
+      ) : null}
+
       {/* Live operations: vehicle list controls the large GPS map. */}
       <section className="mb-5 overflow-hidden rounded-xl border border-odoo-border bg-odoo-surface shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-2 border-b border-odoo-border px-4 py-3">
@@ -294,15 +343,19 @@ export default function DeliveryTrackingClient({
                 <h3 className="text-sm font-black text-odoo-text-strong">ບິນຄ້າງສົ່ງ</h3>
                 <p className="text-xs text-odoo-text-muted">ລໍຖ້າ {waitingBills.length} · ກຳລັງສົ່ງ {s?.inprogress ?? 0}</p>
               </div>
-              <span className="font-mono text-lg font-black text-odoo-primary">{data?.items.length ?? 0}</span>
+              <span className="font-mono text-lg font-black text-odoo-primary">{visibleBills.length}</span>
             </div>
             <div className="flex-1 overflow-y-auto">
               {loading ? (
                 <div className="py-12 text-center text-sm text-odoo-text-muted">ກຳລັງໂຫຼດ...</div>
-              ) : (data?.items.length ?? 0) === 0 ? (
-                <div className="py-12 text-center text-sm text-odoo-text-muted">ບໍ່ມີບິນຄ້າງສົ່ງ</div>
+              ) : visibleBills.length === 0 ? (
+                <div className="py-12 text-center text-sm text-odoo-text-muted">
+                  <div className="text-2xl">🚚</div>
+                  <div className="mt-1 font-bold">ບໍ່ມີບິນໃນເງື່ອນໄຂນີ້</div>
+                  <div className="text-xs">ລອງຂະຫຍາຍຊ່ວງວັນທີ ຫຼື ເລືອກສະຖານະອື່ນ</div>
+                </div>
               ) : (
-                data!.items.map((bill) => (
+                visibleBills.map((bill) => (
                   <button
                     key={bill.billNo}
                     type="button"

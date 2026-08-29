@@ -74,8 +74,14 @@ export async function GET(request: NextRequest) {
   }
 
   const sp = request.nextUrl.searchParams;
+  // A range, the way the reference console filters: from → to. The old
+  // single `date` still works (both bounds collapse onto it).
   const rawDate = sp.get("date")?.trim();
+  const rawFrom = sp.get("from")?.trim();
+  const rawTo = sp.get("to")?.trim();
   const date = isValidDate(rawDate) ? rawDate : todayInVientiane();
+  const from = isValidDate(rawFrom) ? rawFrom : date;
+  const to = isValidDate(rawTo) ? rawTo : date;
   const round = sp.get("round")?.trim() || "";
   const q = sp.get("q")?.trim() || "";
   const wantAll = sp.get("scope") === "all";
@@ -91,8 +97,10 @@ export async function GET(request: NextRequest) {
     Prisma.sql`COALESCE(t.cancel_type, 0) = 0`,
     Prisma.sql`COALESCE(t.is_cancel, 0) = 0`,
     Prisma.sql`EXISTS (SELECT 1 FROM ic_trans_shipment ship WHERE ship.doc_no = t.doc_no)`,
-    Prisma.sql`(ld.status IS NULL OR ld.status NOT IN (1, 2))`,
-    Prisma.sql`COALESCE(ld.trip_date, pb.scheduled_date, t.doc_date) = ${date}::date`,
+    // Done and cancelled ride along: the console reads them as states of
+    // the range, not as bills that stopped existing.
+    Prisma.sql`COALESCE(ld.trip_date, pb.scheduled_date, t.doc_date)
+               BETWEEN ${from}::date AND ${to}::date`,
   ];
   if (scopeOwn) filters.push(Prisma.sql`t.sale_code = ${myCode}`);
   if (round) filters.push(Prisma.sql`COALESCE(ld.round_code, pb.delivery_round_code) = ${round}`);
@@ -193,6 +201,8 @@ export async function GET(request: NextRequest) {
 
   return NextResponse.json({
     date,
+    from,
+    to,
     scope: scopeOwn ? "own" : "all",
     canSeeAll: allowAll,
     summary,

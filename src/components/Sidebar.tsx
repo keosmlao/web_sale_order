@@ -81,16 +81,6 @@ const sections: NavSection[] = [
         ),
       },
       {
-        href: "/reports/promo-effectiveness",
-        label: "ປະສິດທິພາບໂປຣ",
-        icon: (
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
-            <path d="M20.59 13.41 13.42 20.58a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82Z" />
-            <path d="M7 7h.01" />
-          </svg>
-        ),
-      },
-      {
         href: "/reports/daily-payments",
         label: "ສະຫຼຸບການຮັບເງິນ",
         icon: (
