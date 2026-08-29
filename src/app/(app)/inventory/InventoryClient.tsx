@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { fmtDate } from "@/lib/datetime";
 
 // ສາງສິນຄ້າ / ສະຕັອກ — the whole catalog, filterable by group, category
 // and brand, with ໝົດ read as a state rather than a vanished item, and a
@@ -513,7 +514,7 @@ export default function InventoryClient() {
                               <span className="text-[12px] text-odoo-text-muted">
                                 <b className="text-odoo-text">{tier}</b>
                                 {p.fromDate || p.toDate
-                                  ? ` · ${p.fromDate ?? "…"} → ${p.toDate ?? "…"}`
+                                  ? ` · ${p.fromDate ? fmtDate(p.fromDate) : "…"} → ${p.toDate ? fmtDate(p.toDate) : "…"}`
                                   : ""}
                               </span>
                               <b className="shrink-0 font-mono">
