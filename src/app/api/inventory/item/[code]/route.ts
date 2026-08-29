@@ -89,7 +89,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
         -- yet in force is not a price the counter can charge.
         AND COALESCE(from_date, '1900-01-01'::date) <= CURRENT_DATE
         AND COALESCE(to_date, '2099-12-31'::date) >= CURRENT_DATE
-      ORDER BY COALESCE(to_date, '2099-12-31'::date) DESC, from_qty
+      -- Plain columns only: SELECT DISTINCT refuses an ORDER BY
+      -- expression that is not in the select list. NULL to_date means
+      -- open-ended, so it sorts first.
+      ORDER BY to_date DESC NULLS FIRST, from_qty
       LIMIT 20
     `,
     prisma.$queryRaw<Array<{ barcode: string | null; unit_code: string | null }>>`
