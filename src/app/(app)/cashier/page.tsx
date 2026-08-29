@@ -1513,8 +1513,8 @@ function SettleForm({
   // is the whole change — the money math underneath is untouched.
   const TENDER_COLOUR = {
     cash: "#0f9d68",
-    transfer: "#2b70b5",
-    transfer_other: "#003361",
+    transfer: "#714B67",
+    transfer_other: "#3f2a3a",
     coupon: "#d0384e",
   } as const;
 

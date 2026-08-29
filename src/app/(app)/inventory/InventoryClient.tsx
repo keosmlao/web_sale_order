@@ -441,7 +441,7 @@ export default function InventoryClient() {
               <p className="p-8 text-center text-sm text-odoo-danger">ໂຫລດບໍ່ສຳເລັດ</p>
             ) : (
               <>
-                <div className="bg-gradient-to-br from-[#003361] to-[#2b70b5] p-4 text-white">
+                <div className="bg-gradient-to-br from-[#3f2a3a] to-[#714B67] p-4 text-white">
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex min-w-0 items-start gap-3">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -485,7 +485,7 @@ export default function InventoryClient() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 p-4">
-                  <div className="rounded-xl bg-gradient-to-br from-[#2b70b5] to-[#4ac7f0] p-3.5 text-white">
+                  <div className="rounded-xl bg-gradient-to-br from-[#714B67] to-[#01b8bf] p-3.5 text-white">
                     <div className="text-[11px] font-bold text-white/75">ລາຄາຂາຍ</div>
                     <div className="font-mono text-2xl font-black">
                       {detail.prices[0]?.priceKip

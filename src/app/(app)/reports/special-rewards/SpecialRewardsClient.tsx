@@ -65,7 +65,7 @@ export default function SpecialRewardsClient() {
 
   return (
     <div className="space-y-4 px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-[#003361] via-[#174f87] to-[#2b70b5] px-4 py-4 text-white shadow-lg sm:px-5">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl bg-gradient-to-r from-[#3f2a3a] via-[#52374b] to-[#714B67] px-4 py-4 text-white shadow-lg sm:px-5">
         <div className="flex items-center gap-3">
           <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/15 text-2xl">
             🎁
