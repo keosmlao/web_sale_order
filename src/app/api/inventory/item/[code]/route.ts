@@ -76,7 +76,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
         sale_price1: string | number | null;
       }>
     >`
-      SELECT unit_code, from_qty, to_qty, from_date, to_date, sale_price1
+      -- DISTINCT on the condition fields: SML holds literal duplicate
+      -- rows (same unit, window, tier and price; different roworder), and
+      -- two identical lines read as a difference that is not there.
+      SELECT DISTINCT unit_code, from_qty, to_qty, from_date, to_date, sale_price1
       FROM ic_inventory_price
       WHERE ic_code = ${code}
         AND currency_code = '02'
@@ -86,7 +89,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
         -- yet in force is not a price the counter can charge.
         AND COALESCE(from_date, '1900-01-01'::date) <= CURRENT_DATE
         AND COALESCE(to_date, '2099-12-31'::date) >= CURRENT_DATE
-      ORDER BY COALESCE(to_date, '2099-12-31'::date) DESC, roworder DESC
+      ORDER BY COALESCE(to_date, '2099-12-31'::date) DESC, from_qty
       LIMIT 20
     `,
     prisma.$queryRaw<Array<{ barcode: string | null; unit_code: string | null }>>`

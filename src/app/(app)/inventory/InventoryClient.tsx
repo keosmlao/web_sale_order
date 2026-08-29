@@ -497,18 +497,31 @@ export default function InventoryClient() {
                       </p>
                     ) : (
                       <ul className="divide-y divide-odoo-border">
-                        {detail.prices.map((p, i) => (
-                          <li
-                            key={i}
-                            className="flex items-baseline justify-between px-3.5 py-2 text-sm"
-                          >
-                            <span className="text-[12px] text-odoo-text-muted">
-                              {p.unit ?? "—"}
-                              {p.toDate ? ` · ຮອດ ${p.toDate}` : ""}
-                            </span>
-                            <b className="font-mono">{moneyFmt.format(p.priceKip)} ກີບ</b>
-                          </li>
-                        ))}
+                        {detail.prices.map((p, i) => {
+                          // Say WHY a row exists: the qty tier when it is
+                          // a real tier, and the full validity window —
+                          // two prices must never look identical.
+                          const tier =
+                            p.fromQty > 1 || (p.toQty > 0 && p.toQty < 9999)
+                              ? `${qtyFmt.format(p.fromQty)}–${qtyFmt.format(p.toQty)} ${p.unit ?? ""}`
+                              : (p.unit ?? "—");
+                          return (
+                            <li
+                              key={i}
+                              className="flex items-baseline justify-between gap-3 px-3.5 py-2 text-sm"
+                            >
+                              <span className="text-[12px] text-odoo-text-muted">
+                                <b className="text-odoo-text">{tier}</b>
+                                {p.fromDate || p.toDate
+                                  ? ` · ${p.fromDate ?? "…"} → ${p.toDate ?? "…"}`
+                                  : ""}
+                              </span>
+                              <b className="shrink-0 font-mono">
+                                {moneyFmt.format(p.priceKip)} ກີບ
+                              </b>
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </section>
