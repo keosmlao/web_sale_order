@@ -119,8 +119,10 @@ export default function HistoryClient() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
-  const [from, setFrom] = useState("");
-  const [to, setTo] = useState("");
+  // The list opens on today — that is the day a cashier is working; the
+  // quick chips and the pickers reach anything older.
+  const [from, setFrom] = useState(() => ymd(new Date()));
+  const [to, setTo] = useState(() => ymd(new Date()));
   const [status, setStatus] = useState<"all" | "settled" | "voided">("all");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [tab, setTab] = useState<"list" | "summary">("list");
