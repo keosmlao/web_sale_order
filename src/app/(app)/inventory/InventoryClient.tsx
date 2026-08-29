@@ -82,6 +82,7 @@ export default function InventoryClient() {
   const [category, setCategory] = useState("");
   const [brand, setBrand] = useState("");
   const [stock, setStock] = useState<"all" | "in" | "out">("all");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const [items, setItems] = useState<Item[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -201,14 +202,34 @@ export default function InventoryClient() {
       </header>
 
       <div className="mb-4 rounded-xl border border-odoo-border bg-odoo-surface p-3">
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center">
+        {/* One search bar; the five group/brand selects fold behind ຕົວກອງ
+            on a phone (they filled the screen before the first item). On
+            sm+ they simply sit inline as before. */}
+        <div className="flex items-center gap-2">
           <input
             type="search"
             value={q}
             onChange={(e) => setQ(e.target.value)}
             placeholder="ຄົ້ນຫາ ຊື່ / ລະຫັດສິນຄ້າ"
-            className="odoo-input col-span-2 w-full sm:w-64"
+            className="odoo-input flex-1 sm:w-64 sm:flex-none"
           />
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((v) => !v)}
+            className={`odoo-btn odoo-btn-secondary shrink-0 sm:hidden ${
+              groupMain || groupSub || groupSub2 || category || brand
+                ? "!border-odoo-primary !text-odoo-primary"
+                : ""
+            }`}
+          >
+            ຕົວກອງ {filtersOpen ? "▴" : "▾"}
+          </button>
+        </div>
+        <div
+          className={`mt-2 grid-cols-2 gap-2 sm:mt-2 sm:flex sm:flex-wrap sm:items-center ${
+            filtersOpen ? "grid" : "hidden sm:flex"
+          }`}
+        >
           <select value={groupMain} onChange={(e) => setGroupMain(e.target.value)} className={selectCls}>
             <option value="">ທຸກກຸ່ມຫຼັກ</option>
             {(facets?.groups ?? []).map((g) => (
