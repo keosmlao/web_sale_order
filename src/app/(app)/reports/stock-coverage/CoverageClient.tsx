@@ -26,6 +26,8 @@ type Item = {
   refillValue: number;
   stockValue: number;
   revenue: number;
+  minQty: number | null;
+  targetQty: number | null;
   abc: "A" | "B" | "C" | null;
   fsn: "F" | "S" | "N";
   wmsQty: number | null;
@@ -207,6 +209,9 @@ export default function CoverageClient() {
           <button type="button" onClick={() => void load()} className="odoo-btn odoo-btn-primary">
             ວິເຄາະ
           </button>
+          <a href="/settings/stock-minimum" className="odoo-btn odoo-btn-secondary">
+            ⚙ ກຳນົດ stock ຕໍ່າສຸດ/ເປົ້າ
+          </a>
         </div>
         <p className="mt-2 text-[11px] text-odoo-text-muted">
           ວັນທີ່ພໍໃຊ້ = ຄົງເຫຼືອ ÷ ຍອດຂາຍສະເລ່ຍ/ມື້ (ຈາກບິນຂາຍຈິງຂອງສາງນີ້) ·
@@ -434,6 +439,17 @@ export default function CoverageClient() {
                     <td className="px-3 py-2 text-right font-mono font-bold">
                       {n2.format(it.balance)}{" "}
                       <small className="text-odoo-text-muted">{it.unit}</small>
+                      {it.minQty !== null && (it.minQty > 0 || (it.targetQty ?? 0) > 0) ? (
+                        <small
+                          className={`block text-[10px] font-bold ${
+                            it.minQty > 0 && it.balance < it.minQty
+                              ? "text-rose-600"
+                              : "text-odoo-text-muted"
+                          }`}
+                        >
+                          ຕໍ່າສຸດ {n2.format(it.minQty)} · ເປົ້າ {n2.format(it.targetQty ?? 0)}
+                        </small>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2 text-right font-mono">
                       {n2.format(it.sold)}

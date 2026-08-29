@@ -29,6 +29,11 @@ type SalesRow = {
   bills: number;
 };
 type WmsRow = { item_code: string; qty: string | number };
+type MinRow = {
+  item_code: string;
+  min_qty: string | number;
+  target_qty: string | number;
+};
 type BalRow = { ic_code: string; qty: string | number };
 type InfoRow = {
   code: string;
@@ -55,7 +60,7 @@ export async function GET(request: NextRequest) {
     SELECT code, name_1 FROM ic_warehouse WHERE code = ANY(${warehouses})
   `;
 
-  const [sales, balances, wmsRows] = await Promise.all([
+  const [sales, balances, wmsRows, minRows] = await Promise.all([
     prisma.$queryRaw<SalesRow[]>`
       SELECT d.item_code,
              SUM(d.qty) AS sold,
@@ -89,8 +94,22 @@ export async function GET(request: NextRequest) {
       WHERE wh_code = ${wh}
       GROUP BY item_code
     `.catch(() => [] as WmsRow[]),
+    // Hand-set floors from /settings/stock-minimum: where someone has
+    // decided this shelf must never drop below min and refills aim at
+    // target, the analysis honours the decision over pure velocity.
+    prisma.$queryRaw<MinRow[]>`
+      SELECT item_code, min_qty, target_qty
+      FROM app_stock_minimum
+      WHERE warehouse_code = ${wh}
+    `.catch(() => [] as MinRow[]),
   ]);
   const wmsByCode = new Map(wmsRows.map((w) => [w.item_code, Number(w.qty)]));
+  const minByCode = new Map(
+    minRows.map((m) => [
+      m.item_code,
+      { min: Number(m.min_qty), target: Number(m.target_qty) },
+    ]),
+  );
 
   const balByCode = new Map(balances.map((b) => [b.ic_code, Number(b.qty)]));
   const salesByCode = new Map(sales.map((r) => [r.item_code, r]));
@@ -119,6 +138,8 @@ export async function GET(request: NextRequest) {
     refillValue: number;
     stockValue: number;
     revenue: number;
+    minQty: number | null;
+    targetQty: number | null;
     abc: "A" | "B" | "C" | null;
     fsn: "F" | "S" | "N";
     wmsQty: number | null;
@@ -136,17 +157,26 @@ export async function GET(request: NextRequest) {
     // A malformed unit_cost turned one addend NaN and the whole day's
     // refill total into null. Money maths only over finite numbers.
     const cost = Number.isFinite(rawCost) ? rawCost : 0;
+    const floor = minByCode.get(code);
     let status: Item["status"];
     if (sold > 0 && balance <= 0) status = "out";
+    else if (floor && floor.min > 0 && balance < floor.min)
+      // Below the hand-set floor is critical regardless of how the
+      // velocity maths reads it.
+      status = "critical";
     else if (avgDay > 0 && (coverDays ?? 0) < crit) status = "critical";
     else if (avgDay > 0 && (coverDays ?? 0) < reorder) status = "reorder";
     else if (avgDay > 0 && (coverDays ?? 0) <= excess) status = "ok";
     else if (avgDay > 0) status = "excess";
+    else if (floor && floor.min > 0 && balance < floor.min) status = "critical";
     else status = "idle";
+    const velocityRefill = Math.max(0, Math.ceil(avgDay * reorder - balance));
+    const targetRefill =
+      floor && floor.target > 0 ? Math.max(0, Math.ceil(floor.target - balance)) : 0;
     const refillQty =
       status === "out" || status === "critical" || status === "reorder"
-        ? Math.max(0, Math.ceil(avgDay * reorder - balance))
-        : 0;
+        ? Math.max(velocityRefill, targetRefill)
+        : targetRefill;
     // FSN by recency of the last sale: Fast within 30 days, Slow within
     // the window, Non-moving never sold in it.
     const lastSaleAge = s?.last_sale
@@ -171,6 +201,8 @@ export async function GET(request: NextRequest) {
       refillValue: Math.round(refillQty * cost),
       stockValue: Math.round(balance * cost),
       revenue: Number.isFinite(revenueRaw) ? Math.round(revenueRaw) : 0,
+      minQty: floor ? floor.min : null,
+      targetQty: floor ? floor.target : null,
       abc: null,
       fsn,
       wmsQty,
