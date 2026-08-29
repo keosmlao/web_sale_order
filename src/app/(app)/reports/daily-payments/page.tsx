@@ -1,5 +1,6 @@
 import { requireEmployee } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { getConfiguredSalesWarehouses } from "@/lib/inventory-config";
 import { CURRENCY_LABEL, type CurrencyCode } from "@/lib/payment";
 
 export const dynamic = "force-dynamic";
@@ -58,7 +59,8 @@ export default async function DailyPaymentsReportPage({
   const selectedDate =
     params.date && isValidDate(params.date) ? params.date : todayIso;
 
-  const [headers, payments, slips] = await Promise.all([
+  const salesWhs = await getConfiguredSalesWarehouses();
+  const [headers, payments, slips, smlHeaders] = await Promise.all([
     prisma.$queryRaw<HeaderRow[]>`
       SELECT
         t.doc_no,
@@ -95,7 +97,55 @@ export default async function DailyPaymentsReportPage({
       WHERE t.doc_date = ${selectedDate}::date
       GROUP BY s.doc_no
     `,
+    // The shop's SML-raised receipts (flag 44, a line out of the sales
+    // warehouses). cb_trans money is THB base → divided back into KIP;
+    // no per-currency split exists, so it lands in the KIP buckets.
+    prisma.$queryRaw<
+      Array<HeaderRow & { cash_kip: string | number | null; transfer_kip: string | number | null }>
+    >`
+      SELECT
+        t.doc_no,
+        TO_CHAR(t.doc_date, 'YYYY-MM-DD') AS doc_date,
+        t.doc_time,
+        t.cust_code,
+        ar.name_1 AS customer_name,
+        NULLIF(NULLIF(TRIM(t.sale_code), ''), '00000') AS sale_code,
+        COALESCE(emp.fullname_lo, emp.nickname, t.sale_code) AS salesperson_name,
+        t.total_amount_2 AS total_amount_kip,
+        t.is_cancel,
+        ROUND(c.cash_amount    / NULLIF(t.exchange_rate, 0)) AS cash_kip,
+        ROUND(c.tranfer_amount / NULLIF(t.exchange_rate, 0)) AS transfer_kip
+      FROM ic_trans t
+      JOIN cb_trans c ON c.doc_no = t.doc_no AND c.trans_flag = 44
+      LEFT JOIN ar_customer ar ON ar.code = t.cust_code
+      LEFT JOIN odg_employee emp
+        ON emp.employee_code = NULLIF(NULLIF(TRIM(t.sale_code), ''), '00000')
+      WHERE t.trans_flag = 44
+        AND t.doc_format_code <> 'CAKAP'
+        AND t.doc_date = ${selectedDate}::date
+        AND EXISTS (
+          SELECT 1 FROM ic_trans_detail dd
+          WHERE dd.doc_no = t.doc_no
+            AND dd.trans_flag = 44
+            AND dd.wh_code = ANY(${salesWhs})
+        )
+      ORDER BY t.doc_time NULLS LAST, t.doc_no
+    `,
   ]);
+
+  // SML rows ride the same lists: their breakdown is kept aside by doc,
+  // and the headers array carries them so every loop below sees them.
+  const smlBreakdown = new Map<string, { cash: number; transfer: number }>();
+  const smlDocs = new Set<string>();
+  for (const h of smlHeaders) {
+    smlDocs.add(h.doc_no);
+    smlBreakdown.set(h.doc_no, {
+      cash: h.cash_kip ? Number(h.cash_kip) : 0,
+      transfer: h.transfer_kip ? Number(h.transfer_kip) : 0,
+    });
+    headers.push(h);
+  }
+  headers.sort((a, b) => (a.doc_time ?? "").localeCompare(b.doc_time ?? ""));
 
   // Bucket payment lines by doc_no for per-row totals.
   const paymentsByDoc = new Map<string, PaymentLineRow[]>();
@@ -136,17 +186,29 @@ export default async function DailyPaymentsReportPage({
       breakdown[key] += p.amount ? Number(p.amount) : 0;
     }
   }
+  for (const h of smlHeaders) {
+    if (h.is_cancel) continue;
+    const b = smlBreakdown.get(h.doc_no);
+    if (!b) continue;
+    breakdown["02:cash"] += b.cash;
+    breakdown["02:transfer"] += b.transfer;
+  }
 
   // Per-row currency × method aggregates for the table.
   function rowBreakdown(docNo: string) {
-    const list = paymentsByDoc.get(docNo) ?? [];
     const r: Record<BreakdownKey, number> = {
       "02:cash": 0,
       "02:transfer": 0,
       "01:cash": 0,
       "01:transfer": 0,
     };
-    for (const p of list) {
+    const sml = smlBreakdown.get(docNo);
+    if (sml) {
+      r["02:cash"] = sml.cash;
+      r["02:transfer"] = sml.transfer;
+      return r;
+    }
+    for (const p of paymentsByDoc.get(docNo) ?? []) {
       const key = `${p.currency_code}:${p.pay_method}` as BreakdownKey;
       if (key in r) r[key] += p.amount ? Number(p.amount) : 0;
     }
@@ -290,6 +352,11 @@ export default async function DailyPaymentsReportPage({
                     >
                       <td className="px-4 py-3 font-mono text-xs font-bold">
                         {h.doc_no}
+                        {smlDocs.has(h.doc_no) ? (
+                          <span className="ml-1.5 inline-flex rounded-full bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-700 align-middle">
+                            SML
+                          </span>
+                        ) : null}
                       </td>
                       <td className="px-4 py-3 text-xs text-odoo-text-muted">
                         {h.doc_time ?? "—"}

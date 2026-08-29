@@ -83,7 +83,15 @@ function Barcode({ value }: { value: string }) {
 
 // Render the ODIEN Mall sales invoice (ບິນຂາຍສິນຄ້າ). The page sets up the
 // screen toolbar; this component is the printed body.
-export default function ReceiptPrintView({ receipt }: { receipt: ReceiptDetail }) {
+export default function ReceiptPrintView({
+  receipt,
+  isCopy = false,
+}: {
+  receipt: ReceiptDetail;
+  // A reprint. The first print is the original; every one after carries
+  // the ສຳເນົາ stamp so two "originals" can never circulate.
+  isCopy?: boolean;
+}) {
   const r = receipt;
 
   const subtotal = r.items.reduce((a, it) => a + it.sumKip, 0);
@@ -96,7 +104,17 @@ export default function ReceiptPrintView({ receipt }: { receipt: ReceiptDetail }
   const issuerName = r.cashier?.name ?? r.salesperson?.name ?? "";
 
   return (
-    <article className="receipt-sheet receipt-invoice mx-auto min-h-[277mm] w-[190mm] bg-white px-[5mm] py-[4mm] text-black shadow-sm print:min-h-0 print:w-auto print:px-0 print:py-0">
+    <article className="receipt-sheet receipt-invoice relative mx-auto min-h-[277mm] w-[190mm] bg-white px-[5mm] py-[4mm] text-black shadow-sm print:min-h-0 print:w-auto print:px-0 print:py-0">
+      {isCopy ? (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
+        >
+          <span className="rotate-[-24deg] border-4 border-red-500/40 px-8 py-2 text-6xl font-black tracking-widest text-red-500/40">
+            ສຳເນົາ
+          </span>
+        </div>
+      ) : null}
       {/* ---- Header ---- */}
       <header className="grid grid-cols-[28mm_1fr_55mm] items-start gap-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}

@@ -10224,3 +10224,29 @@ a {
   .settle-actions { margin: 10px -10px -10px; padding: 9px 10px; }
   .settle-actions .odoo-btn-primary { height: 42px; }
 }
+
+/* ─── Bill totals stay put ───────────────────────────────────────────────
+   The left column scrolls as one piece, so on a bill with more than a few
+   lines the totals and the points scrolled off the top and the cashier
+   was reading a list with no bottom line. They pin to the foot of the
+   column instead.
+
+   Solid backgrounds, and a rule above: a sticky block over a translucent
+   one lets the rows behind read through it, which is what made the settle
+   footer look broken earlier. */
+.settle-left .settle-bill-sum,
+.settle-left .settle-points-sum {
+  position: sticky;
+  z-index: 5;
+}
+.settle-left .settle-bill-sum {
+  bottom: 0;
+  background: var(--odoo-surface);
+  border-color: var(--odoo-border-strong);
+  box-shadow: 0 -8px 18px -10px rgba(15, 23, 42, 0.18);
+}
+/* The points box sits above it, so it pins to the taller offset. */
+.settle-left .settle-points-sum {
+  bottom: 0;
+  background: var(--odoo-warning-bg);
+}

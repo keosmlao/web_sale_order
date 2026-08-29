@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getEmployeeFromRequest } from "@/lib/auth";
+import { getConfiguredSalesWarehouses } from "@/lib/inventory-config";
 
 // /api/reports/daily-payments
 //
@@ -11,6 +12,20 @@ import { getEmployeeFromRequest } from "@/lib/auth";
 //
 // Query params:
 //   date — ISO YYYY-MM-DD. Default: today in Asia/Vientiane (UTC+7).
+
+type SmlHeaderRow = {
+  doc_no: string;
+  doc_date: string;
+  doc_time: string | null;
+  cust_code: string | null;
+  customer_name: string | null;
+  sale_code: string | null;
+  salesperson_name: string | null;
+  total_amount_kip: string | number | null;
+  is_cancel: number | null;
+  cash_kip: string | number | null;
+  transfer_kip: string | number | null;
+};
 
 type HeaderRow = {
   doc_no: string;
@@ -74,7 +89,8 @@ export async function GET(request: NextRequest) {
 
   // Three parallel queries — same shape as the page. Fan-out is cheap and
   // halves the wall-clock vs. sequential.
-  const [headers, payments, slips] = await Promise.all([
+  const salesWhs = await getConfiguredSalesWarehouses();
+  const [headers, payments, slips, smlHeaders] = await Promise.all([
     prisma.$queryRaw<HeaderRow[]>`
       SELECT
         t.doc_no,
@@ -110,6 +126,40 @@ export async function GET(request: NextRequest) {
       JOIN ic_trans t ON t.doc_no = s.doc_no AND t.doc_format_code = 'CAKAP'
       WHERE t.doc_date = ${selectedDate}::date
       GROUP BY s.doc_no
+    `,
+    // The shop's receipts raised inside SML (any flag-44 format with a
+    // line out of the storefront's sales warehouses). Their money is in
+    // cb_trans as THB base — divided back into KIP by the bill's exchange
+    // rate; SML keeps no per-currency split, so the whole figure lands in
+    // the KIP buckets.
+    prisma.$queryRaw<SmlHeaderRow[]>`
+      SELECT
+        t.doc_no,
+        TO_CHAR(t.doc_date, 'YYYY-MM-DD') AS doc_date,
+        t.doc_time,
+        t.cust_code,
+        ar.name_1 AS customer_name,
+        NULLIF(NULLIF(TRIM(t.sale_code), ''), '00000') AS sale_code,
+        COALESCE(emp.fullname_lo, emp.nickname, t.sale_code) AS salesperson_name,
+        t.total_amount_2 AS total_amount_kip,
+        t.is_cancel,
+        ROUND(c.cash_amount    / NULLIF(t.exchange_rate, 0)) AS cash_kip,
+        ROUND(c.tranfer_amount / NULLIF(t.exchange_rate, 0)) AS transfer_kip
+      FROM ic_trans t
+      JOIN cb_trans c ON c.doc_no = t.doc_no AND c.trans_flag = 44
+      LEFT JOIN ar_customer ar ON ar.code = t.cust_code
+      LEFT JOIN odg_employee emp
+        ON emp.employee_code = NULLIF(NULLIF(TRIM(t.sale_code), ''), '00000')
+      WHERE t.trans_flag = 44
+        AND t.doc_format_code <> 'CAKAP'
+        AND t.doc_date = ${selectedDate}::date
+        AND EXISTS (
+          SELECT 1 FROM ic_trans_detail dd
+          WHERE dd.doc_no = t.doc_no
+            AND dd.trans_flag = 44
+            AND dd.wh_code = ANY(${salesWhs})
+        )
+      ORDER BY t.doc_time NULLS LAST, t.doc_no
     `,
   ]);
 
@@ -166,16 +216,40 @@ export async function GET(request: NextRequest) {
     return r;
   }
 
-  return NextResponse.json({
-    date: selectedDate,
-    totals: {
-      receiptsActive,
-      receiptsCancelled,
-      kipActive,
-      kipCancelled,
-    },
-    breakdown: dayBreakdown,
-    rows: headers.map((h) => ({
+  // SML bills join the same totals and the same row list, KIP-equivalent
+  // figures in the KIP buckets, badged by origin.
+  for (const h of smlHeaders) {
+    const kip = toNum(h.total_amount_kip);
+    if (h.is_cancel) {
+      receiptsCancelled += 1;
+      kipCancelled += kip;
+    } else {
+      receiptsActive += 1;
+      kipActive += kip;
+      dayBreakdown["02:cash"] += toNum(h.cash_kip);
+      dayBreakdown["02:transfer"] += toNum(h.transfer_kip);
+    }
+  }
+
+  const posRows = headers.map((h) => ({
+    docNo: h.doc_no,
+    docDate: h.doc_date,
+    docTime: h.doc_time,
+    custCode: h.cust_code,
+    custName: h.customer_name,
+    saleCode: h.sale_code,
+    salespersonName: h.salesperson_name,
+    totalAmountKip: toNum(h.total_amount_kip),
+    isCancelled: Boolean(h.is_cancel),
+    breakdown: rowBreakdown(h.doc_no),
+    slipCount: slipsByDoc.get(h.doc_no) ?? 0,
+    origin: "pos" as const,
+  }));
+  const smlRows = smlHeaders.map((h) => {
+    const r = emptyBreakdown();
+    r["02:cash"] = toNum(h.cash_kip);
+    r["02:transfer"] = toNum(h.transfer_kip);
+    return {
       docNo: h.doc_no,
       docDate: h.doc_date,
       docTime: h.doc_time,
@@ -185,8 +259,24 @@ export async function GET(request: NextRequest) {
       salespersonName: h.salesperson_name,
       totalAmountKip: toNum(h.total_amount_kip),
       isCancelled: Boolean(h.is_cancel),
-      breakdown: rowBreakdown(h.doc_no),
-      slipCount: slipsByDoc.get(h.doc_no) ?? 0,
-    })),
+      breakdown: r,
+      slipCount: 0,
+      origin: "sml" as const,
+    };
+  });
+  const rows = [...posRows, ...smlRows].sort((a, b) =>
+    (a.docTime ?? "").localeCompare(b.docTime ?? ""),
+  );
+
+  return NextResponse.json({
+    date: selectedDate,
+    totals: {
+      receiptsActive,
+      receiptsCancelled,
+      kipActive,
+      kipCancelled,
+    },
+    breakdown: dayBreakdown,
+    rows,
   });
 }

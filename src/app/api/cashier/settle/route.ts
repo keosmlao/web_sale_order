@@ -436,6 +436,22 @@ export async function POST(request: NextRequest) {
       if (!cart) {
         throw new HandledError(404, `ບໍ່ພົບກະຕ່າ ${cartNumber}`);
       }
+
+      // No open shift, no money. Settling outside a shift used to be
+      // allowed (shift_id just went NULL), which meant the day-close
+      // figures and the shift close could disagree by whatever was taken
+      // in between — the drawer held cash no shift accounted for.
+      const shiftGuard = await tx.$queryRaw<Array<{ id: bigint }>>`
+        SELECT id FROM app_cashier_shift
+        WHERE cashier_code = ${userCode} AND status = 'open'
+        LIMIT 1
+      `;
+      if (!shiftGuard[0]) {
+        throw new HandledError(
+          409,
+          "ຍັງບໍ່ໄດ້ເປີດກະ — ກະລຸນາເປີດກະກ່ອນຮັບເງິນ",
+        );
+      }
       if ((cart.status ?? 0) !== 0) {
         throw new HandledError(
           409,

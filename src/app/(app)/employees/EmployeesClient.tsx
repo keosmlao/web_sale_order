@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import {
   createEmployeeAction,
   deleteEmployeeAction,
+  resetPasswordAction,
   setRoleAction,
   updateEmployeeAction,
   type ActionResult,
@@ -463,11 +464,14 @@ function EmployeeModal({
 
           <div className="mt-5 flex flex-wrap items-center justify-end gap-2 border-t border-odoo-border pt-4 min-w-0">
             {mode === "edit" && employee && (
-              <DeleteButton
-                employeeCode={employee.employeeCode}
-                disabled={isSelf}
-                onDone={onSaved}
-              />
+              <>
+                <ResetPasswordButton employeeCode={employee.employeeCode} />
+                <DeleteButton
+                  employeeCode={employee.employeeCode}
+                  disabled={isSelf}
+                  onDone={onSaved}
+                />
+              </>
             )}
             <button
               type="button"
@@ -487,6 +491,86 @@ function EmployeeModal({
         </form>
       </div>
     </div>
+  );
+}
+
+function ResetPasswordButton({ employeeCode }: { employeeCode: string }) {
+  const [state, formAction, pending] = useActionState<
+    ActionResult | null,
+    FormData
+  >(resetPasswordAction, null);
+  const [asking, setAsking] = useState(false);
+  const [pw, setPw] = useState("");
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    if (state?.ok) {
+      setAsking(false);
+      setDone(true);
+    }
+  }, [state]);
+
+  if (done) {
+    return (
+      <span className="text-xs font-bold text-odoo-success">
+        ✓ ຕັ້ງລະຫັດໃໝ່ແລ້ວ
+      </span>
+    );
+  }
+
+  if (!asking) {
+    return (
+      <button
+        type="button"
+        onClick={() => {
+          // The employee code is the reset people actually use — offered
+          // pre-filled, one tap to accept, still editable.
+          setPw(employeeCode);
+          setAsking(true);
+        }}
+        className="rounded-md border border-odoo-border bg-white px-3 py-2 text-sm font-semibold text-odoo-text-strong transition hover:bg-odoo-surface-muted"
+      >
+        ຕັ້ງລະຫັດຜ່ານໃໝ່
+      </button>
+    );
+  }
+
+  // Not a <form> — this lives inside the modal's save form (same reason as
+  // DeleteButton below).
+  return (
+    <span className="inline-flex flex-wrap items-center gap-1">
+      <input
+        type="text"
+        value={pw}
+        onChange={(e) => setPw(e.target.value)}
+        placeholder="ລະຫັດໃໝ່"
+        className="odoo-input !w-32 !py-1.5 text-sm"
+        autoFocus
+      />
+      <button
+        type="button"
+        disabled={pending || pw.trim().length < 4}
+        onClick={() => {
+          const fd = new FormData();
+          fd.set("employeeCode", employeeCode);
+          fd.set("newPassword", pw.trim());
+          startTransition(() => formAction(fd));
+        }}
+        className="odoo-btn odoo-btn-primary !px-3 !py-1.5"
+      >
+        {pending ? "…" : "ຕັ້ງ"}
+      </button>
+      <button
+        type="button"
+        onClick={() => setAsking(false)}
+        className="rounded-md border border-odoo-border bg-white px-2 py-1.5 text-sm font-semibold"
+      >
+        ✕
+      </button>
+      {state && !state.ok ? (
+        <span className="text-xs text-odoo-danger">{state.error}</span>
+      ) : null}
+    </span>
   );
 }
 

@@ -99,6 +99,9 @@ export async function POST(request: NextRequest) {
     reason?: unknown;
     managerCode?: unknown;
     managerPin?: unknown;
+    // Partial return: which lines come back, and how many of each.
+    // Absent → the classic full void.
+    lines?: Array<{ lineNumber?: unknown; qty?: unknown }>;
   } | null;
   const docNo = typeof body?.docNo === "string" ? body.docNo.trim() : "";
   const reason =
@@ -107,6 +110,24 @@ export async function POST(request: NextRequest) {
     typeof body?.managerCode === "string" ? body.managerCode.trim() : "";
   const managerPin =
     typeof body?.managerPin === "string" ? body.managerPin : "";
+
+  const requestedLines: Array<{ lineNumber: number; qty: number }> = [];
+  if (Array.isArray(body?.lines)) {
+    for (const l of body.lines) {
+      const lineNumber = Number(l?.lineNumber);
+      const qty = Number(l?.qty);
+      if (!Number.isInteger(lineNumber) || !(qty > 0)) {
+        return NextResponse.json(
+          { error: "ລາຍການຄືນບໍ່ຖືກຕ້ອງ" },
+          { status: 400 },
+        );
+      }
+      requestedLines.push({ lineNumber, qty });
+    }
+  }
+  // Partial mode the moment lines are named: the original bill stays
+  // alive, only the named goods and their money come back.
+  const partial = requestedLines.length > 0;
 
   if (!docNo) {
     return NextResponse.json({ error: "docNo required" }, { status: 400 });
@@ -216,6 +237,65 @@ export async function POST(request: NextRequest) {
         throw new HandledError(500, "ໃບຮັບບໍ່ມີລາຍການສິນຄ້າ");
       }
 
+      // Partial return: scale each named line down to the returned
+      // quantity. Prior CTPLs against this receipt are netted off first so
+      // a line can never come back more times than it was sold.
+      let docLines = details;
+      let partialKip = 0;
+      let partialThb = 0;
+      if (partial) {
+        const priorRows = await tx.$queryRaw<
+          Array<{ line_number: number; returned: string | number | null }>
+        >`
+          SELECT d.line_number, SUM(-d.qty) AS returned
+          FROM ic_trans_detail d
+          JOIN ic_trans h
+            ON h.doc_no = d.doc_no
+           AND h.doc_format_code = ${DOC_PREFIX}
+           AND h.ref_doc_no = ${docNo}
+          WHERE d.trans_flag = ${RETURN_TRANS_FLAG}
+          GROUP BY d.line_number
+        `;
+        const priorByLine = new Map(
+          priorRows.map((r) => [r.line_number, Number(r.returned ?? 0)]),
+        );
+        const byLine = new Map(details.map((d) => [d.line_number, d]));
+        const scaled: CakDetailRow[] = [];
+        for (const req of requestedLines) {
+          const d = byLine.get(req.lineNumber);
+          if (!d) {
+            throw new HandledError(400, `ບໍ່ພົບແຖວ ${req.lineNumber} ໃນບິນ`);
+          }
+          const sold = Number(d.qty ?? 0);
+          const already = priorByLine.get(req.lineNumber) ?? 0;
+          if (req.qty > sold - already + 1e-9) {
+            throw new HandledError(
+              409,
+              `${d.item_code}: ຄືນໄດ້ສູງສຸດ ${sold - already} (ຂາຍ ${sold}, ຄືນແລ້ວ ${already})`,
+            );
+          }
+          const factor = req.qty / sold;
+          const round2 = (v: number) => Math.round(v * 100) / 100;
+          scaled.push({
+            ...d,
+            qty: req.qty,
+            sum_amount: round2(Number(d.sum_amount ?? 0) * factor),
+            sum_amount_2: round2(Number(d.sum_amount_2 ?? 0) * factor),
+            discount_amount: round2(Number(d.discount_amount ?? 0) * factor),
+            discount_amount_2: round2(
+              Number(d.discount_amount_2 ?? 0) * factor,
+            ),
+            sum_of_cost: round2(Number(d.sum_of_cost ?? 0) * factor),
+          });
+        }
+        docLines = scaled;
+        partialKip = scaled.reduce(
+          (a, d) => a + Number(d.sum_amount_2 ?? 0),
+          0,
+        );
+        partialThb = scaled.reduce((a, d) => a + Number(d.sum_amount ?? 0), 0);
+      }
+
       // 4. Snapshot cb_trans for the refund header.
       const cbRows = await tx.$queryRaw<CbHeaderRow[]>`
         SELECT cash_amount, tranfer_amount, total_other_currency,
@@ -254,10 +334,16 @@ export async function POST(request: NextRequest) {
       }
 
       // 6. Insert CTPL header with negative totals.
-      const totalKipNeg = -Number(cak.total_amount_2 ?? 0);
-      const totalThbNeg = -Number(cak.total_amount ?? 0);
+      const totalKipNeg = partial
+        ? -partialKip
+        : -Number(cak.total_amount_2 ?? 0);
+      const totalThbNeg = partial
+        ? -partialThb
+        : -Number(cak.total_amount ?? 0);
       const exchangeRate = cak.exchange_rate ? Number(cak.exchange_rate) : 1;
-      const refRemark = `ຍົກເລີກ ${docNo}${reason ? ` · ${reason}` : ""}`;
+      const refRemark = partial
+        ? `ຄືນເຄື່ອງບາງລາຍການ ${docNo}${reason ? ` · ${reason}` : ""}`
+        : `ຍົກເລີກ ${docNo}${reason ? ` · ${reason}` : ""}`;
       await tx.$executeRaw`
         INSERT INTO ic_trans (
           trans_type, trans_flag,
@@ -299,7 +385,7 @@ export async function POST(request: NextRequest) {
       //    negative amount. wh_code/shelf_code mirror the original so the
       //    stock function nets out (a CAK 'sale' minus a CTPL 'return' for
       //    the same wh/shelf restores balance).
-      for (const d of details) {
+      for (const d of docLines) {
         const qtyNeg = -Number(d.qty ?? 0);
         const priceThb = Number(d.price ?? 0);
         const priceKip = Number(d.price_2 ?? 0);
@@ -340,11 +426,18 @@ export async function POST(request: NextRequest) {
 
       // 8. Insert reverse cb_trans with negative cash/transfer amounts
       //    so the cashbook balances after the void.
-      const cashNeg = -Number(cb?.cash_amount ?? 0);
-      const transferNeg = -Number(cb?.tranfer_amount ?? 0);
-      const otherNeg = -Number(cb?.total_other_currency ?? 0);
-      const cbTotalNeg = -Number(cb?.total_amount ?? 0);
-      const cbPayNeg = -Number(cb?.total_amount_pay ?? 0);
+      // Partial: the returned value goes back to the customer as cash,
+      // whatever mix originally paid the bill — that is what a counter
+      // refund is. Full void reverses the original split.
+      const cashNeg = partial ? totalThbNeg : -Number(cb?.cash_amount ?? 0);
+      const transferNeg = partial ? 0 : -Number(cb?.tranfer_amount ?? 0);
+      const otherNeg = partial ? 0 : -Number(cb?.total_other_currency ?? 0);
+      const cbTotalNeg = partial
+        ? totalThbNeg
+        : -Number(cb?.total_amount ?? 0);
+      const cbPayNeg = partial
+        ? totalThbNeg
+        : -Number(cb?.total_amount_pay ?? 0);
       await tx.$executeRaw`
         INSERT INTO cb_trans (
           trans_type, trans_flag,
@@ -380,21 +473,31 @@ export async function POST(request: NextRequest) {
         )
       `;
 
-      // 9. Mark the original CAKAP cancelled. is_cancel=1 + status=2 is
-      //    the legacy SML convention; downstream reports filter on status.
-      await tx.$executeRaw`
-        UPDATE ic_trans
-        SET status = 2,
-            is_cancel = 1,
-            cancel_type = 1,
-            lastedit_datetime = NOW()
-        WHERE doc_no = ${docNo}
-      `;
+      // 9. Mark the original CAKAP cancelled — full void only. A partial
+      //    return leaves the bill standing; the CTPL rows carry the
+      //    correction.
+      if (!partial) {
+        await tx.$executeRaw`
+          UPDATE ic_trans
+          SET status = 2,
+              is_cancel = 1,
+              cancel_type = 1,
+              lastedit_datetime = NOW()
+          WHERE doc_no = ${docNo}
+        `;
+      }
 
       // 10. Restore loyalty points. Earned points (sum_point on original
       //     header) get clawed back; redeemed points get returned. Both
       //     are idempotent because we update with the actual deltas.
-      const earnedPts = Math.floor(Number(cak.sum_point ?? 0));
+      const totalKipAbs = Number(cak.total_amount_2 ?? 0);
+      const earnedPtsFull = Math.floor(Number(cak.sum_point ?? 0));
+      // Partial: claw back points in proportion to the value returned.
+      const earnedPts = partial
+        ? totalKipAbs > 0
+          ? Math.floor((earnedPtsFull * partialKip) / totalKipAbs)
+          : 0
+        : earnedPtsFull;
       if (earnedPts > 0 && cak.cust_code) {
         await tx.$executeRaw`
           UPDATE ar_customer
@@ -402,7 +505,12 @@ export async function POST(request: NextRequest) {
           WHERE code = ${cak.cust_code}
         `;
       }
-      const redemptionRows = await tx.$queryRaw<RedemptionRow[]>`
+      // Redeemed points come back only on a full void — on a partial
+      // return the discount already served its bill, and the refund is
+      // cash for the goods.
+      const redemptionRows = partial
+        ? []
+        : await tx.$queryRaw<RedemptionRow[]>`
         SELECT points_used, customer_code
         FROM app_loyalty_redemption
         WHERE doc_no = ${docNo}
@@ -415,6 +523,45 @@ export async function POST(request: NextRequest) {
             WHERE code = ${r.customer_code}
           `;
         }
+      }
+
+      // Serial-tracked units of a partial return go back on the shelf in
+      // the WMS master — the first N of that item issued on this receipt,
+      // since the paper cannot know which physical unit came back.
+      if (partial) {
+        for (const d of docLines) {
+          await tx.$executeRaw`
+            UPDATE sn_inventory
+            SET status = 0, user_mapping = ${userCode}, updated_at = NOW()
+            WHERE isn IN (
+              SELECT sd.isn FROM sn_trans_detail sd
+              WHERE sd.doc_ref = ${docNo}
+                AND sd.item_code = ${d.item_code}
+                AND COALESCE(sd.isn, '') <> ''
+              LIMIT ${Math.ceil(Number(d.qty ?? 0))}
+            )
+          `;
+        }
+        // Who returned what, and for how much — the receipt history's
+        // audit row stays untouched on a partial. Heals on demand, same
+        // pattern as the delete log.
+        await tx.$executeRaw`
+          CREATE TABLE IF NOT EXISTS app_receipt_return_log (
+            id            BIGSERIAL PRIMARY KEY,
+            doc_no        VARCHAR(50) NOT NULL,
+            return_doc_no VARCHAR(50) NOT NULL,
+            total_kip     NUMERIC(18,2) NOT NULL,
+            reason        TEXT,
+            returned_by   VARCHAR(20) NOT NULL,
+            returned_at   TIMESTAMP   NOT NULL DEFAULT NOW()
+          )
+        `;
+        await tx.$executeRaw`
+          INSERT INTO app_receipt_return_log
+            (doc_no, return_doc_no, total_kip, reason, returned_by)
+          VALUES (${docNo}, ${newDocNo}, ${partialKip}, ${reason}, ${userCode})
+        `;
+        return newDocNo;
       }
 
       // 11. Stamp the settle audit so receipt history shows the void.
@@ -449,7 +596,7 @@ export async function POST(request: NextRequest) {
       return newDocNo;
     });
 
-    return NextResponse.json({ ok: true, voidDocNo, reason });
+    return NextResponse.json({ ok: true, voidDocNo, reason, partial });
   } catch (e) {
     if (e instanceof HandledError) {
       return NextResponse.json({ error: e.message }, { status: e.status });

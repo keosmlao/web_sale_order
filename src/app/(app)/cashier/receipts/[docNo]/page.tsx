@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireEmployee } from "@/lib/auth";
 import { fetchReceipt } from "@/lib/receipts";
+import { prisma } from "@/lib/prisma";
 import AutoPrint from "./AutoPrint";
 import PrintButton from "./PrintButton";
 import ReceiptPrintView from "./ReceiptPrintView";
@@ -18,7 +19,7 @@ export default async function ReceiptPage({
   params: Promise<Params>;
   searchParams: Promise<{ print?: string; view?: string }>;
 }) {
-  await requireEmployee();
+  const me = await requireEmployee();
   const { docNo: rawDocNo } = await params;
   const { print, view } = await searchParams;
   const docNo = decodeURIComponent(rawDocNo).trim();
@@ -26,6 +27,30 @@ export default async function ReceiptPage({
 
   const receipt = await fetchReceipt(docNo);
   if (!receipt) notFound();
+
+  // Opened to print (?print=1): log it, and stamp everything after the
+  // first print as a copy. The table heals itself on an un-migrated
+  // database, same pattern as the delete log.
+  let isCopy = false;
+  if (print === "1") {
+    await prisma.$executeRaw`
+      CREATE TABLE IF NOT EXISTS app_receipt_print_log (
+        id            BIGSERIAL PRIMARY KEY,
+        doc_no        VARCHAR(50) NOT NULL,
+        printed_by    VARCHAR(20),
+        printed_at    TIMESTAMP   NOT NULL DEFAULT NOW()
+      )
+    `;
+    const prior = await prisma.$queryRaw<Array<{ n: bigint }>>`
+      SELECT COUNT(*)::bigint AS n FROM app_receipt_print_log
+      WHERE doc_no = ${docNo}
+    `;
+    isCopy = Number(prior[0]?.n ?? 0) > 0;
+    await prisma.$executeRaw`
+      INSERT INTO app_receipt_print_log (doc_no, printed_by)
+      VALUES (${docNo}, ${me.employeeCode ?? ""})
+    `;
+  }
 
   const fmt = new Intl.NumberFormat("en-US");
   const toKip = (thb: number) =>
@@ -185,7 +210,7 @@ export default async function ReceiptPage({
           <PrintButton />
         </div>
       </div>
-      <ReceiptPrintView receipt={receipt} />
+      <ReceiptPrintView receipt={receipt} isCopy={isCopy} />
       {print === "1" ? <AutoPrint /> : null}
     </div>
   );

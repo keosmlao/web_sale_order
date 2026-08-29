@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireEmployee } from "@/lib/auth";
+import { hashPassword, requireEmployee } from "@/lib/auth";
 import { canAssignRoles, isValidRole, roleFromEmployee } from "@/lib/roles";
 
 export type ActionResult = { ok: true } | { ok: false; error: string };
@@ -121,6 +121,53 @@ export async function setRoleAction(
         updated_at = NOW()
     WHERE employee_code = ${employeeCode}
   `;
+  revalidatePath("/employees");
+  return { ok: true };
+}
+
+export async function resetPasswordAction(
+  _prev: ActionResult | null,
+  form: FormData,
+): Promise<ActionResult> {
+  const actor = await requireRoleManager();
+  if (typeof actor !== "string") return actor;
+
+  const employeeCode = s(form.get("employeeCode"));
+  const newPassword = s(form.get("newPassword"));
+  if (!employeeCode) return { ok: false, error: "ບໍ່ມີລະຫັດພະນັກງານ" };
+  if (!newPassword || newPassword.length < 4) {
+    return { ok: false, error: "ລະຫັດຜ່ານໃໝ່ຕ້ອງຍາວຢ່າງໜ້ອຍ 4 ຕົວ" };
+  }
+
+  const employee = await prisma.odgEmployee.findUnique({
+    where: { employeeCode },
+    select: { employeeCode: true },
+  });
+  if (!employee) {
+    return { ok: false, error: "ບໍ່ພົບພະນັກງານນີ້" };
+  }
+
+  // Stored hashed from the first moment — the plaintext-then-upgrade path
+  // is only for legacy rows that predate hashing.
+  await prisma.odgEmployee.update({
+    where: { employeeCode },
+    data: { password: await hashPassword(newPassword) },
+  });
+  // Who reset whose password, and when. The table heals itself on an
+  // un-migrated database, same pattern as the receipt delete log.
+  await prisma.$executeRaw`
+    CREATE TABLE IF NOT EXISTS app_password_reset_log (
+      id            BIGSERIAL PRIMARY KEY,
+      employee_code VARCHAR(20) NOT NULL,
+      reset_by      VARCHAR(20) NOT NULL,
+      reset_at      TIMESTAMP   NOT NULL DEFAULT NOW()
+    )
+  `;
+  await prisma.$executeRaw`
+    INSERT INTO app_password_reset_log (employee_code, reset_by)
+    VALUES (${employeeCode}, ${actor})
+  `;
+
   revalidatePath("/employees");
   return { ok: true };
 }
