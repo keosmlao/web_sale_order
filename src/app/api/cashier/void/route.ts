@@ -564,6 +564,21 @@ export async function POST(request: NextRequest) {
         return newDocNo;
       }
 
+      // Every serial-tracked unit on the bill goes back on the shelf in
+      // the WMS master — a voided sale means the goods came back. Matched
+      // the way the WMS's own delete-issue restores: printed serial first,
+      // company serial behind it, per item, only units actually issued.
+      await tx.$executeRaw`
+        UPDATE sn_inventory s
+        SET status = 0, user_mapping = ${userCode}, updated_at = NOW()
+        FROM sn_trans_detail d
+        WHERE d.doc_ref = ${docNo}
+          AND COALESCE(NULLIF(s.sn, ''), s.isn)
+              = COALESCE(NULLIF(d.sn, ''), d.isn)
+          AND s.item_code = d.item_code
+          AND COALESCE(s.status, 0) = 1
+      `;
+
       // 11. Stamp the settle audit so receipt history shows the void.
       //     The original audit row remains (history is append-only via
       //     INSERT in settle), so the void column tells us "this CAKAP
