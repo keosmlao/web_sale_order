@@ -30,6 +30,7 @@ function isValidDate(s: string | null | undefined): s is string {
 type Row = {
   bill_no: string;
   bill_date: string | null;
+  bill_date_iso: string | null;
   cust_code: string | null;
   customer_name: string | null;
   telephone: string | null;
@@ -115,7 +116,8 @@ export async function GET(request: NextRequest) {
   const rows = await prisma.$queryRaw<Row[]>`
     SELECT
       t.doc_no AS bill_no,
-      TO_CHAR(t.doc_date, 'DD/MM/YYYY') AS bill_date,
+      TO_CHAR(t.doc_date, 'DD-MM-YYYY') AS bill_date,
+      TO_CHAR(t.doc_date, 'YYYY-MM-DD') AS bill_date_iso,
       t.cust_code,
       ar.name_1 AS customer_name,
       COALESCE(NULLIF(ld.telephone, ''), ar.telephone) AS telephone,
@@ -171,6 +173,7 @@ export async function GET(request: NextRequest) {
   const items = rows.map((r) => ({
     billNo: r.bill_no,
     billDate: r.bill_date,
+    billDateIso: r.bill_date_iso,
     custCode: r.cust_code,
     customerName: r.customer_name?.trim() || r.cust_code || "—",
     telephone: r.telephone?.trim() || null,
