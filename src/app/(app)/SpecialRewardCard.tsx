@@ -116,85 +116,122 @@ export function RewardList({
                     </span>
                   ) : null}
                 </div>
+                {/* The prize is the point — worn as a tag, not a pill
+                    fighting the title. */}
                 <span
-                  className={`shrink-0 rounded-full px-2.5 py-1 font-mono text-sm font-black ${
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1 font-mono text-sm font-black ${
                     r.achieved
-                      ? "bg-emerald-100 text-emerald-700"
-                      : "bg-indigo-50 text-indigo-700"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-slate-900 text-amber-300"
                   }`}
                 >
-                  {moneyFmt.format(r.reward)} ບາດ{r.splitByShare ? "" : "/ຄົນ"}
+                  🏆 {moneyFmt.format(r.reward)} ບາດ{r.splitByShare ? "" : "/ຄົນ"}
                 </span>
               </div>
 
-              <div className="mt-2 flex items-center justify-between text-xs font-bold text-slate-500">
-                <span>
-                  ຍອດຕອນນີ້{" "}
-                  <b className="font-mono text-slate-800">{moneyFmt.format(r.current)}</b>
-                  <span className="text-slate-400"> / ເປົ້າ {moneyFmt.format(r.target)} ບາດ</span>
-                </span>
-                <span className={`font-mono font-black ${r.achieved ? "text-emerald-600" : "text-amber-600"}`}>
-                  {pct.toFixed(0)}%
-                </span>
-              </div>
-              <div className="mt-1 h-2 overflow-hidden rounded-full bg-slate-100">
-                <div
-                  className={`h-full rounded-full transition-all duration-700 ${
-                    r.achieved
-                      ? "bg-emerald-500"
-                      : "bg-gradient-to-r from-amber-400 to-orange-500"
+              {/* Gauge hero: the % carries the story, the figures explain it. */}
+              <div className="mt-3 flex items-end gap-4">
+                <span
+                  className={`font-mono text-3xl font-black leading-none ${
+                    r.achieved ? "text-emerald-600" : "text-slate-900"
                   }`}
-                  style={{ width: `${fillPct}%` }}
-                />
-              </div>
-              <div className="mt-1 text-xs font-semibold">
-                {r.achieved ? (
-                  <span className="text-emerald-600">🎉 ບັນລຸເປົ້າແລ້ວ — ໄດ້ຮັບລາງວັນ</span>
-                ) : (
-                  <span className="text-slate-400">
-                    ຂາດອີກ{" "}
-                    <b className="font-mono text-slate-600">{moneyFmt.format(remaining)}</b> ບາດ
-                  </span>
-                )}
+                >
+                  {pct.toFixed(0)}
+                  <small className="text-base">%</small>
+                </span>
+                <div className="min-w-0 flex-1 pb-0.5">
+                  <div className="flex items-baseline justify-between text-[11.5px] font-bold text-slate-500">
+                    <span>
+                      ຍອດຕອນນີ້{" "}
+                      <b className="font-mono text-slate-800">
+                        {moneyFmt.format(r.current)}
+                      </b>{" "}
+                      / ເປົ້າ {moneyFmt.format(r.target)} ບາດ
+                    </span>
+                    {r.achieved ? (
+                      <span className="text-emerald-600">🎉 ບັນລຸເປົ້າແລ້ວ</span>
+                    ) : (
+                      <span>
+                        ຂາດອີກ{" "}
+                        <b className="font-mono text-slate-700">
+                          {moneyFmt.format(remaining)}
+                        </b>
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${
+                        r.achieved
+                          ? "bg-emerald-500"
+                          : "bg-gradient-to-r from-amber-400 to-orange-500"
+                      }`}
+                      style={{ width: `${fillPct}%` }}
+                    />
+                  </div>
+                </div>
               </div>
 
               {/* Managers / unit heads: every member's sales, % share and
                   (for split rewards) their slice of the pot. */}
+              {/* The team as a leaderboard: rank, a bar scaled to the top
+                  seller, the figures on the right. A race reads faster
+                  than a table. */}
               {r.breakdown && r.breakdown.length > 0 ? (
-                <div className="mt-2 overflow-hidden rounded-xl ring-1 ring-inset ring-slate-100">
-                  <table className="w-full text-xs">
-                    <thead>
-                      <tr className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-400">
-                        <th className="px-2.5 py-1.5 text-left">ພະນັກງານ</th>
-                        <th className="px-2.5 py-1.5 text-right">ຍອດຂາຍ</th>
-                        <th className="px-2.5 py-1.5 text-right">%</th>
-                        {r.splitByShare ? (
-                          <th className="px-2.5 py-1.5 text-right">ຈະໄດ້ຮັບ</th>
-                        ) : null}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {r.breakdown.map((m) => (
-                        <tr key={m.code} className={m.amount > 0 ? "" : "text-slate-400"}>
-                          <td className="max-w-32 truncate px-2.5 py-1.5 font-bold text-slate-700">
-                            {m.name}
-                          </td>
-                          <td className="px-2.5 py-1.5 text-right font-mono font-bold">
-                            {moneyFmt.format(m.amount)}
-                          </td>
-                          <td className="px-2.5 py-1.5 text-right font-mono font-black text-amber-600">
-                            {(m.share * 100).toFixed(1)}%
-                          </td>
-                          {r.splitByShare ? (
-                            <td className="px-2.5 py-1.5 text-right font-mono font-black text-emerald-700">
-                              {moneyFmt.format(Math.round(m.reward))}
-                            </td>
-                          ) : null}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+                <ol className="mt-3 flex flex-col gap-1">
+                  {(() => {
+                    const top = Math.max(
+                      1,
+                      ...r.breakdown.map((m) => m.amount),
+                    );
+                    return r.breakdown.map((m, i) => (
+                      <li
+                        key={m.code}
+                        className={`flex items-center gap-2.5 rounded-lg px-2 py-1.5 ${
+                          m.amount > 0 ? "" : "opacity-50"
+                        }`}
+                      >
+                        <span
+                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-black ${
+                            i === 0 && m.amount > 0
+                              ? "bg-amber-400 text-white"
+                              : i === 1 && m.amount > 0
+                                ? "bg-slate-300 text-slate-700"
+                                : i === 2 && m.amount > 0
+                                  ? "bg-orange-300 text-white"
+                                  : "bg-slate-100 text-slate-500"
+                          }`}
+                        >
+                          {i + 1}
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-baseline justify-between gap-2">
+                            <span className="truncate text-xs font-bold text-slate-700">
+                              {m.name}
+                            </span>
+                            <span className="shrink-0 font-mono text-xs font-bold text-slate-800">
+                              {moneyFmt.format(m.amount)}
+                              <b className="ml-1.5 font-mono text-[11px] text-amber-600">
+                                {(m.share * 100).toFixed(1)}%
+                              </b>
+                              {r.splitByShare ? (
+                                <b className="ml-1.5 font-mono text-[11px] text-emerald-700">
+                                  ≈{moneyFmt.format(Math.round(m.reward))}
+                                </b>
+                              ) : null}
+                            </span>
+                          </span>
+                          <span className="mt-0.5 block h-1 overflow-hidden rounded-full bg-slate-100">
+                            <span
+                              className="block h-full rounded-full bg-gradient-to-r from-amber-300 to-orange-400"
+                              style={{ width: `${Math.min(100, (m.amount / top) * 100)}%` }}
+                            />
+                          </span>
+                        </span>
+                      </li>
+                    ));
+                  })()}
+                </ol>
               ) : null}
 
               {/* My slice of the pot — split_by_share rewards pay each person
