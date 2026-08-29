@@ -1,6 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+
+// ສາງສິນຄ້າ / ສະຕັອກ — the whole catalog, filterable by group, category
+// and brand, with ໝົດ read as a state rather than a vanished item, and a
+// slide-over drawer per item: price, live balance per warehouse, the
+// catalog facts, the KIP price table, the barcodes. Modelled on the
+// owner's reference screen.
 
 type Item = {
   code: string;
@@ -13,311 +19,531 @@ type Item = {
   salePriceKip: number;
 };
 
-type StockLocation = {
-  warehouse: string | null;
-  warehouseName: string | null;
-  location: string | null;
-  locationName: string | null;
-  balanceQty: number;
+type Facets = {
+  groups: Array<{ code: string; name: string }>;
+  subs: Array<{ code: string; name: string }>;
+  subs2: Array<{ code: string; name: string }>;
+  categories: Array<{ code: string; name: string }>;
+  brands: string[];
+};
+
+type ItemDetail = {
+  code: string;
+  nameLo: string | null;
+  nameEng: string | null;
+  unitName: string | null;
+  brand: string | null;
+  companyBalance: number;
+  groupMain: string | null;
+  groupSub: string | null;
+  groupSub2: string | null;
+  category: string | null;
+  pattern: string | null;
+  warehouses: Array<{ code: string; name: string; qty: number }>;
+  prices: Array<{
+    unit: string | null;
+    fromQty: number;
+    toQty: number;
+    fromDate: string | null;
+    toDate: string | null;
+    priceKip: number;
+  }>;
+  barcodes: Array<{ barcode: string | null; unit: string | null }>;
 };
 
 const moneyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
 const qtyFmt = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
+const PAGE_SIZE = 50;
 
-const PAGE_SIZE = 10;
-const MIN_QUERY = 2;
-
-// Colour-code on-hand qty so low stock pops at a glance.
-function stockTone(qty: number): { dot: string; text: string; bg: string; ring: string } {
-  if (qty <= 5)
-    return { dot: "bg-rose-500", text: "text-rose-700", bg: "bg-rose-50", ring: "ring-rose-200" };
-  if (qty <= 20)
-    return { dot: "bg-amber-500", text: "text-amber-700", bg: "bg-amber-50", ring: "ring-amber-200" };
-  return { dot: "bg-emerald-500", text: "text-emerald-700", bg: "bg-emerald-50", ring: "ring-emerald-200" };
-}
-
-export default function InventoryClient() {
-  const [input, setInput] = useState("");
-  const [query, setQuery] = useState("");
-  const [items, setItems] = useState<Item[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<string | null>(null);
-  const [locCache, setLocCache] = useState<Record<string, StockLocation[] | "loading" | "error">>({});
-  const inputRef = useRef<HTMLInputElement>(null);
-  // Desktop (≥640px) lists the whole catalog straight away, like the old
-  // page; phones stay search-first so nothing heavy loads on open.
-  const [isDesktop, setIsDesktop] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 640px)");
-    const apply = () => {
-      setIsDesktop(mq.matches);
-      setPage(1);
-    };
-    apply();
-    mq.addEventListener("change", apply);
-    return () => mq.removeEventListener("change", apply);
-  }, []);
-
-  // Search-first: nothing is fetched until the cashier types. Debounce the
-  // box; queries shorter than MIN_QUERY clear the results entirely.
-  useEffect(() => {
-    const term = input.trim();
-    const h = setTimeout(() => {
-      setQuery(term.length >= MIN_QUERY ? term : "");
-      setPage(1);
-    }, 300);
-    return () => clearTimeout(h);
-  }, [input]);
-
-  useEffect(() => {
-    if (!query && !isDesktop) {
-      setItems([]);
-      setTotal(0);
-      setError(null);
-      setLoading(false);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      if (page === 1) setLoading(true);
-      else setLoadingMore(true);
-      try {
-        const res = await fetch(
-          `/api/inventory/list?page=${page}&pageSize=${PAGE_SIZE}&q=${encodeURIComponent(query)}`,
-          { cache: "no-store" },
-        );
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as { items: Item[]; total: number };
-        if (cancelled) return;
-        setItems((prev) => (page === 1 ? data.items ?? [] : [...prev, ...(data.items ?? [])]));
-        setTotal(data.total ?? 0);
-        setError(null);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "ໂຫລດຂໍ້ມູນບໍ່ສຳເລັດ");
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-          setLoadingMore(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [query, page, isDesktop]);
-
-  async function toggleRow(code: string) {
-    if (expanded === code) {
-      setExpanded(null);
-      return;
-    }
-    setExpanded(code);
-    if (locCache[code]) return;
-    setLocCache((m) => ({ ...m, [code]: "loading" }));
-    try {
-      const res = await fetch(`/api/inventory/stock-locations?code=${encodeURIComponent(code)}`, {
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as { locations: StockLocation[] };
-      setLocCache((m) => ({ ...m, [code]: data.locations ?? [] }));
-    } catch {
-      setLocCache((m) => ({ ...m, [code]: "error" }));
-    }
+function StockBadge({ qty }: { qty: number }) {
+  if (qty <= 0) {
+    return (
+      <span className="inline-flex rounded-full bg-rose-50 px-2.5 py-0.5 text-[11px] font-bold text-rose-600">
+        ໝົດ
+      </span>
+    );
   }
-
-  const hasMore = items.length < total;
-
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6 sm:px-6">
-      {/* Title */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-lg shadow-indigo-500/25">
-          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-            <path d="M3.27 6.96 12 12.01l8.73-5.05" />
-            <path d="M12 22.08V12" />
-          </svg>
-        </div>
-        <div>
-          <h1 className="text-xl font-black tracking-tight text-odoo-text-strong">ສິນຄ້າຄົງເຫຼືອ</h1>
-          <p className="text-xs text-odoo-text-muted">
-            {isDesktop ? "ຄົ້ນຫາ ຫຼື ເລື່ອນເບິ່ງລາຍການສິນຄ້າ" : "ພິມຄົ້ນຫາກ່ອນ — ຜົນອອກສະເພາະທີ່ຄົ້ນ, ໄວກວ່າ"}
-          </p>
-        </div>
-      </div>
-
-      {/* Search (hero) */}
-      <div className="relative mt-4">
-        <span className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-odoo-text-muted">
-          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="7" />
-            <path d="m21 21-4.3-4.3" />
-          </svg>
-        </span>
-        <input
-          ref={inputRef}
-          type="search"
-          inputMode="search"
-          autoFocus
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="ຄົ້ນ ລະຫັດ / ຊື່ / ຍີ່ຫໍ້ / ໝວດ / barcode"
-          className="w-full rounded-2xl border-2 border-odoo-border bg-white py-3.5 pl-11 pr-10 text-[15px] font-semibold shadow-sm outline-none transition focus:border-odoo-primary focus:ring-4 focus:ring-odoo-primary/10"
-        />
-        {input ? (
-          <button
-            type="button"
-            onClick={() => {
-              setInput("");
-              inputRef.current?.focus();
-            }}
-            aria-label="ລ້າງ"
-            className="absolute right-4 top-1/2 -translate-y-1/2 text-odoo-text-muted hover:text-odoo-danger"
-          >
-            ✕
-          </button>
-        ) : null}
-      </div>
-
-      {error ? <div className="odoo-alert-danger mt-4 px-3 py-2 text-sm">{error}</div> : null}
-
-      {/* Idle state — nothing was fetched */}
-      {!query && !loading && !isDesktop ? (
-        <div className="mt-10 text-center text-odoo-text-muted">
-          <div className="text-6xl opacity-20">🔍</div>
-          <div className="mt-3 text-sm font-bold text-odoo-text-strong">ພິມຢ່າງໜ້ອຍ {MIN_QUERY} ຕົວອັກສອນ ເພື່ອຄົ້ນຫາສິນຄ້າ</div>
-          <div className="mt-1 text-xs">ຕົວຢ່າງ: 110101 · HISENSE · ຕູ້ເຢັນ — ກົດຜົນເພື່ອເບິ່ງຍອດແຍກສາງ</div>
-        </div>
-      ) : null}
-
-      {/* Result count */}
-      {(query || isDesktop) && !loading ? (
-        <div className="mt-4 text-xs font-semibold text-odoo-text-muted">
-          ພົບ {moneyFmt.format(total)} ລາຍການ {total > items.length ? `· ສະແດງ ${items.length}` : ""}
-        </div>
-      ) : null}
-
-      {/* Results — one compact card per item, phone-first */}
-      <div className="mt-2 space-y-2">
-        {loading
-          ? Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="flex items-center gap-3 rounded-2xl border border-odoo-border bg-white p-3">
-                <div className="h-10 w-14 animate-pulse rounded-lg bg-odoo-surface-muted" />
-                <div className="flex-1 space-y-2">
-                  <div className="h-3.5 w-3/4 animate-pulse rounded bg-odoo-surface-muted" />
-                  <div className="h-3 w-1/3 animate-pulse rounded bg-odoo-surface-muted" />
-                </div>
-                <div className="h-6 w-14 animate-pulse rounded-full bg-odoo-surface-muted" />
-              </div>
-            ))
-          : items.map((it) => (
-              <ItemCard
-                key={it.code}
-                item={it}
-                isOpen={expanded === it.code}
-                locs={locCache[it.code]}
-                onToggle={() => toggleRow(it.code)}
-              />
-            ))}
-        {query && !loading && items.length === 0 && !error ? (
-          <div className="rounded-2xl border border-odoo-border bg-white px-4 py-12 text-center text-odoo-text-muted">
-            <div className="text-5xl opacity-20">📦</div>
-            <div className="mt-2 text-sm font-semibold">ບໍ່ພົບສິນຄ້າ “{query}”</div>
-          </div>
-        ) : null}
-      </div>
-
-      {/* Load more */}
-      {query && !loading && hasMore ? (
-        <button
-          type="button"
-          onClick={() => setPage((p) => p + 1)}
-          disabled={loadingMore}
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-2xl border border-odoo-border bg-white py-3 text-sm font-black text-odoo-primary transition hover:bg-odoo-primary-50 disabled:opacity-50"
-        >
-          {loadingMore ? "ກຳລັງໂຫລດ…" : `ໂຫລດເພີ່ມ (ເຫຼືອ ${moneyFmt.format(total - items.length)})`}
-        </button>
-      ) : null}
-    </div>
+    <span className="inline-flex rounded-full bg-emerald-50 px-2.5 py-0.5 font-mono text-[12px] font-bold text-emerald-700">
+      {qtyFmt.format(qty)}
+    </span>
   );
 }
 
-function ItemCard({
-  item,
-  isOpen,
-  locs,
-  onToggle,
-}: {
-  item: Item;
-  isOpen: boolean;
-  locs: StockLocation[] | "loading" | "error" | undefined;
-  onToggle: () => void;
-}) {
-  const tone = stockTone(item.companyBalance);
-  const name = item.nameLo ?? item.nameEng ?? item.code;
-  return (
-    <div
-      className={
-        "overflow-hidden rounded-2xl border bg-white transition " +
-        (isOpen ? "border-odoo-primary shadow-md" : "border-odoo-border shadow-sm")
+export default function InventoryClient() {
+  const [q, setQ] = useState("");
+  const [facets, setFacets] = useState<Facets | null>(null);
+  const [groupMain, setGroupMain] = useState("");
+  const [groupSub, setGroupSub] = useState("");
+  const [groupSub2, setGroupSub2] = useState("");
+  const [category, setCategory] = useState("");
+  const [brand, setBrand] = useState("");
+  const [stock, setStock] = useState<"all" | "in" | "out">("all");
+  const [items, setItems] = useState<Item[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [openCode, setOpenCode] = useState<string | null>(null);
+  const [detail, setDetail] = useState<ItemDetail | "loading" | "error" | null>(
+    null,
+  );
+
+  useEffect(() => {
+    fetch("/api/inventory/facets")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => setFacets(d))
+      .catch(() => setFacets(null));
+  }, []);
+
+  const fetchList = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const p = new URLSearchParams({
+        page: String(page),
+        pageSize: String(PAGE_SIZE),
+        stock,
+      });
+      if (q.trim()) p.set("q", q.trim());
+      if (groupMain) p.set("groupMain", groupMain);
+      if (groupSub) p.set("groupSub", groupSub);
+      if (groupSub2) p.set("groupSub2", groupSub2);
+      if (category) p.set("category", category);
+      if (brand) p.set("brand", brand);
+      const res = await fetch(`/api/inventory/list?${p}`);
+      if (!res.ok) {
+        setError(`Error ${res.status}`);
+        return;
       }
-    >
-      <button type="button" onClick={onToggle} className="flex w-full items-start gap-3 p-3 text-left">
-        <div className="min-w-0 flex-1">
-          <div className="line-clamp-2 text-[13px] font-bold leading-snug text-odoo-text-strong">{name}</div>
-          <div className="mt-1 flex flex-wrap items-center gap-1.5">
-            <span className="rounded-md bg-odoo-surface-muted px-1.5 py-0.5 font-mono text-[10px] font-bold text-odoo-text-strong">
-              {item.code}
-            </span>
-            {item.brand ? (
-              <span className="rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">{item.brand}</span>
-            ) : null}
-            {item.category ? (
-              <span className="rounded-md bg-violet-50 px-1.5 py-0.5 text-[10px] font-semibold text-violet-700">{item.category}</span>
-            ) : null}
-          </div>
+      const data = await res.json();
+      setItems(data.items ?? []);
+      setTotal(data.total ?? 0);
+      setTotalPages(data.totalPages ?? 1);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "fetch failed");
+    } finally {
+      setLoading(false);
+    }
+  }, [q, page, stock, groupMain, groupSub, groupSub2, category, brand]);
+
+  useEffect(() => {
+    const t = setTimeout(() => void fetchList(), q ? 300 : 0);
+    return () => clearTimeout(t);
+  }, [fetchList, q]);
+
+  // Any filter change starts the pager over.
+  useEffect(() => {
+    setPage(1);
+  }, [q, stock, groupMain, groupSub, groupSub2, category, brand]);
+
+  useEffect(() => {
+    if (!openCode) {
+      setDetail(null);
+      return;
+    }
+    let cancelled = false;
+    setDetail("loading");
+    fetch(`/api/inventory/item/${encodeURIComponent(openCode)}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d) => {
+        if (!cancelled) setDetail(d);
+      })
+      .catch(() => {
+        if (!cancelled) setDetail("error");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openCode]);
+
+  const selectCls = "odoo-input !w-auto min-w-36 text-sm";
+
+  return (
+    <div className="px-4 py-6 sm:px-6">
+      <header className="mb-4">
+        <h1 className="text-xl font-black text-odoo-text-strong">
+          📦 ສາງສິນຄ້າ / ສະຕັອກ
+        </h1>
+        <p className="mt-0.5 text-[12.5px] text-odoo-text-muted">
+          ຍອດຄົງເຫຼືອຈາກ ERP (ic_inventory) · ພົບ {moneyFmt.format(total)} ລາຍການ
+        </p>
+      </header>
+
+      <div className="mb-4 rounded-xl border border-odoo-border bg-odoo-surface p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="ຄົ້ນຫາ ຊື່ / ລະຫັດສິນຄ້າ"
+            className="odoo-input w-full sm:w-64"
+          />
+          <select value={groupMain} onChange={(e) => setGroupMain(e.target.value)} className={selectCls}>
+            <option value="">ທຸກກຸ່ມຫຼັກ</option>
+            {(facets?.groups ?? []).map((g) => (
+              <option key={g.code} value={g.code}>{g.name}</option>
+            ))}
+          </select>
+          <select value={groupSub} onChange={(e) => setGroupSub(e.target.value)} className={selectCls}>
+            <option value="">ທຸກກຸ່ມຍ່ອຍ 1</option>
+            {(facets?.subs ?? []).map((g) => (
+              <option key={g.code} value={g.code}>{g.name}</option>
+            ))}
+          </select>
+          <select value={groupSub2} onChange={(e) => setGroupSub2(e.target.value)} className={selectCls}>
+            <option value="">ທຸກກຸ່ມຍ່ອຍ 2</option>
+            {(facets?.subs2 ?? []).map((g) => (
+              <option key={g.code} value={g.code}>{g.name}</option>
+            ))}
+          </select>
+          <select value={category} onChange={(e) => setCategory(e.target.value)} className={selectCls}>
+            <option value="">ທຸກໝວດໝູ່</option>
+            {(facets?.categories ?? []).map((g) => (
+              <option key={g.code} value={g.code}>{g.name}</option>
+            ))}
+          </select>
+          <select value={brand} onChange={(e) => setBrand(e.target.value)} className={selectCls}>
+            <option value="">ທຸກຍີ່ຫໍ້</option>
+            {(facets?.brands ?? []).map((b) => (
+              <option key={b} value={b}>{b}</option>
+            ))}
+          </select>
         </div>
-        <div className="flex shrink-0 flex-col items-end gap-1">
-          <span className={"inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-bold ring-1 " + tone.bg + " " + tone.text + " " + tone.ring}>
-            <span className={"h-1.5 w-1.5 rounded-full " + tone.dot} />
-            {qtyFmt.format(item.companyBalance)}
-            {item.unitName ? <span className="font-semibold opacity-70">{item.unitName}</span> : null}
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {(
+            [
+              ["all", "ທັງໝົດ"],
+              ["in", "ມີສະຕັອກ"],
+              ["out", "ໝົດ"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setStock(value)}
+              className={
+                "rounded-full px-3.5 py-1.5 text-xs font-bold transition " +
+                (stock === value
+                  ? "bg-odoo-primary text-white"
+                  : "bg-odoo-surface-muted text-odoo-text hover:bg-odoo-border")
+              }
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {error ? (
+        <p className="mb-3 rounded-md border border-rose-300 bg-rose-50 px-3 py-2 text-sm font-semibold text-odoo-danger">
+          {error}
+        </p>
+      ) : null}
+
+      <div className="overflow-x-auto rounded-xl border border-odoo-border bg-odoo-surface">
+        <table className="w-full text-sm">
+          <thead className="bg-odoo-surface-muted text-left text-[11px] font-bold uppercase tracking-wider text-odoo-text-muted">
+            <tr>
+              <th className="px-3 py-2">ສິນຄ້າ</th>
+              <th className="px-3 py-2">ຍີ່ຫໍ້</th>
+              <th className="px-3 py-2">ໜ່ວຍ</th>
+              <th className="px-3 py-2 text-center">ຄົງເຫຼືອ</th>
+              <th className="px-3 py-2 text-right">ລາຄາ</th>
+              <th className="px-3 py-2 text-right" />
+            </tr>
+          </thead>
+          <tbody>
+            {loading ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-8 text-center text-odoo-text-muted">
+                  ກຳລັງໂຫລດ…
+                </td>
+              </tr>
+            ) : items.length === 0 ? (
+              <tr>
+                <td colSpan={6} className="px-3 py-8 text-center text-odoo-text-muted">
+                  ບໍ່ພົບສິນຄ້າ
+                </td>
+              </tr>
+            ) : (
+              items.map((it) => (
+                <tr
+                  key={it.code}
+                  onClick={() => setOpenCode(it.code)}
+                  className="cursor-pointer border-t border-odoo-border hover:bg-odoo-surface-muted/50"
+                >
+                  <td className="px-3 py-2">
+                    <div className="flex items-center gap-2.5">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/products/image/${encodeURIComponent(it.code)}`}
+                        alt=""
+                        className="h-10 w-10 shrink-0 rounded-lg border border-odoo-border object-contain"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.visibility = "hidden";
+                        }}
+                      />
+                      <div className="min-w-0">
+                        <div className="truncate font-bold text-odoo-text-strong">
+                          {it.nameLo ?? it.nameEng ?? it.code}
+                        </div>
+                        <div className="font-mono text-[11px] text-odoo-text-muted">
+                          {it.code}
+                        </div>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-3 py-2 text-[12px] font-semibold text-odoo-text-muted">
+                    {it.brand ?? "—"}
+                  </td>
+                  <td className="px-3 py-2 text-[12px] text-odoo-text-muted">
+                    {it.unitName ?? "—"}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <StockBadge qty={it.companyBalance} />
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono font-bold">
+                    {it.salePriceKip > 0 ? moneyFmt.format(it.salePriceKip) : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right text-[12px] font-bold text-odoo-primary">
+                    ລາຍລະອຽດ →
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {totalPages > 1 ? (
+        <div className="mt-3 flex items-center justify-between text-sm">
+          <button
+            type="button"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => p - 1)}
+            className="odoo-btn odoo-btn-secondary disabled:opacity-40"
+          >
+            ← ກ່ອນ
+          </button>
+          <span className="font-mono text-odoo-text-muted">
+            {page} / {totalPages}
           </span>
-          {item.salePriceKip > 0 ? (
-            <span className="font-mono text-[13px] font-black text-odoo-text-strong">{moneyFmt.format(item.salePriceKip)}</span>
-          ) : null}
-          <span className={"text-[10px] text-odoo-text-muted transition-transform " + (isOpen ? "rotate-180" : "")}>▾ ສາງ</span>
+          <button
+            type="button"
+            disabled={page >= totalPages}
+            onClick={() => setPage((p) => p + 1)}
+            className="odoo-btn odoo-btn-secondary disabled:opacity-40"
+          >
+            ຕໍ່ໄປ →
+          </button>
         </div>
-      </button>
-      {isOpen ? (
-        <div className="border-t border-odoo-border/60 bg-odoo-surface-muted/40 px-3 py-2.5">
-          {locs === "loading" || locs === undefined ? (
-            <div className="flex items-center gap-2 text-xs text-odoo-text-muted">
-              <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-odoo-border border-t-odoo-primary" />
-              ກຳລັງໂຫລດຍອດແຍກສາງ...
-            </div>
-          ) : locs === "error" ? (
-            <div className="text-xs text-odoo-danger">ໂຫລດຍອດແຍກສາງບໍ່ສຳເລັດ</div>
-          ) : locs.length === 0 ? (
-            <div className="text-xs text-odoo-text-muted">ບໍ່ມີສະຕັອກໃນສາງໃດ</div>
-          ) : (
-            <div className="grid gap-1.5 sm:grid-cols-2">
-              {locs.map((l, i) => (
-                <div key={i} className="flex items-center gap-2 rounded-xl border border-odoo-border bg-white px-2.5 py-1.5">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-xs font-semibold text-odoo-text-strong">{l.warehouseName ?? l.warehouse ?? "—"}</div>
-                    <div className="truncate text-[10px] text-odoo-text-muted">{l.locationName ?? l.location ?? "—"}</div>
+      ) : null}
+
+      {/* ── Detail drawer ── */}
+      {openCode ? (
+        <div className="fixed inset-0 z-[70]">
+          <button
+            type="button"
+            aria-label="ປິດ"
+            onClick={() => setOpenCode(null)}
+            className="absolute inset-0 bg-black/40"
+          />
+          <aside className="absolute right-0 top-0 flex h-full w-full max-w-xl flex-col overflow-y-auto bg-odoo-surface shadow-2xl">
+            {detail === "loading" || detail === null ? (
+              <p className="p-8 text-center text-sm text-odoo-text-muted">ກຳລັງໂຫລດ…</p>
+            ) : detail === "error" ? (
+              <p className="p-8 text-center text-sm text-odoo-danger">ໂຫລດບໍ່ສຳເລັດ</p>
+            ) : (
+              <>
+                <div className="bg-gradient-to-br from-[#003361] to-[#2b70b5] p-4 text-white">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex min-w-0 items-start gap-3">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={`/api/products/image/${encodeURIComponent(detail.code)}`}
+                        alt=""
+                        className="h-12 w-12 shrink-0 rounded-xl bg-white object-contain p-1"
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.visibility = "hidden";
+                        }}
+                      />
+                      <div className="min-w-0">
+                        <h2 className="text-[15px] font-black leading-snug">
+                          {detail.nameLo ?? detail.nameEng ?? detail.code}
+                        </h2>
+                        <div className="font-mono text-[12px] text-white/70">
+                          {detail.code}
+                        </div>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {[detail.brand, detail.groupMain, detail.category]
+                            .filter(Boolean)
+                            .map((t) => (
+                              <span
+                                key={t}
+                                className="rounded-full bg-white/15 px-2 py-0.5 text-[10.5px] font-bold"
+                              >
+                                {t}
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setOpenCode(null)}
+                      className="shrink-0 rounded-lg bg-white/15 px-2.5 py-1 font-bold hover:bg-white/25"
+                    >
+                      ✕
+                    </button>
                   </div>
-                  <span className="shrink-0 font-mono text-sm font-bold text-emerald-600">{qtyFmt.format(l.balanceQty)}</span>
                 </div>
-              ))}
-            </div>
-          )}
+
+                <div className="grid grid-cols-2 gap-3 p-4">
+                  <div className="rounded-xl bg-gradient-to-br from-[#2b70b5] to-[#4ac7f0] p-3.5 text-white">
+                    <div className="text-[11px] font-bold text-white/75">ລາຄາຂາຍ</div>
+                    <div className="font-mono text-2xl font-black">
+                      {detail.prices[0]?.priceKip
+                        ? moneyFmt.format(detail.prices[0].priceKip)
+                        : "—"}{" "}
+                      <small className="text-[12px] font-bold">ກີບ</small>
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-odoo-border p-3.5">
+                    <div className="text-[11px] font-bold text-odoo-text-muted">
+                      ຄົງເຫຼືອ (IC_INVENTORY)
+                    </div>
+                    <div
+                      className={`text-2xl font-black ${detail.companyBalance > 0 ? "text-emerald-600" : "text-rose-600"}`}
+                    >
+                      {detail.companyBalance > 0
+                        ? `${qtyFmt.format(detail.companyBalance)} ${detail.unitName ?? ""}`
+                        : "ໝົດສາງ"}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-3 px-4 pb-6">
+                  <section className="rounded-xl border border-odoo-border">
+                    <h3 className="border-b border-odoo-border px-3.5 py-2.5 text-[13px] font-black">
+                      ຄົງເຫຼືອຕາມສາງ{" "}
+                      <span className="ml-1 rounded-full bg-odoo-surface-muted px-2 text-[11px] text-odoo-text-muted">
+                        {detail.warehouses.length}
+                      </span>
+                    </h3>
+                    {detail.warehouses.length === 0 ? (
+                      <p className="px-3.5 py-5 text-center text-[12.5px] text-odoo-text-muted">
+                        ບໍ່ມີການເຄື່ອນໄຫວໃນສາງ
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-odoo-border">
+                        {detail.warehouses.map((w) => (
+                          <li
+                            key={w.code}
+                            className="flex items-baseline justify-between px-3.5 py-2 text-sm"
+                          >
+                            <span>
+                              <b className="font-mono text-[12px]">{w.code}</b>{" "}
+                              <span className="text-odoo-text-muted">{w.name}</span>
+                            </span>
+                            <b className="font-mono">{qtyFmt.format(w.qty)}</b>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+
+                  <section className="rounded-xl border border-odoo-border">
+                    <h3 className="border-b border-odoo-border px-3.5 py-2.5 text-[13px] font-black">
+                      ຂໍ້ມູນສິນຄ້າ
+                    </h3>
+                    <dl className="grid grid-cols-1 gap-x-6 px-3.5 py-2 text-sm sm:grid-cols-2">
+                      {(
+                        [
+                          ["ກຸ່ມຫຼັກ", detail.groupMain],
+                          ["ກຸ່ມຍ່ອຍ", detail.groupSub],
+                          ["ກຸ່ມຍ່ອຍ 2", detail.groupSub2],
+                          ["ໝວດ", detail.category],
+                          ["ຮູບແບບ", detail.pattern],
+                          ["ໜ່ວຍ", detail.unitName],
+                          ["ຍີ່ຫໍ້", detail.brand],
+                        ] as const
+                      )
+                        .filter(([, v]) => v)
+                        .map(([k, v]) => (
+                          <div
+                            key={k}
+                            className="flex items-baseline justify-between gap-3 border-b border-odoo-border/60 py-1.5 last:border-0"
+                          >
+                            <dt className="text-[12px] font-bold text-odoo-text-muted">{k}</dt>
+                            <dd className="text-right font-semibold">{v}</dd>
+                          </div>
+                        ))}
+                    </dl>
+                  </section>
+
+                  <section className="rounded-xl border border-odoo-border">
+                    <h3 className="border-b border-odoo-border px-3.5 py-2.5 text-[13px] font-black">
+                      ຕາຕະລາງລາຄາ{" "}
+                      <span className="ml-1 rounded-full bg-amber-100 px-2 text-[11px] text-amber-700">
+                        {detail.prices.length}
+                      </span>
+                    </h3>
+                    {detail.prices.length === 0 ? (
+                      <p className="px-3.5 py-5 text-center text-[12.5px] text-odoo-text-muted">
+                        ບໍ່ມີລາຄາ
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-odoo-border">
+                        {detail.prices.map((p, i) => (
+                          <li
+                            key={i}
+                            className="flex items-baseline justify-between px-3.5 py-2 text-sm"
+                          >
+                            <span className="text-[12px] text-odoo-text-muted">
+                              {p.unit ?? "—"}
+                              {p.toDate ? ` · ຮອດ ${p.toDate}` : ""}
+                            </span>
+                            <b className="font-mono">{moneyFmt.format(p.priceKip)} ກີບ</b>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+
+                  <section className="rounded-xl border border-odoo-border">
+                    <h3 className="border-b border-odoo-border px-3.5 py-2.5 text-[13px] font-black">
+                      ບາໂຄດ{" "}
+                      <span className="ml-1 rounded-full bg-odoo-surface-muted px-2 text-[11px] text-odoo-text-muted">
+                        {detail.barcodes.length}
+                      </span>
+                    </h3>
+                    {detail.barcodes.length === 0 ? (
+                      <p className="px-3.5 py-5 text-center text-[12.5px] text-odoo-text-muted">
+                        ບໍ່ມີບາໂຄດ
+                      </p>
+                    ) : (
+                      <ul className="divide-y divide-odoo-border">
+                        {detail.barcodes.map((b, i) => (
+                          <li
+                            key={i}
+                            className="flex items-baseline justify-between px-3.5 py-2 text-sm"
+                          >
+                            <span className="font-mono">{b.barcode}</span>
+                            <span className="text-[12px] text-odoo-text-muted">
+                              {b.unit ?? ""}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                </div>
+              </>
+            )}
+          </aside>
         </div>
       ) : null}
     </div>

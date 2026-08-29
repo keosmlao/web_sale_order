@@ -31,22 +31,34 @@ export async function GET(request: NextRequest) {
   const page = Math.max(1, Number(sp.get("page")) || 1);
   const pageSize = Math.min(200, Math.max(10, Number(sp.get("pageSize")) || 50));
   const offset = (page - 1) * pageSize;
+  const groupMain = (sp.get("groupMain") ?? "").trim();
+  const groupSub = (sp.get("groupSub") ?? "").trim();
+  const groupSub2 = (sp.get("groupSub2") ?? "").trim();
+  const category = (sp.get("category") ?? "").trim();
+  const brand = (sp.get("brand") ?? "").trim();
+  // all | in | out — the reference screen lists the whole catalog and lets
+  // ໝົດ read as a state, not as an item that ceased to exist.
+  const stock = (sp.get("stock") ?? "all").trim();
 
   // Reusable filter + ordering so the COUNT and the page query stay in sync.
   const like = `%${q}%`;
-  const where = q
-    ? Prisma.sql`
-        i.name_1 IS NOT NULL
-        AND COALESCE(i.balance_qty, 0) > 0
-        AND (
-          i.code ILIKE ${like}
-          OR COALESCE(i.name_1, '') ILIKE ${like}
-          OR COALESCE(i.name_eng_1, '') ILIKE ${like}
-          OR COALESCE(i.item_brand, '') ILIKE ${like}
-        )`
-    : Prisma.sql`
-        i.name_1 IS NOT NULL
-        AND COALESCE(i.balance_qty, 0) > 0`;
+  const conds: Prisma.Sql[] = [Prisma.sql`i.name_1 IS NOT NULL`];
+  if (q) {
+    conds.push(Prisma.sql`(
+      i.code ILIKE ${like}
+      OR COALESCE(i.name_1, '') ILIKE ${like}
+      OR COALESCE(i.name_eng_1, '') ILIKE ${like}
+      OR COALESCE(i.item_brand, '') ILIKE ${like}
+    )`);
+  }
+  if (groupMain) conds.push(Prisma.sql`i.group_main = ${groupMain}`);
+  if (groupSub) conds.push(Prisma.sql`i.group_sub = ${groupSub}`);
+  if (groupSub2) conds.push(Prisma.sql`i.group_sub2 = ${groupSub2}`);
+  if (category) conds.push(Prisma.sql`i.item_category = ${category}`);
+  if (brand) conds.push(Prisma.sql`i.item_brand = ${brand}`);
+  if (stock === "in") conds.push(Prisma.sql`COALESCE(i.balance_qty, 0) > 0`);
+  if (stock === "out") conds.push(Prisma.sql`COALESCE(i.balance_qty, 0) <= 0`);
+  const where = Prisma.join(conds, " AND ");
   const orderBy = q
     ? Prisma.sql`ORDER BY CASE WHEN i.code ILIKE ${like} THEN 0 ELSE 1 END, i.code`
     : Prisma.sql`ORDER BY i.code`;
