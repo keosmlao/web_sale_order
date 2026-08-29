@@ -85,6 +85,9 @@ export async function GET(request: NextRequest) {
           AND ipp.currency_code = '02'
           AND COALESCE(ipp.sale_price1, 0) > 0
           AND COALESCE(ipp.status, 1) = 1
+          -- The price in force today, same rule as the item drawer.
+          AND COALESCE(ipp.from_date, '1900-01-01'::date) <= CURRENT_DATE
+          AND COALESCE(ipp.to_date, '2099-12-31'::date) >= CURRENT_DATE
         ORDER BY
           COALESCE(ipp.to_date, '2099-12-31'::date) DESC,
           COALESCE(ipp.from_date, '1900-01-01'::date) DESC,

@@ -82,6 +82,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
         AND currency_code = '02'
         AND COALESCE(status, 1) = 1
         AND COALESCE(sale_price1, 0) > 0
+        -- Only the window that covers today — an expired price or one not
+        -- yet in force is not a price the counter can charge.
+        AND COALESCE(from_date, '1900-01-01'::date) <= CURRENT_DATE
+        AND COALESCE(to_date, '2099-12-31'::date) >= CURRENT_DATE
       ORDER BY COALESCE(to_date, '2099-12-31'::date) DESC, roworder DESC
       LIMIT 20
     `,
