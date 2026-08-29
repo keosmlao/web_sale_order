@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireEmployee } from "@/lib/auth";
 import { fetchReceipt } from "@/lib/receipts";
+import { fmtDateTime } from "@/lib/datetime";
 import { prisma } from "@/lib/prisma";
 import AutoPrint from "./AutoPrint";
 import PrintButton from "./PrintButton";
@@ -89,7 +90,7 @@ export default async function ReceiptPage({
           </div>
           <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-odoo-text-muted">
             {receipt.createdAt ? (
-              <span>{new Date(receipt.createdAt).toLocaleString()}</span>
+              <span>{fmtDateTime(receipt.createdAt)}</span>
             ) : null}
             {receipt.customer.name ? <span>{receipt.customer.name}</span> : null}
             {receipt.customer.phone ? (

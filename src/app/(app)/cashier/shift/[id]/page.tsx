@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { fmtDateTime } from "@/lib/datetime";
 import { notFound } from "next/navigation";
 import { requireEmployee } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -151,10 +152,10 @@ export default async function ShiftReportPage({
       </header>
 
       <section className="mb-4 grid gap-3 rounded-md border border-odoo-border bg-odoo-surface p-4 sm:grid-cols-2">
-        <Field label="ເປີດກະ" value={shift.opened_at.toLocaleString()} />
+        <Field label="ເປີດກະ" value={fmtDateTime(shift.opened_at)} />
         <Field
           label="ປິດກະ"
-          value={shift.closed_at ? shift.closed_at.toLocaleString() : "ຍັງເປີດຢູ່"}
+          value={shift.closed_at ? fmtDateTime(shift.closed_at) : "ຍັງເປີດຢູ່"}
         />
         <Field
           label="ເງິນສົດເລີ່ມຕົ້ນ"
@@ -229,7 +230,7 @@ export default async function ShiftReportPage({
                   </td>
                   <td className="py-1 text-[12px]">{m.reason}</td>
                   <td className="py-1 text-[11px] text-odoo-text-muted">
-                    {m.created_at.toLocaleString()}
+                    {fmtDateTime(m.created_at)}
                   </td>
                 </tr>
               ))}

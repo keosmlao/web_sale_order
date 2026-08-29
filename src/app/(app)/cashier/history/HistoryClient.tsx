@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { fmtDateTime } from "@/lib/datetime";
 import { useCallback, useEffect, useState } from "react";
 
 
@@ -422,7 +423,7 @@ export default function HistoryClient() {
                   </div>
                 </div>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-odoo-text-muted">
-                  <span>{new Date(r.createdAt).toLocaleString()}</span>
+                  <span>{fmtDateTime(r.createdAt)}</span>
                   {r.salespersonName || r.saleCode ? (
                     <>
                       <span>·</span>
@@ -533,7 +534,7 @@ export default function HistoryClient() {
                     </Link>
                   </td>
                   <td className="px-3 py-2 text-[12px] text-odoo-text-muted">
-                    {new Date(r.createdAt).toLocaleString()}
+                    {fmtDateTime(r.createdAt)}
                   </td>
                   <td className="px-3 py-2">
                     <div className="font-semibold text-odoo-text-strong">

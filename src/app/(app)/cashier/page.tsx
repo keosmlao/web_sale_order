@@ -16,6 +16,7 @@ import {
 } from "@/lib/payment";
 import LowStockBanner from "./LowStockBanner";
 import OnePayWatcher from "./OnePayWatcher";
+import { fmtDateTime } from "@/lib/datetime";
 import {
   publishCustomerDisplay,
   openCustomerDisplayWindow,
@@ -102,13 +103,10 @@ const moneyFmt = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 2,
 });
 
-const dateTimeFmt = new Intl.DateTimeFormat("en-GB", {
-  year: "numeric",
-  month: "2-digit",
-  day: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-});
+// dd-MM-yyyy HH:mm, 24-hour — the shop's format, same on every screen.
+const dateTimeFmt = {
+  format: (d: Date) => fmtDateTime(d),
+};
 
 type StatusFilter = "ALL" | CashierOrder["statusLabel"];
 
