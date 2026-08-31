@@ -300,134 +300,131 @@ const sections: NavSection[] = [
           },
         ],
       },
+    ],
+  },
+  {
+    id: "settings",
+    // Its own section, not an entry buried inside Management. Every
+    // other area of the system heads its own list; settings was a
+    // level below its peers, which is what made it look out of place.
+    label: "Settings",
+    items: [
       {
-        id: "settings",
-        label: "ການຕັ້ງຄ່າ",
+        href: "/settings/sales-warehouses",
+        label: "ສາງຂາຍ",
         icon: (
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
-            <path d="M12 15.5A3.5 3.5 0 1 0 12 8a3.5 3.5 0 0 0 0 7.5Z" />
-            <path d="M19.4 15a1.7 1.7 0 0 0 .34 1.88l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.88-.34 1.7 1.7 0 0 0-1.03 1.56V21a2 2 0 0 1-4 0v-.09a1.7 1.7 0 0 0-1.03-1.56 1.7 1.7 0 0 0-1.88.34l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.6 15a1.7 1.7 0 0 0-1.56-1.03H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.65 8.94a1.7 1.7 0 0 0-.34-1.88l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.7 1.7 0 0 0 1.88.34H9a1.7 1.7 0 0 0 1-1.56V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1.03 1.56 1.7 1.7 0 0 0 1.88-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.88V9a1.7 1.7 0 0 0 1.56 1.03H21a2 2 0 0 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15Z" />
+            <path d="M3 9 12 4l9 5-9 5-9-5Z" />
+            <path d="M3 9v6l9 5 9-5V9" />
           </svg>
         ),
-        children: [
-          {
-            href: "/settings/sales-warehouses",
-            label: "ສາງຂາຍ",
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
-                <path d="M3 9 12 4l9 5-9 5-9-5Z" />
-                <path d="M3 9v6l9 5 9-5V9" />
-              </svg>
-            ),
-          },
-          {
-            href: "/settings/stock-minimum",
-            label: "Minimum Stock",
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
-                <path d="M4 19h16" />
-                <path d="M7 16V9" />
-                <path d="M12 16V5" />
-                <path d="M17 16v-4" />
-              </svg>
-            ),
-          },
-          {
-            href: "/settings/sales-targets",
-            label: "ຈັດການເປົ້າຂາຍ",
-            roles: ["head", "manager"],
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
-                <circle cx="12" cy="12" r="8" />
-                <circle cx="12" cy="12" r="3.5" />
-                <path d="m15 9 5-5M16 4h4v4" />
-              </svg>
-            ),
-          },
-          {
-            href: "/settings/special-rewards",
-            label: "ຈັດການລາງວັນພິເສດ",
-            roles: ["head", "manager"],
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
-                <rect x="3" y="8" width="18" height="4" rx="1" />
-                <path d="M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8" />
-                <path d="M12 8v13" />
-                <path d="M12 8s-1.5-4-4-4a2 2 0 0 0 0 4" />
-                <path d="M12 8s1.5-4 4-4a2 2 0 0 1 0 4" />
-              </svg>
-            ),
-          },
-          {
-            href: "/settings/incentives",
-            label: "Config Incentive",
-            roles: ["head", "manager"],
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
-                <circle cx="12" cy="8" r="5" />
-                <path d="m8.5 12-1 9 4.5-2 4.5 2-1-9" />
-              </svg>
-            ),
-          },
-          {
-            href: "/settings/barcodes",
-            label: "Barcode ສິນຄ້າ",
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
-                <path d="M3 5v14" />
-                <path d="M7 5v14" />
-                <path d="M11 5v14" />
-                <path d="M15 5v14" />
-                <path d="M19 5v14" />
-              </svg>
-            ),
-          },
-          {
-            href: "/settings/payment-accounts",
-            label: "ບັນຊີຮັບເງິນ",
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
-                <rect x="2" y="5" width="20" height="14" rx="2" />
-                <path d="M2 10h20" />
-              </svg>
-            ),
-          },
-          {
-            href: "/settings/test-mode",
-            label: "ໂໝດທົດສອບ ໂອນເງິນ",
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
-                <path d="M9 3h6" />
-                <path d="M10 3v6l-4.5 8A2 2 0 0 0 7.3 20h9.4a2 2 0 0 0 1.8-3L14 9V3" />
-                <path d="M7 14h10" />
-              </svg>
-            ),
-          },
-          {
-            href: "/loyalty",
-            label: "ສະສົມແຕ້ມ",
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
-                <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-              </svg>
-            ),
-          },
-          {
-            href: "/settings/menu-visibility",
-            label: "ການສະແດງເມນູ",
-            roles: ["manager"],
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[16px] w-[16px]">
-                <path d="M3 5h18" />
-                <path d="M3 12h18" />
-                <path d="M3 19h18" />
-                <circle cx="8" cy="5" r="1.6" fill="currentColor" />
-                <circle cx="16" cy="12" r="1.6" fill="currentColor" />
-                <circle cx="10" cy="19" r="1.6" fill="currentColor" />
-              </svg>
-            ),
-          },
-        ],
+      },
+      {
+        href: "/settings/stock-minimum",
+        label: "Minimum Stock",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <path d="M4 19h16" />
+            <path d="M7 16V9" />
+            <path d="M12 16V5" />
+            <path d="M17 16v-4" />
+          </svg>
+        ),
+      },
+      {
+        href: "/settings/sales-targets",
+        label: "ຈັດການເປົ້າຂາຍ",
+        roles: ["head", "manager"],
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <circle cx="12" cy="12" r="8" />
+            <circle cx="12" cy="12" r="3.5" />
+            <path d="m15 9 5-5M16 4h4v4" />
+          </svg>
+        ),
+      },
+      {
+        href: "/settings/special-rewards",
+        label: "ຈັດການລາງວັນພິເສດ",
+        roles: ["head", "manager"],
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <rect x="3" y="8" width="18" height="4" rx="1" />
+            <path d="M5 12v8a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-8" />
+            <path d="M12 8v13" />
+            <path d="M12 8s-1.5-4-4-4a2 2 0 0 0 0 4" />
+            <path d="M12 8s1.5-4 4-4a2 2 0 0 1 0 4" />
+          </svg>
+        ),
+      },
+      {
+        href: "/settings/incentives",
+        label: "Config Incentive",
+        roles: ["head", "manager"],
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <circle cx="12" cy="8" r="5" />
+            <path d="m8.5 12-1 9 4.5-2 4.5 2-1-9" />
+          </svg>
+        ),
+      },
+      {
+        href: "/settings/barcodes",
+        label: "Barcode ສິນຄ້າ",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <path d="M3 5v14" />
+            <path d="M7 5v14" />
+            <path d="M11 5v14" />
+            <path d="M15 5v14" />
+            <path d="M19 5v14" />
+          </svg>
+        ),
+      },
+      {
+        href: "/settings/payment-accounts",
+        label: "ບັນຊີຮັບເງິນ",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <path d="M2 10h20" />
+          </svg>
+        ),
+      },
+      {
+        href: "/settings/test-mode",
+        label: "ໂໝດທົດສອບ ໂອນເງິນ",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <path d="M9 3h6" />
+            <path d="M10 3v6l-4.5 8A2 2 0 0 0 7.3 20h9.4a2 2 0 0 0 1.8-3L14 9V3" />
+            <path d="M7 14h10" />
+          </svg>
+        ),
+      },
+      {
+        href: "/loyalty",
+        label: "ສະສົມແຕ້ມ",
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+          </svg>
+        ),
+      },
+      {
+        href: "/settings/menu-visibility",
+        label: "ການສະແດງເມນູ",
+        roles: ["manager"],
+        icon: (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-[18px] w-[18px]">
+            <path d="M3 5h18" />
+            <path d="M3 12h18" />
+            <path d="M3 19h18" />
+            <circle cx="8" cy="5" r="1.6" fill="currentColor" />
+            <circle cx="16" cy="12" r="1.6" fill="currentColor" />
+            <circle cx="10" cy="19" r="1.6" fill="currentColor" />
+          </svg>
+        ),
       },
     ],
   },
