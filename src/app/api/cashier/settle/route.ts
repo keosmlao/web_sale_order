@@ -20,6 +20,7 @@ import {
   type EnginePromotion,
 } from "@/lib/promotions-engine";
 import { STOCK_BALANCE_AS_OF_DATE } from "@/lib/inventory-config";
+import { walkInCustomerCode } from "@/lib/walkin-customer";
 import {
   getPaymentAccountMap,
   resolvePaymentAccount,
@@ -41,7 +42,7 @@ import {
 // - doc_no          = 'CAKAP' + YY + MM + 4-digit sequence (e.g. CAKAP26050001)
 // - trans_type      = 2 (sale)
 // - trans_flag      = 44 (cash sale)
-// - vat_type        = 0 (no VAT)
+// - vat_type        = 2 (VAT inclusive — see VAT_TYPE below)
 // - pay_type        = 1 (cash/mixed tender)
 
 const DOC_PREFIX = "CAKAP";
@@ -181,6 +182,33 @@ function roundMoney(n: number, decimals = 2): number {
   return Math.round(n * f) / f;
 }
 
+// Spread a bill-level reduction (bill discount, points redeemed) across the
+// lines in proportion to what each line is worth.
+function proportionalSplit(
+  gross: number[],
+  grossTotal: number,
+  netTotal: number,
+): number[] {
+  if (grossTotal <= 0 || netTotal >= grossTotal) return gross.slice();
+  const factor = netTotal / grossTotal;
+  return gross.map((g) => roundMoney(g * factor));
+}
+
+// Make a set of line amounts add up to the bill total exactly. Rounding each
+// line on its own leaves a stray unit or two; the biggest line absorbs it,
+// since it is the one that can always take the hit without going negative.
+function tieToTotal(values: number[], target: number): number[] {
+  if (values.length === 0) return values;
+  const out = values.slice();
+  let largest = 0;
+  for (let i = 1; i < out.length; i++) {
+    if (out[i] > out[largest]) largest = i;
+  }
+  const drift = roundMoney(target - out.reduce((s, v) => s + v, 0));
+  out[largest] = Math.max(0, roundMoney(out[largest] + drift));
+  return out;
+}
+
 type CartRow = {
   cart_number: string;
   doc_no: string;
@@ -213,10 +241,6 @@ type CartItemRow = {
   // transports; carrying it onto the CAKAP row keeps it on the receipt.
   remark: string | null;
 };
-
-function yy(): string {
-  return new Date().getFullYear().toString().slice(-2);
-}
 
 export async function POST(request: NextRequest) {
   const employee = await getEmployeeFromRequest(request);
@@ -358,11 +382,6 @@ export async function POST(request: NextRequest) {
   }
 
   const userCode = employee.employeeCode ?? "";
-  const yearSuffix = yy();
-  const monthSuffix = (new Date().getMonth() + 1)
-    .toString()
-    .padStart(2, "0");
-  const yymm = `${yearSuffix}${monthSuffix}`;
 
   // Combine cashier remark with cart's delivery info and (optional) bill
   // discount + loyalty redemption notes into a single remark string.
@@ -514,10 +533,20 @@ export async function POST(request: NextRequest) {
         `;
       }
 
-      // Walk-in support: cust_code may be NULL (no customer attached). The
-      // SML columns are VARCHAR, so we coalesce to '' at every insert site;
-      // ar_customer joins downstream skip the row when the code is blank.
+      // Walk-in support: cust_code may be NULL (no customer attached).
+      //
+      // Two different codes come out of this, and mixing them up is what the
+      // blank-code bug was:
+      //   custCode    — the MEMBER. '' for a walk-in. Everything loyalty
+      //                 touches keys off this, so a walk-in can neither earn
+      //                 nor redeem points against the shared walk-in account.
+      //   docCustCode — what goes on the DOCUMENTS. Never blank: a bill with
+      //                 no customer joins to no ar_customer row, so it has no
+      //                 argroup_main and drops straight out of saleBasis() —
+      //                 out of ຍອດຂາຍ, ranking, achievement and bonus alike.
+      //                 SML's own counter never leaves it blank either.
       const custCode = cart.cust_code ?? "";
+      const docCustCode = custCode || walkInCustomerCode();
       // Loyalty points the SOK accrued at order time. Credited to the member
       // on settle and stamped onto the CAKAP header so a later void can claw
       // the exact same amount back.
@@ -546,6 +575,64 @@ export async function POST(request: NextRequest) {
       `;
       if (items.length === 0) {
         throw new HandledError(400, `ກະຕ່າ ${cartNumber} ບໍ່ມີລາຍການສິນຄ້າ`);
+      }
+
+      // Some items are marked in SML as never-discountable to storefront
+      // (group 101) customers, and a trigger on ic_trans_detail aborts the
+      // insert outright when one arrives carrying a discount. Left to fire,
+      // it lands on the cashier as a raw Postgres exception at the moment
+      // they take the money — on an order the salesperson was allowed to
+      // build, because nothing checks this when the SOK is written. Ask the
+      // same question here and name the items instead.
+      //
+      // A bill-level reduction is shared out over every line (see lineNetKip
+      // below), so once one is in play every item on the cart ends up
+      // carrying a discount and every item has to be asked about.
+      const billHasReduction =
+        billDiscountRequestId !== null || redeemPoints > 0;
+      const discountedCodes = Array.from(
+        new Set(
+          items
+            .filter(
+              (it) => billHasReduction || Number(it.discount_amount_2 ?? 0) > 0,
+            )
+            .map((it) => it.item_code)
+            .filter(Boolean),
+        ),
+      );
+      // to_regclass first, and never inside the same statement: a missing
+      // table is a parse error, and a parse error inside the transaction
+      // aborts the settle. This check is a courtesy — it turns a trigger's
+      // raw exception into a readable message — so on an installation that
+      // has no such list it simply steps aside rather than becoming a new
+      // way for the till to refuse money.
+      const nodiscountRows = await tx.$queryRaw<Array<{ present: boolean }>>`
+        SELECT to_regclass('public.odg_ic_inventory_nodiscount') IS NOT NULL
+               AS present
+      `;
+      if (discountedCodes.length > 0 && nodiscountRows[0]?.present) {
+        const blockedRows = await tx.$queryRaw<Array<{ item_code: string }>>`
+          SELECT DISTINCT nd.item_code
+          FROM odg_ic_inventory_nodiscount nd
+          WHERE nd.item_code IN (${Prisma.join(discountedCodes)})
+            AND CURRENT_DATE BETWEEN nd.from_date AND nd.to_date
+            AND (
+              SELECT COUNT(ar_code)
+              FROM ar_customer_detail
+              WHERE ar_code = ${docCustCode}
+                AND group_main = '101'
+            ) = 1
+        `;
+        if (blockedRows.length > 0) {
+          const blocked = new Set(blockedRows.map((r) => r.item_code));
+          const names = items
+            .filter((it) => blocked.has(it.item_code))
+            .map((it) => `${it.item_name ?? it.item_code} (${it.item_code})`);
+          throw new HandledError(
+            400,
+            `ສິນຄ້າຕໍ່ໄປນີ້ໃຊ້ສ່ວນຫຼຸດບໍ່ໄດ້: ${Array.from(new Set(names)).join(", ")} — ກະລຸນາແກ້ອໍເດີກ່ອນຮັບເງິນ`,
+          );
+        }
       }
 
       // Real-time stock check. SML's balance function is the same one the
@@ -698,17 +785,35 @@ export async function POST(request: NextRequest) {
       const effectiveDepartmentCode =
         departmentCode || (cart.header_department_code ?? "").trim();
 
-      // 2b. Look up default shelf for this warehouse (lowest code = primary
-      // "ສະພາບດີ" shelf, e.g. 1102 → 110201). Used when order_item has no
-      // explicit shelf_code.
-      const shelfRows = await tx.$queryRaw<Array<{ code: string }>>`
-        SELECT code
-        FROM ic_shelf
-        WHERE whcode = ${whCode}
-        ORDER BY code
-        LIMIT 1
-      `;
-      const defaultShelfCode = shelfRows[0]?.code ?? `${whCode}01`;
+      // 2b. Look up the default shelf for EVERY warehouse on the cart (lowest
+      // code = primary "ສະພາບດີ" shelf, e.g. 1102 → 110201). Used when a line
+      // carries no explicit shelf_code.
+      //
+      // One shelf per warehouse, not one for the whole bill: a cart that
+      // mixes warehouses would otherwise put line 2's goods on a shelf that
+      // belongs to line 1's warehouse, and the stock function buckets by
+      // (item, wh_code, shelf_code) — so the sale would be deducted from a
+      // shelf that never held the item.
+      const cartWarehouses = Array.from(
+        new Set(
+          items.map((it) => (it.wh_code ?? "").trim() || whCode).filter(Boolean),
+        ),
+      );
+      const shelfRows =
+        cartWarehouses.length > 0
+          ? await tx.$queryRaw<Array<{ whcode: string; code: string }>>`
+              SELECT DISTINCT ON (whcode) whcode, code
+              FROM ic_shelf
+              WHERE whcode IN (${Prisma.join(cartWarehouses)})
+              ORDER BY whcode, code
+            `
+          : [];
+      const defaultShelfByWh = new Map<string, string>();
+      for (const row of shelfRows) {
+        if (row.whcode && row.code) defaultShelfByWh.set(row.whcode, row.code);
+      }
+      const defaultShelfFor = (wh: string): string =>
+        defaultShelfByWh.get(wh) ?? `${wh}01`;
 
       // 2b. Load exchange rates for every currency we might receive in.
       // erp_currency stores rate-to-THB (the SML base) per row, so:
@@ -767,6 +872,20 @@ export async function POST(request: NextRequest) {
       };
 
       // 3. Generate next doc_no: CAKAP + YY + MM + 4-digit sequence.
+      //
+      // YYMM comes from Postgres, not from Node. Every date column on the
+      // documents below is written as CURRENT_DATE, so taking the month from
+      // the web server's clock instead would put a bill in the wrong series
+      // whenever the two disagree — a server on UTC stamps CAKAP2607xxxx onto
+      // a doc_date of 2026-08-01 for every sale made before 07:00 Lao time on
+      // the 1st, and the month's numbering restarts mid-month.
+      const yymmRows = await tx.$queryRaw<Array<{ yymm: string }>>`
+        SELECT to_char(CURRENT_DATE, 'YYMM') AS yymm
+      `;
+      const yymm = yymmRows[0]?.yymm ?? "";
+      if (yymm.length !== 4) {
+        throw new HandledError(500, "ບໍ່ສາມາດອ່ານປີ/ເດືອນຈາກຖານຂໍ້ມູນໄດ້");
+      }
       const docNoPattern = `${DOC_PREFIX}${yymm}%`;
       // Serialize doc number allocation per prefix/month. Without this,
       // two cashiers can read the same MAX(doc_no) concurrently and both try
@@ -977,6 +1096,36 @@ export async function POST(request: NextRequest) {
       );
       const totalThb = roundMoney(totalKip * exchangeRate);
 
+      // Push the bill-level reductions down onto the lines.
+      //
+      // The bill discount and the points redeemed come off the bill as a
+      // whole, and until now only the header knew about them:
+      // ic_trans.total_amount_2 was net while the ic_trans_detail rows still
+      // added up to the gross. Every sales figure this app reports —
+      // ຍອດຂາຍ, ranking, achievement, bonus — is built by summing detail
+      // lines out of odg_sale_detail, so the seller was being credited with
+      // money the till never took, and the bigger the discount the wider the
+      // gap. SML expects the same thing of its own documents: across the
+      // 1,027 CAK bills raised since June 2026 the header total equals the
+      // sum of its lines and total_discount is never used at all — every
+      // discount lives on a line.
+      //
+      // So each line carries its share and the lines add up to the bill total
+      // to the unit. The share lands on the line's discount_amount, not on
+      // its price, so qty × price − discount = amount still holds and the
+      // unit price the customer was quoted survives on the row.
+      const lineGrossKip = items.map((it) =>
+        it.amount ? Number(it.amount) : 0,
+      );
+      const lineNetKip = tieToTotal(
+        proportionalSplit(lineGrossKip, lineSubtotalKip, totalKip),
+        totalKip,
+      );
+      const lineNetThb = tieToTotal(
+        lineNetKip.map((k) => roundMoney(k * exchangeRate)),
+        totalThb,
+      );
+
       // Sum received money in LAK (main) and THB (base) across all payment
       // lines. amount_in_main is what the customer effectively gave us in
       // KIP terms — the cashier sees this on screen; total_amount_pay in
@@ -1114,7 +1263,7 @@ export async function POST(request: NextRequest) {
           CURRENT_DATE, ${docNo}, to_char(NOW(), 'HH24:MI'),
           ${docNo}, CURRENT_DATE,
           ${INQUIRY_TYPE},
-          ${custCode},
+          ${docCustCode},
           ${branchCode}, ${effectiveDepartmentCode},
           '', '',
           CURRENT_DATE, CURRENT_DATE,
@@ -1163,21 +1312,38 @@ export async function POST(request: NextRequest) {
       for (let i = 0; i < items.length; i++) {
         const it = items[i];
         const qty = it.qty ? Number(it.qty) : 0;
+        // What the SOK charged for this line, before any bill-level reduction.
+        const grossKip = it.amount
+          ? Number(it.amount)
+          : qty * (it.price ? Number(it.price) : 0);
+        // What this line is actually worth once the bill discount and the
+        // redeemed points have been shared out (see lineNetKip above). With
+        // neither in play these are the SOK's own amounts, unchanged.
+        const sumKip = lineNetKip[i] ?? grossKip;
+        const sumThb = lineNetThb[i] ?? roundMoney(sumKip * exchangeRate);
+        // price_2 stays the SOK's unit price. A line's amount is
+        // qty × price − discount, so the share of the bill-level reduction
+        // this line took belongs on the discount, not on the price: divide it
+        // into the unit price instead and the member's own discount — which
+        // is already off the amount — gets subtracted a second time by
+        // anything that recomputes the line.
         const priceKip = it.price ? Number(it.price) : 0;
-        const sumKip = it.amount ? Number(it.amount) : qty * priceKip;
         const priceThb = roundMoney(priceKip * exchangeRate, 4);
-        const sumThb = roundMoney(sumKip * exchangeRate);
-        // Carry per-line member discount through from the SOK row. KIP is
-        // authoritative (recorded on SOK in KIP); THB is recomputed at the
-        // current exchange rate so the cashier-time conversion wins.
+        // Carry per-line member discount through from the SOK row, plus this
+        // line's share of any bill-level reduction. KIP is authoritative
+        // (recorded on SOK in KIP); THB is recomputed at the current exchange
+        // rate so the cashier-time conversion wins.
         const discountStr = (it.discount ?? "").toString();
-        const discountKip = it.discount_amount_2
+        const memberDiscountKip = it.discount_amount_2
           ? Number(it.discount_amount_2)
           : 0;
+        const discountKip = roundMoney(
+          memberDiscountKip + (grossKip - sumKip),
+        );
         const discountThb = roundMoney(discountKip * exchangeRate);
         const itemWh = (it.wh_code ?? "").trim() || whCode;
         const itemShelf =
-          (it.shelf_code ?? "").trim() || defaultShelfCode;
+          (it.shelf_code ?? "").trim() || defaultShelfFor(itemWh);
         const avgCostThb = avgCostByCode.get(it.item_code) ?? 0;
         const sumOfCostThb = roundMoney(avgCostThb * qty);
         // set_ref_price = the original/list KIP unit price for the line.
@@ -1216,7 +1382,7 @@ export async function POST(request: NextRequest) {
           VALUES (
             ${TRANS_TYPE}, ${TRANS_FLAG},
             CURRENT_DATE, ${docNo}, to_char(NOW(), 'HH24:MI'),
-            ${custCode},
+            ${docCustCode},
             ${INQUIRY_TYPE},
             ${branchCode},
             ${it.item_code},
@@ -1389,7 +1555,7 @@ export async function POST(request: NextRequest) {
           ref_doc_no, doc_type, create_date_time_now
         ) VALUES (
           ${outDocNo}, CURRENT_DATE, to_char(NOW(), 'HH24:MI'), 1,
-          ${issueWh}, ${branchCode}, ${custCode},
+          ${issueWh}, ${branchCode}, ${docCustCode},
           NOW(), ${userCode}, 0,
           ${docNo}, 44, NOW()
         )
@@ -1470,7 +1636,7 @@ export async function POST(request: NextRequest) {
         VALUES (
           ${TRANS_TYPE}, ${TRANS_FLAG},
           CURRENT_DATE, ${docNo}, to_char(NOW(), 'HH24:MI'),
-          ${custCode},
+          ${docCustCode},
           ${branchCode},
           '', 0,
           ${totalThb}, ${totalThb},
@@ -1572,7 +1738,7 @@ export async function POST(request: NextRequest) {
         VALUES (
           ${docNo}, ${TRANS_FLAG},
           CURRENT_DATE,
-          ${custCode},
+          ${docCustCode},
           ${deliveryHint}
         )
       `;
@@ -1832,8 +1998,15 @@ export async function POST(request: NextRequest) {
     if (e instanceof HandledError) {
       return NextResponse.json({ error: e.message }, { status: e.status });
     }
-    const message = e instanceof Error ? e.message : String(e);
-    return NextResponse.json({ error: message }, { status: 500 });
+    // Anything that reaches here is a database or driver failure, not
+    // something the cashier did. Its text is a Postgres error — table names,
+    // constraint names, sometimes a fragment of the statement — so it stays
+    // in the server log and the till gets a message it can act on.
+    console.error(`[cashier/settle] settling ${cartNumber} failed:`, e);
+    return NextResponse.json(
+      { error: "ຮັບເງິນບໍ່ສຳເລັດ ເນື່ອງຈາກຂໍ້ຜິດພາດຂອງລະບົບ — ກະລຸນາລອງໃໝ່ ຫຼື ແຈ້ງ IT" },
+      { status: 500 },
+    );
   }
 }
 

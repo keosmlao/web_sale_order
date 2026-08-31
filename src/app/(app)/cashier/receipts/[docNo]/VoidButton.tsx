@@ -78,7 +78,8 @@ export default function VoidButton({
             </h3>
             <p className="mb-3 text-[12px] text-odoo-text-muted">
               ການຍົກເລີກຈະສ້າງເອກະສານສົ່ງຄືນ (CTPL) ໃໝ່ ແລະ ຄືນເງິນ + ສ້າງ stock
-              ກັບ ແລະ ຄືນຄະແນນລູກຄ້າ. ຕ້ອງມີ PIN ຂອງຜູ້ຈັດການ.
+              ກັບ ແລະ ຄືນຄະແນນລູກຄ້າ. ອໍເດີຈະກັບເຂົ້າຄິວລໍຮັບເງິນ ເພື່ອອອກບິນໃໝ່ໄດ້.
+              ຕ້ອງມີ PIN ຂອງຜູ້ຈັດການ.
             </p>
             <label className="grid gap-1">
               <span className="odoo-label">ເຫດຜົນ</span>
