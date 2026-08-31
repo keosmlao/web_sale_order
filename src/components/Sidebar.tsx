@@ -708,7 +708,11 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
                                       closeMobileMenu();
                                     }}
                                     className={
-                                      "flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition " +
+                                      // Same size as the group above it: a
+                                      // submenu entry is a destination like
+                                      // any other, and the indent already
+                                      // says it sits underneath.
+                                      "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition " +
                                       (childActive
                                         ? "bg-[#714B67] text-white shadow-sm shadow-[#714B67]/30"
                                         : "text-slate-400 hover:bg-white/10 hover:text-white")
