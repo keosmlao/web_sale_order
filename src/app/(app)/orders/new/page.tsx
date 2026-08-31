@@ -443,6 +443,15 @@ function PosScreen({
   // flow reads the latest choice without waiting for a re-render.
   // Which line's ISN list is open, if any.
   const [serialPickerIdx, setSerialPickerIdx] = useState<number | null>(null);
+  // Asking another warehouse to send stock, raised from the line that ran
+  // short. The moment the counter discovers it cannot sell something is the
+  // moment worth capturing — afterwards nobody goes back to record it.
+  const [refillIdx, setRefillIdx] = useState<number | null>(null);
+  const [refillQty, setRefillQty] = useState("");
+  const [refillReason, setRefillReason] = useState("");
+  const [refillBusy, setRefillBusy] = useState(false);
+  const [refillErr, setRefillErr] = useState<string | null>(null);
+  const [refillDone, setRefillDone] = useState<string | null>(null);
   const [serialQuery, setSerialQuery] = useState("");
   const [promoChoice, setPromoChoice] = useState<Record<string, string | null>>(
     {},
@@ -3258,9 +3267,35 @@ function PosScreen({
                                   );
                                   if (!selectedLocation || selectedLocation.balanceQty >= line.quantity) return null;
                                   return (
-                                    <span className="text-[10px] font-semibold text-odoo-danger">
-                                      stock ບໍ່ພໍ
-                                    </span>
+                                    <>
+                                      <span className="text-[10px] font-semibold text-odoo-danger">
+                                        stock ບໍ່ພໍ
+                                      </span>
+                                      <button
+                                        type="button"
+                                        className="pos-refill-ask"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setRefillIdx(idx);
+                                          setRefillQty(
+                                            String(
+                                              Math.max(
+                                                1,
+                                                line.quantity -
+                                                  Math.floor(
+                                                    selectedLocation.balanceQty,
+                                                  ),
+                                              ),
+                                            ),
+                                          );
+                                          setRefillReason("");
+                                          setRefillErr(null);
+                                          setRefillDone(null);
+                                        }}
+                                      >
+                                        ຂໍໂອນມາ
+                                      </button>
+                                    </>
                                   );
                                 })()}
                               </div>
@@ -3961,6 +3996,120 @@ function PosScreen({
               setSerialQuery("");
             }}
           />
+        );
+      })() : null}
+      {refillIdx !== null ? (() => {
+        const line = items[refillIdx];
+        if (!line) return null;
+        const close = () => {
+          setRefillIdx(null);
+          setRefillErr(null);
+          setRefillDone(null);
+        };
+        async function send() {
+          const qty = Number(refillQty);
+          if (!Number.isFinite(qty) || qty <= 0) {
+            setRefillErr("ໃສ່ຈຳນວນທີ່ຕ້ອງການ");
+            return;
+          }
+          setRefillBusy(true);
+          setRefillErr(null);
+          try {
+            const res = await fetch("/api/reports/stock-refill", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                warehouseCode: line.warehouseCode || undefined,
+                itemCode: line.productId,
+                requestedQty: qty,
+                // The bill it came off is the reason, and the one thing a
+                // manager needs to judge urgency: this is not a top-up, a
+                // customer is standing there.
+                reason:
+                  refillReason.trim() ||
+                  `ລູກຄ້າຕ້ອງການ ${moneyFmt.format(line.quantity)} — ສາງນີ້ບໍ່ພໍ`,
+              }),
+            });
+            const data = await res.json().catch(() => null);
+            if (!res.ok) {
+              setRefillErr(data?.error ?? `ຂໍ້ຜິດພາດ ${res.status}`);
+              return;
+            }
+            setRefillDone("ສົ່ງຄຳຂໍແລ້ວ — ລໍຜູ້ຈັດການອະນຸມັດ");
+          } catch {
+            setRefillErr("ສົ່ງຄຳຂໍບໍ່ສຳເລັດ");
+          } finally {
+            setRefillBusy(false);
+          }
+        }
+        return (
+          <div className="pos-modal-layer" onClick={close}>
+            <div
+              className="pos-refill-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3>ຂໍໂອນສິນຄ້າມາສາງນີ້</h3>
+              <p className="pos-refill-item">{line.productName}</p>
+              <p className="pos-refill-sub">
+                {line.productId}
+                {line.warehouseCode ? ` · ສາງ ${line.warehouseCode}` : ""}
+              </p>
+
+              {refillDone ? (
+                <>
+                  <div className="pos-refill-ok">{refillDone}</div>
+                  <button type="button" className="odoo-btn" onClick={close}>
+                    ປິດ
+                  </button>
+                </>
+              ) : (
+                <>
+                  <label className="pos-refill-field">
+                    <span>ຈຳນວນທີ່ຂໍ</span>
+                    <input
+                      type="number"
+                      min={1}
+                      value={refillQty}
+                      autoFocus
+                      disabled={refillBusy}
+                      onChange={(e) => setRefillQty(e.target.value)}
+                    />
+                  </label>
+                  <label className="pos-refill-field">
+                    <span>ເຫດຜົນ (ບໍ່ບັງຄັບ)</span>
+                    <input
+                      type="text"
+                      value={refillReason}
+                      disabled={refillBusy}
+                      placeholder="ເຊັ່ນ: ລູກຄ້າລໍຢູ່ໜ້າຮ້ານ"
+                      onChange={(e) => setRefillReason(e.target.value)}
+                    />
+                  </label>
+                  {refillErr ? (
+                    <div className="pos-refill-err">{refillErr}</div>
+                  ) : null}
+                  <div className="pos-refill-actions">
+                    <button
+                      type="button"
+                      className="odoo-btn"
+                      disabled={refillBusy}
+                      onClick={close}
+                    >
+                      ຍົກເລີກ
+                    </button>
+                    <button
+                      type="button"
+                      className="odoo-btn odoo-btn-primary"
+                      disabled={refillBusy}
+                      onClick={() => void send()}
+                    >
+                      {refillBusy ? "ກຳລັງສົ່ງ…" : "ສົ່ງຄຳຂໍ"}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
         );
       })() : null}
       {priceRequestIdx !== null ? (() => {

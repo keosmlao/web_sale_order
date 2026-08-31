@@ -97,8 +97,11 @@ export function canManagePromotions(role: AppRole): boolean {
 // Stock-refill requests: approve/reject and mark-fulfilled are warehouse
 // decisions that managers and heads share. Salespeople can create requests
 // from the floor; PC has no business with stock.
+// The owner's call: a refill request moves stock between warehouses, so it
+// is the manager's decision alone. A head can raise one like anybody else,
+// but not approve their own branch's.
 export function canApproveRefillRequests(role: AppRole): boolean {
-  return role === "head" || role === "manager";
+  return role === "manager";
 }
 
 // PC role is data-entry-only at the cashier and shouldn't be opening stock
