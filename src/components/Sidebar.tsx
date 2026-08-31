@@ -570,7 +570,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
             <img src="/odm.png" alt="ODIEN Mall" className="h-5 w-auto object-contain" />
           </div>
           <div className="min-w-0 leading-none">
-            <div className="truncate text-[15px] font-extrabold tracking-tight text-white">ODG ຂາຍ</div>
+            <div className="truncate text-base font-extrabold tracking-tight text-white">ODG ຂາຍ</div>
           </div>
         </div>
         <form action={logoutAction} className="shrink-0">
@@ -633,7 +633,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
             </div>
             <div className="min-w-0 leading-none">
               <div className="truncate text-base font-extrabold tracking-tight text-white">ODG ຂາຍ</div>
-              <div className="mt-1 truncate text-[10px] font-medium text-slate-400">ລະບົບຈັດການການຂາຍ</div>
+              <div className="mt-1 truncate text-[11px] font-medium text-slate-400">ລະບົບຈັດການການຂາຍ</div>
             </div>
           </div>
           <button
@@ -652,7 +652,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
         <nav className="sbd-mnav min-h-0 flex-1 overflow-y-auto overscroll-contain px-2 py-3 [-webkit-overflow-scrolling:touch]" aria-label="ເມນູ">
           {visibleSections.map((section) => (
             <div key={section.id} className="mb-1.5">
-              <div className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+              <div className="px-3 py-1.5 text-[11px] font-bold uppercase tracking-widest text-slate-500">
                 {section.label}
               </div>
               <ul className="space-y-0.5">
@@ -708,11 +708,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
                                       closeMobileMenu();
                                     }}
                                     className={
-                                      // Same size as the group above it: a
-                                      // submenu entry is a destination like
-                                      // any other, and the indent already
-                                      // says it sits underneath.
-                                      "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition " +
+                                      "flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13px] font-medium transition " +
                                       (childActive
                                         ? "bg-[#714B67] text-white shadow-sm shadow-[#714B67]/30"
                                         : "text-slate-400 hover:bg-white/10 hover:text-white")
@@ -766,7 +762,7 @@ export default function Sidebar({ displayName, employeeCode, subtitle, role, hid
             </div>
             <div className="min-w-0">
               <div className="truncate text-sm font-bold text-white" title={displayName}>{displayName}</div>
-              <div className="font-mono text-[11px] text-slate-400">{employeeCode}</div>
+              <div className="font-mono text-[12px] text-slate-400">{employeeCode}</div>
             </div>
           </div>
           <form action={logoutAction}>
